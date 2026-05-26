@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
-import { BlockedView, VideoRow }       from "../../components/UI";
-import { useYouTubePlaylists }          from "../../hooks/useYouTubePlaylists";
+import { supabase }                        from "../../lib/supabase";
+import { BlockedView, VideoRow }           from "../../components/UI";
+import { useYouTubePlaylists }             from "../../hooks/useYouTubePlaylists";
+import { useEscenarioQueue }               from "../../hooks/realtime/useEscenarioQueue";
 import { VIDEOS_FTL, VIDEOS_PT, VIDEOS_KARAOKE } from "../../constants/data";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
@@ -24,15 +26,6 @@ function EscenarioStandby() {
       </div>
     </div>
   );
-}
-
-// ─── Hook reutilizable para inscripción ──────────────────────────────────────
-function useEnrollment() {
-  const [enrolled,  setEnrolled]  = useState(false);
-  const [selVideo,  setSelVideo]  = useState(null);
-  const enroll  = useCallback(() => setEnrolled(true),  []);
-  const leave   = useCallback(() => { setEnrolled(false); setSelVideo(null); }, []);
-  return { enrolled, selVideo, setSelVideo, enroll, leave };
 }
 
 // ─── Enrolled confirmation card ──────────────────────────────────────────────
@@ -83,16 +76,28 @@ function CostumeStrip({ items, color, bg, border }) {
 }
 
 // ─── Duelo de Talentos ───────────────────────────────────────────────────────
-function DueloView({ ytConfig }) {
-  const [vote,     setVote]     = useState(null);
-  const [selSong,  setSelSong]  = useState(null);
-  const [songSent, setSongSent] = useState(false);
+function DueloView({ user, sessionId, ytConfig, gameState }) {
+  const [vote, setVote] = useState(null);
   const { playlists } = useYouTubePlaylists(ytConfig || {});
-  const songs = playlists.duelo?.length ? playlists.duelo : [];
+
+  const votesA = gameState?.duelo_votes_a || 0;
+  const votesB = gameState?.duelo_votes_b || 0;
+  const total  = votesA + votesB || 1;
+
   const options = [
-    { id: "a", label: "Participante A", color: "#EF4444", bg: "rgba(239,68,68,.1)", border: "rgba(239,68,68,.3)" },
-    { id: "b", label: "Participante B", color: "#3B82F6", bg: "rgba(59,130,246,.1)",  border: "rgba(59,130,246,.3)" },
+    { id: "a", label: gameState?.duelo_slot1?.name || "Participante A", color: "#EF4444", bg: "rgba(239,68,68,.1)", border: "rgba(239,68,68,.3)", votes: votesA },
+    { id: "b", label: gameState?.duelo_slot2?.name || "Participante B", color: "#3B82F6", bg: "rgba(59,130,246,.1)",  border: "rgba(59,130,246,.3)", votes: votesB },
   ];
+
+  const handleVote = async (optionId) => {
+    if (vote) return;
+    setVote(optionId);
+    const field = optionId === "a" ? "duelo_votes_a" : "duelo_votes_b";
+    await supabase
+      .from("game_state")
+      .update({ [field]: (optionId === "a" ? votesA : votesB) + 1 })
+      .eq("session_id", sessionId);
+  };
 
   return (
     <div>
@@ -104,7 +109,7 @@ function DueloView({ ytConfig }) {
         {options.map((o) => (
           <button
             key={o.id}
-            onClick={() => !vote && setVote(o.id)}
+            onClick={() => handleVote(o.id)}
             style={{
               flex: 1, padding: "20px 8px", borderRadius: 16, border: "2px solid",
               borderColor: vote === o.id ? o.color : o.border,
@@ -117,6 +122,9 @@ function DueloView({ ytConfig }) {
             <div style={{ fontSize: 36, marginBottom: 8 }}>⭐</div>
             <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color: o.color }}>
               {o.label}
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(245,230,192,.4)", marginTop: 4 }}>
+              {Math.round((o.votes / total) * 100)}%
             </div>
             {vote === o.id && (
               <div style={{ fontSize: 10, color: o.color, marginTop: 6, fontWeight: 700 }}>✓ Tu voto</div>
@@ -138,11 +146,12 @@ function DueloView({ ytConfig }) {
 }
 
 // ─── Follow the Leader ───────────────────────────────────────────────────────
-function FollowTheLeaderView({ ytConfig }) {
-  const { enrolled, selVideo, setSelVideo, enroll, leave } = useEnrollment();
+function FollowTheLeaderView({ user, sessionId, ytConfig }) {
+  const [selVideo, setSelVideo] = useState(null);
+  const { isEnrolled, enroll, leave, loading } = useEscenarioQueue(sessionId, "ftl");
   const { playlists } = useYouTubePlaylists(ytConfig || {});
 
-  if (enrolled) return (
+  if (isEnrolled) return (
     <EnrolledCard
       color="#F9A8D4" border="rgba(236,72,153,.4)" bg="rgba(236,72,153,.1)"
       icon="🎟️" title="¡Inscripto!" video={selVideo}
@@ -168,7 +177,8 @@ function FollowTheLeaderView({ ytConfig }) {
         <VideoRow key={v.id} video={v} selected={selVideo?.id === v.id} onSelect={setSelVideo} color="#EC4899" />
       ))}
       <button className="btn-primary" style={{ background: "linear-gradient(135deg,#EC4899,#8B5CF6)", marginTop: 6 }}
-        disabled={!selVideo} onClick={enroll}>
+        disabled={!selVideo || loading}
+        onClick={() => enroll(user, selVideo?.ytId, selVideo?.title)}>
         💃 ¡Me apunto al escenario!
       </button>
     </div>
@@ -176,10 +186,10 @@ function FollowTheLeaderView({ ytConfig }) {
 }
 
 // ─── Personal Trainer ────────────────────────────────────────────────────────
-function PersonalTrainerView({ ytConfig }) {
-  const { enrolled, enroll, leave } = useEnrollment();
+function PersonalTrainerView({ user, sessionId }) {
+  const { isEnrolled, enroll, leave, loading } = useEscenarioQueue(sessionId, "pt");
 
-  if (enrolled) return (
+  if (isEnrolled) return (
     <EnrolledCard
       color="#86EFAC" border="rgba(16,185,129,.4)" bg="rgba(16,185,129,.1)"
       icon="🏅" title="¡Inscripto!"
@@ -198,7 +208,8 @@ function PersonalTrainerView({ ytConfig }) {
       <div style={{ fontSize: 12, color: "rgba(245,230,192,.5)", marginBottom: 16, lineHeight: 1.5 }}>
         Dirigís una clase de gym dance grupal. Toda la sala te sigue desde sus lugares.
       </div>
-      <button className="btn-primary" style={{ background: "linear-gradient(135deg,#10B981,#06B6D4)" }} onClick={enroll}>
+      <button className="btn-primary" style={{ background: "linear-gradient(135deg,#10B981,#06B6D4)" }}
+        disabled={loading} onClick={() => enroll(user)}>
         🏋️ ¡Quiero dirigir la clase!
       </button>
     </div>
@@ -206,11 +217,12 @@ function PersonalTrainerView({ ytConfig }) {
 }
 
 // ─── Si lo sabe cante ────────────────────────────────────────────────────────
-function KaraokeView({ ytConfig }) {
-  const { enrolled, selVideo, setSelVideo, enroll, leave } = useEnrollment();
+function KaraokeView({ user, sessionId, ytConfig }) {
+  const [selVideo, setSelVideo] = useState(null);
+  const { isEnrolled, enroll, leave, loading } = useEscenarioQueue(sessionId, "karaoke");
   const { playlists } = useYouTubePlaylists(ytConfig || {});
 
-  if (enrolled) return (
+  if (isEnrolled) return (
     <EnrolledCard
       color="#C084FC" border="rgba(168,85,247,.4)" bg="rgba(168,85,247,.1)"
       icon="🎙️" title="¡Inscripto!" video={selVideo}
@@ -232,7 +244,8 @@ function KaraokeView({ ytConfig }) {
         <VideoRow key={v.id} video={v} selected={selVideo?.id === v.id} onSelect={setSelVideo} color="#A855F7" />
       ))}
       <button className="btn-primary" style={{ background: "linear-gradient(135deg,#A855F7,#EC4899)", marginTop: 6 }}
-        disabled={!selVideo} onClick={enroll}>
+        disabled={!selVideo || loading}
+        onClick={() => enroll(user, selVideo?.ytId, selVideo?.title)}>
         🎤 ¡Me apunto a cantar!
       </button>
     </div>
@@ -240,7 +253,7 @@ function KaraokeView({ ytConfig }) {
 }
 
 // ─── EscenarioView (router) ──────────────────────────────────────────────────
-export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, ytConfig }) {
+export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -255,10 +268,10 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   if (!activeEscenario) return <EscenarioStandby />;
 
   switch (activeEscenario) {
-    case "duelo":   return <DueloView ytConfig={ytConfig} />;
-    case "ftl":     return <FollowTheLeaderView ytConfig={ytConfig} />;
-    case "pt":      return <PersonalTrainerView ytConfig={ytConfig} />;
-    case "karaoke": return <KaraokeView ytConfig={ytConfig} />;
+    case "duelo":   return <DueloView user={user} sessionId={sessionId} ytConfig={ytConfig} gameState={gameState} />;
+    case "ftl":     return <FollowTheLeaderView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
+    case "pt":      return <PersonalTrainerView user={user} sessionId={sessionId} />;
+    case "karaoke": return <KaraokeView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
     default:        return <EscenarioStandby />;
   }
 }
