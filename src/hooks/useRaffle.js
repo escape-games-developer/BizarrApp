@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { STROBE_COLORS, RAFFLE_NAMES, rand } from "../constants/data";
+import { STROBE_COLORS, RAFFLE_NAMES } from "../constants/data";
+import { rand } from "../constants/theme";
 
 /**
  * useRaffle

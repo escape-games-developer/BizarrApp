@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase, getActiveSession } from "../lib/supabase";
+import { supabase } from "../../lib/supabase";
+
 
 /**
  * useGameState

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 // Intervalo de heartbeat: el cliente actualiza last_seen cada 30s
 // Si no hay heartbeat en 2 minutos, se considera desconectado
