@@ -6,6 +6,8 @@ import { useGameState }         from "./hooks/realtime/useGameState";
 import { useMessages }          from "./hooks/realtime/useMessages";
 import { usePresence }          from "./hooks/realtime/usePresence";
 import { AvatarDisplay }        from "./components/AvatarDisplay";
+import { useCoupon }            from "./hooks/useCoupon";
+import { CouponScreen }         from "./components/CouponScreen";
 
 import { useYouTubePlaylistAdmin } from "./hooks/useYouTubePlaylists";
 import CartaView     from "./views/Carta/CartaView";
@@ -22,20 +24,21 @@ export default function BizarrApp() {
   const { user, regStep, setRegStep, register, login, updateUser, isLoggedIn } = useAuth();
 
   const [view,     setView]     = useState("novedades");
-  // Configuración de playlists de YouTube (persiste en localStorage)
   const { config: ytConfig } = useYouTubePlaylistAdmin();
   const [authMode, setAuthMode] = useState("login");
 
-  // Estado global del juego — sincronizado via Supabase Realtime
   const { session, gameState, loading: stateLoading } = useGameState();
 
-  // Presencia: check-in del usuario en la sesión activa
   usePresence(session?.id, user);
 
-  // Mensajes del usuario
   const { messages, send: sendMsg } = useMessages(session?.id, "user");
 
   const isRestricted = !user?.geoOk;
+
+  const {
+    coupon, mins, secs, pin, setPin,
+    pinOk, redeem, redeeming, isUrgent, hasCoupon,
+  } = useCoupon(user?.id);
 
   const goProfile = useCallback(() => {
     if (user?.registered) setRegStep(5);
@@ -53,14 +56,16 @@ export default function BizarrApp() {
 
   const renderContent = () => {
     switch (view) {
-      case "menu":       return <CartaView />;
-      case "novedades":  return <NovedadesView banners={[]} />;
+      case "menu":      return <CartaView />;
+      case "novedades": return <NovedadesView banners={[]} />;
       case "games":
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
-                 isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}/>;
+                 isRestricted={isRestricted} onGoProfile={goProfile}
+                 sessionId={session?.id} gameState={gameState}/>;
       case "escenario":
         return <EscenarioView user={user} activeEscenario={gameState?.active_escenario ?? null}
-                 isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id} ytConfig={ytConfig}/>;
+                 isRestricted={isRestricted} onGoProfile={goProfile}
+                 sessionId={session?.id} ytConfig={ytConfig} gameState={gameState}/>;
       case "pantalla":
         return <PantallaView user={user}
                  messages={messages.filter(m => m.user_id === user?.id)}
@@ -98,6 +103,13 @@ export default function BizarrApp() {
       <style>{globalCss}</style>
       <div className="app-root">
         <div className="phone-shell">
+          {hasCoupon && (
+            <CouponScreen
+              coupon={coupon} mins={mins} secs={secs}
+              pin={pin} setPin={setPin} pinOk={pinOk}
+              redeem={redeem} redeeming={redeeming} isUrgent={isUrgent}
+            />
+          )}
           <header className="app-header">
             <img src={LOGO_URL} alt="BizarrApp" className="app-header-logo"
               onError={e => { e.target.style.display="none"; }}/>
