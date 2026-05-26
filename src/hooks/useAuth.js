@@ -1,106 +1,147 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../lib/supabase";
 
-// ─── Simulación de base de datos de usuarios ─────────────────────────────────
-// En producción: reemplazar con llamadas a API + JWT
-// Clave: email (lowercase) → { passwordHash, profile }
-const USER_STORE_KEY = "bizarrapp_users";
-const SESSION_KEY    = "bizarrapp_session";
+const SESSION_KEY = "bizarrapp_session";
 
-function getStore() {
-  try {
-    return JSON.parse(localStorage.getItem(USER_STORE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveStore(store) {
-  localStorage.setItem(USER_STORE_KEY, JSON.stringify(store));
-}
-
-function getSession() {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * useAuth
- * Maneja registro, login y sesión persistente.
- *
- * En producción: reemplazar localStorage con:
- *   - Supabase Auth  →  supabase.auth.signUp / signInWithPassword
- *   - Firebase Auth  →  createUserWithEmailAndPassword / signInWithEmailAndPassword
- *   - API propia     →  fetch('/api/auth/...')
- */
 export function useAuth() {
-  const [user,    setUser]    = useState(() => getSession());
-  const [regStep, setRegStep] = useState(() => getSession()?.registered ? 5 : 1);
+  const [user,    setUser]    = useState(() => {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
+    catch { return null; }
+  });
+  const [regStep, setRegStep] = useState(() =>
+    user?.registered ? 5 : 1
+  );
+  const [loading, setLoading] = useState(false);
+
+  // Escuchar cambios de sesión de Supabase
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_OUT") {
+          localStorage.removeItem(SESSION_KEY);
+          setUser(null);
+          setRegStep(1);
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ── Registro ────────────────────────────────────────────────────────────────
-  const register = useCallback((profile, password) => {
-    const key   = profile.email.toLowerCase().trim();
-    const store = getStore();
+  const register = useCallback(async (profile, password) => {
+    setLoading(true);
+    try {
+      // 1. Crear usuario en Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: profile.email.toLowerCase().trim(),
+        password,
+      });
 
-    if (store[key]) {
-      return { ok: false, error: "Este email ya está registrado." };
+      if (error) return { ok: false, error: error.message };
+
+      const userId = data.user?.id;
+      if (!userId) return { ok: false, error: "Error al crear usuario." };
+
+      // 2. Guardar perfil en tabla profiles
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          user_id:      userId,
+          name:         profile.name,
+          team:         profile.team,
+          avatar_id:    profile.avatarId    || null,
+          avatar_emoji: profile.avatarEmoji || null,
+          photo_url:    profile.photoUrl    || null,
+          phone:        profile.phone       || null,
+          geo_ok:       false,
+          registered:   true,
+        });
+
+      if (profileError) {
+        console.error("[useAuth] Error guardando perfil:", profileError);
+      }
+
+      // 3. Guardar sesión local
+      const fullProfile = { ...profile, id: userId, registered: true };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(fullProfile));
+      setUser(fullProfile);
+      setRegStep(5);
+
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      setLoading(false);
     }
-
-    // Simular hash de contraseña (en producción: bcrypt en el backend)
-    const entry = { password, profile: { ...profile, registered: true } };
-    store[key] = entry;
-    saveStore(store);
-
-    // Guardar sesión
-    localStorage.setItem(SESSION_KEY, JSON.stringify(entry.profile));
-    setUser(entry.profile);
-    setRegStep(5);
-
-    // Simular envío de email de bienvenida
-    console.info(
-      `[BizarrApp] Email enviado a ${profile.email}: ¡Bienvenido, ${profile.name}!`
-    );
-
-    return { ok: true };
   }, []);
 
   // ── Login ───────────────────────────────────────────────────────────────────
-  const login = useCallback((email, password) => {
-    const key   = email.toLowerCase().trim();
-    const store = getStore();
-    const entry = store[key];
+  const login = useCallback(async (email, password) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
+      });
 
-    if (!entry)                   return { ok: false, error: "No encontramos ese email." };
-    if (entry.password !== password) return { ok: false, error: "Contraseña incorrecta." };
+      if (error) return { ok: false, error: "Email o contraseña incorrectos." };
 
-    localStorage.setItem(SESSION_KEY, JSON.stringify(entry.profile));
-    setUser(entry.profile);
-    setRegStep(5);
-    return { ok: true };
+      // Buscar perfil en la tabla profiles
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", data.user.id)
+        .single();
+
+      const fullProfile = profileData
+        ? {
+            id:           data.user.id,
+            name:         profileData.name,
+            email:        email.toLowerCase().trim(),
+            team:         profileData.team,
+            avatarId:     profileData.avatar_id,
+            avatarEmoji:  profileData.avatar_emoji,
+            photoUrl:     profileData.photo_url,
+            geoOk:        profileData.geo_ok,
+            registered:   true,
+          }
+        : { id: data.user.id, email: email.toLowerCase().trim(), registered: true };
+
+      localStorage.setItem(SESSION_KEY, JSON.stringify(fullProfile));
+      setUser(fullProfile);
+      setRegStep(5);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // ── Actualizar perfil ───────────────────────────────────────────────────────
-  const updateUser = useCallback((updates) => {
+  const updateUser = useCallback(async (updates) => {
     setUser((prev) => {
       const next = { ...prev, ...updates };
       localStorage.setItem(SESSION_KEY, JSON.stringify(next));
-      // También actualizar en el store
-      if (next.email) {
-        const store = getStore();
-        const key   = next.email.toLowerCase();
-        if (store[key]) {
-          store[key].profile = next;
-          saveStore(store);
-        }
-      }
       return next;
     });
-  }, []);
+    // Sincronizar con Supabase si hay user_id
+    if (user?.id) {
+      const dbUpdates = {};
+      if (updates.name)         dbUpdates.name         = updates.name;
+      if (updates.team)         dbUpdates.team         = updates.team;
+      if (updates.avatarId)     dbUpdates.avatar_id    = updates.avatarId;
+      if (updates.avatarEmoji)  dbUpdates.avatar_emoji = updates.avatarEmoji;
+      if (updates.geoOk !== undefined) dbUpdates.geo_ok = updates.geoOk;
+      if (Object.keys(dbUpdates).length > 0) {
+        await supabase.from("profiles").update(dbUpdates).eq("user_id", user.id);
+      }
+    }
+  }, [user?.id]);
 
   // ── Logout ──────────────────────────────────────────────────────────────────
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem(SESSION_KEY);
     setUser(null);
     setRegStep(1);
@@ -114,6 +155,7 @@ export function useAuth() {
     login,
     updateUser,
     logout,
+    loading,
     isLoggedIn: !!user?.registered,
   };
 }
