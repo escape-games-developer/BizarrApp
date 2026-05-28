@@ -9,7 +9,6 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        // Separar vendor chunk para mejor cache
         manualChunks: {
           react: ["react", "react-dom"],
         },
@@ -19,7 +18,7 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
-    // HTTPS requerido para geolocalización en dispositivos reales
-    // https: true,
+    host: true,  // ← agregar esto para testear desde el celu
+    // https: true,  // descomentar cuando necesites geo en celu real
   },
 });
