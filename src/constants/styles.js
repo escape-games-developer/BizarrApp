@@ -7,7 +7,7 @@ const globalCss = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    background: #0A0500;
+   background: #08040F
     font-family: 'DM Sans', sans-serif;
     color: #F5E6C0;
     -webkit-font-smoothing: antialiased;
@@ -55,7 +55,7 @@ const globalCss = `
     width: 100%;
     max-width: 430px;
     height: 100dvh;
-    background: #0D0700;
+    background: #110820;
     display: flex;
     flex-direction: column;
     overflow: hidden;
