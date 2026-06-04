@@ -8,13 +8,49 @@ export function useAuth() {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
     catch { return null; }
   });
-  const [regStep, setRegStep] = useState(() =>
-    user?.registered ? 5 : 1
-  );
+  const [regStep, setRegStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Escuchar cambios de sesión de Supabase
+  // ── Restaurar sesión al recargar ────────────────────────────────────────────
   useEffect(() => {
+    const restoreSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // No hay sesión activa en Supabase → limpiar localStorage
+        localStorage.removeItem(SESSION_KEY);
+        setUser(null);
+        setRegStep(1);
+        return;
+      }
+
+      // Hay sesión → buscar perfil actualizado desde la BD
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+
+      if (profile) {
+        const fullProfile = {
+          id:          session.user.id,
+          email:       session.user.email,
+          name:        profile.name,
+          team:        profile.team,
+          avatarId:    profile.avatar_id,
+          avatarEmoji: profile.avatar_emoji,
+          photoUrl:    profile.photo_url,
+          geoOk:       profile.geo_ok,
+          registered:  profile.registered,
+        };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(fullProfile));
+        setUser(fullProfile);
+        setRegStep(fullProfile.registered ? 5 : 1);
+      }
+    };
+
+    restoreSession();
+
+    // Escuchar cambios de sesión
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_OUT") {
@@ -24,6 +60,7 @@ export function useAuth() {
         }
       }
     );
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -42,18 +79,18 @@ export function useAuth() {
       const userId = data.user?.id;
       if (!userId) return { ok: false, error: "Error al crear usuario." };
 
-      // 2. Guardar perfil en tabla profiles
+      // 2. Upsert perfil en tabla profiles (id = userId, no user_id)
       const { error: profileError } = await supabase
         .from("profiles")
-        .insert({
-          user_id:      userId,
+        .upsert({
+          id:           userId,
           name:         profile.name,
-          team:         profile.team,
-          avatar_id:    profile.avatarId    || null,
-          avatar_emoji: profile.avatarEmoji || null,
-          photo_url:    profile.photoUrl    || null,
-          phone:        profile.phone       || null,
-          geo_ok:       false,
+          team:         profile.team         || null,
+          avatar_id:    profile.avatarId     || null,
+          avatar_emoji: profile.avatarEmoji  || null,
+          photo_url:    profile.photoUrl     || null,
+          phone:        profile.phone        || null,
+          geo_ok:       profile.geoOk        || false,
           registered:   true,
         });
 
@@ -62,7 +99,11 @@ export function useAuth() {
       }
 
       // 3. Guardar sesión local
-      const fullProfile = { ...profile, id: userId, registered: true };
+      const fullProfile = {
+        ...profile,
+        id:         userId,
+        registered: true,
+      };
       localStorage.setItem(SESSION_KEY, JSON.stringify(fullProfile));
       setUser(fullProfile);
       setRegStep(5);
@@ -86,30 +127,34 @@ export function useAuth() {
 
       if (error) return { ok: false, error: "Email o contraseña incorrectos." };
 
-      // Buscar perfil en la tabla profiles
+      // Buscar perfil — clave es id, no user_id
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
-        .eq("user_id", data.user.id)
+        .eq("id", data.user.id)
         .single();
 
       const fullProfile = profileData
         ? {
-            id:           data.user.id,
-            name:         profileData.name,
-            email:        email.toLowerCase().trim(),
-            team:         profileData.team,
-            avatarId:     profileData.avatar_id,
-            avatarEmoji:  profileData.avatar_emoji,
-            photoUrl:     profileData.photo_url,
-            geoOk:        profileData.geo_ok,
-            registered:   true,
+            id:          data.user.id,
+            email:       email.toLowerCase().trim(),
+            name:        profileData.name,
+            team:        profileData.team,
+            avatarId:    profileData.avatar_id,
+            avatarEmoji: profileData.avatar_emoji,
+            photoUrl:    profileData.photo_url,
+            geoOk:       profileData.geo_ok,
+            registered:  profileData.registered,
           }
-        : { id: data.user.id, email: email.toLowerCase().trim(), registered: true };
+        : {
+            id:         data.user.id,
+            email:      email.toLowerCase().trim(),
+            registered: false,
+          };
 
       localStorage.setItem(SESSION_KEY, JSON.stringify(fullProfile));
       setUser(fullProfile);
-      setRegStep(5);
+      setRegStep(fullProfile.registered ? 5 : 1);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -125,16 +170,21 @@ export function useAuth() {
       localStorage.setItem(SESSION_KEY, JSON.stringify(next));
       return next;
     });
-    // Sincronizar con Supabase si hay user_id
+
     if (user?.id) {
       const dbUpdates = {};
-      if (updates.name)         dbUpdates.name         = updates.name;
-      if (updates.team)         dbUpdates.team         = updates.team;
-      if (updates.avatarId)     dbUpdates.avatar_id    = updates.avatarId;
-      if (updates.avatarEmoji)  dbUpdates.avatar_emoji = updates.avatarEmoji;
-      if (updates.geoOk !== undefined) dbUpdates.geo_ok = updates.geoOk;
+      if (updates.name         !== undefined) dbUpdates.name         = updates.name;
+      if (updates.team         !== undefined) dbUpdates.team         = updates.team;
+      if (updates.avatarId     !== undefined) dbUpdates.avatar_id    = updates.avatarId;
+      if (updates.avatarEmoji  !== undefined) dbUpdates.avatar_emoji = updates.avatarEmoji;
+      if (updates.photoUrl     !== undefined) dbUpdates.photo_url    = updates.photoUrl;
+      if (updates.phone        !== undefined) dbUpdates.phone        = updates.phone;
+      if (updates.geoOk        !== undefined) dbUpdates.geo_ok       = updates.geoOk;
+      if (updates.registered   !== undefined) dbUpdates.registered   = updates.registered;
+
       if (Object.keys(dbUpdates).length > 0) {
-        await supabase.from("profiles").update(dbUpdates).eq("user_id", user.id);
+        // Clave es id, no user_id
+        await supabase.from("profiles").update(dbUpdates).eq("id", user.id);
       }
     }
   }, [user?.id]);

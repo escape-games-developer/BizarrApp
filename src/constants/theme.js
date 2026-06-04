@@ -39,8 +39,8 @@ export const TEAMS = {
 
 // ─── Geolocalización ──────────────────────────────────────────────────────────
 // ⚠️ Reemplazar con coordenadas reales del bar
-export const BAR_LAT    = -34.60906248747496;
-export const BAR_LNG    = -58.378500898150534;
+export const BAR_LAT    = -34.60927;  // Av. Hipólito Yrigoyen 851, CABA
+export const BAR_LNG    = -58.378576; // Av. Hipólito Yrigoyen 851, CABA
 export const GEO_RADIUS = 100; // metros
 
 // ─── Avatares preset ──────────────────────────────────────────────────────────
