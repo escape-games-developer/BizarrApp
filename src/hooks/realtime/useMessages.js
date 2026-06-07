@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase, supabaseAnon } from "../../lib/supabase";
 
 
 /**
@@ -17,7 +17,8 @@ export function useMessages(sessionId, role = "screen") {
 
   const fetchMessages = useCallback(async () => {
     if (!sessionId) return;
-    let query = supabase
+    const client = role === "admin" ? supabase : supabaseAnon;
+    let query = client
       .from("messages")
       .select("*")
       .eq("session_id", sessionId)
@@ -25,7 +26,6 @@ export function useMessages(sessionId, role = "screen") {
 
     if (role === "screen") query = query.eq("status", "approved");
     if (role === "admin")  query = query.in("status", ["pending", "approved"]);
-    // "user" filtra por user_id (se hace en el componente con .eq("user_id", userId))
 
     const { data } = await query;
     setMessages(data || []);
@@ -36,12 +36,13 @@ export function useMessages(sessionId, role = "screen") {
     fetchMessages();
 
     if (!sessionId) return;
-    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    const client = role === "admin" ? supabase : supabaseAnon;
+    if (channelRef.current) client.removeChannel(channelRef.current);
 
-    const channel = supabase
+    const channel = client
       .channel(`messages-${sessionId}-${role}`)
       .on("postgres_changes", {
-        event:  "*",    // INSERT (nuevo msg) y UPDATE (aprobado/rechazado)
+        event:  "*",
         schema: "public",
         table:  "messages",
         filter: `session_id=eq.${sessionId}`,
@@ -49,7 +50,7 @@ export function useMessages(sessionId, role = "screen") {
       .subscribe();
 
     channelRef.current = channel;
-    return () => supabase.removeChannel(channel);
+    return () => client.removeChannel(channel);
   }, [sessionId, role, fetchMessages]);
 
   // Para el Admin Panel: aprobar / rechazar

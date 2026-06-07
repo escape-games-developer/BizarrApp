@@ -13,17 +13,30 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-// Singleton — una sola instancia en toda la app
+// Cliente con auth persistente — usado por AdminPanel para writes (necesita auth.uid())
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    persistSession:    true,   // sesión persiste en localStorage
+    persistSession:    true,
     autoRefreshToken:  true,
     detectSessionInUrl: false,
   },
   realtime: {
-    params: {
-      eventsPerSecond: 20,     // throttle para no saturar con 180 usuarios
-    },
+    params: { eventsPerSecond: 20 },
+  },
+});
+
+// Cliente anónimo puro — lecturas y Realtime sin sesión de auth.
+// Usado por useGameState, useMessages, etc. para que /pantalla y /
+// no hereden ni intenten refrescar tokens del admin.
+export const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession:    false,
+    autoRefreshToken:  false,
+    detectSessionInUrl: false,
+    storageKey:        "sb-anon",   // evita "Multiple GoTrueClient instances"
+  },
+  realtime: {
+    params: { eventsPerSecond: 20 },
   },
 });
 

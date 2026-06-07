@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { AvatarDisplay }   from "../../components/AvatarDisplay";
 import { StepBar }         from "../../components/UI";
 import { PRESET_AVATARS, TEAMS, GEO_RADIUS } from "../../constants/theme";
 import { useGeoGate }      from "../../hooks/useGeoGate";
+import { useAuth }         from "../../hooks/useAuth";
 
 const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!"];
 
@@ -71,11 +72,18 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
   const [pass,      setPass]      = useState("");
   const [passConf,  setPassConf]  = useState("");
   const [emailSent, setEmailSent] = useState(false);
+  const [editing,   setEditing]   = useState(false);
   const fileRef = useRef();
+
+  const { logout } = useAuth();
 
   // Geo
   const { geoState, distMeters, loading: geoLoading, retry: requestGeo } = useGeoGate();
   const geoOk = geoState === "ok";
+
+  useEffect(() => {
+    if (geoState === "ok" && !user?.geoOk) onSave({ geoOk: true });
+  }, [geoState]);
 
   const selAvData   = PRESET_AVATARS.find((a) => a.id === selAv);
   const previewUser = avatarSrc==="photo"&&photoUrl
@@ -102,11 +110,11 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
       phone:phone.replace(/\D/g,""), geoOk, registered:true,
     };
     const result = onRegister(profile, pass);
-    if (result.ok) { setEmailSent(true); setStep(5); }
+    if (result.ok) { setEmailSent(true); setEditing(false); setStep(5); }
   }, [name,avatarSrc,photoUrl,selAv,selAvData,team,email,phone,geoOk,pass,onRegister,setStep]);
 
   // Ya registrado → saltar a paso 5
-  if (user?.registered && step === 1) { setStep(5); return null; }
+  if (user?.registered && !editing && step === 1) { setStep(5); return null; }
 
   return (
     <div>
@@ -431,6 +439,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
                 <span style={{ flex:1,fontSize:12,fontWeight:600,color:"rgba(245,230,192,.8)" }}>{row.label}</span>
                 <span style={{ fontSize:11,color:row.ok?"#86EFAC":"rgba(245,230,192,.3)" }}>{row.val}</span>
                 <span style={{ fontSize:12,color:row.ok?"#86EFAC":"rgba(245,230,192,.18)" }}>{row.ok?"✓":"○"}</span>
+                {!row.ok && row.label==="Ubicación" && <button onClick={requestGeo} style={{background:"none",border:"none",cursor:"pointer",fontSize:14}}>📍</button>}
               </div>
             ))}
           </div>
@@ -441,7 +450,15 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               📍 Para activar los juegos verificá tu ubicación. Editá el perfil y habilitá la ubicación cuando estés en el bar.
             </div>
           )}
-          <button className="btn-primary" onClick={()=>setStep(1)}>✏️ Editar perfil</button>
+          <button className="btn-primary" onClick={()=>{ setEditing(true); setStep(1); }}>✏️ Editar perfil</button>
+          <button
+            onClick={logout}
+            style={{ width:"100%", marginTop:10, padding:"12px", borderRadius:12,
+              background:"rgba(255,45,120,.1)", border:"1px solid rgba(255,45,120,.3)",
+              color:"#FF2D78", fontFamily:"Syne,sans-serif", fontWeight:800,
+              fontSize:13, cursor:"pointer" }}>
+            🚪 Cerrar sesión
+          </button>
         </>
       )}
     </div>

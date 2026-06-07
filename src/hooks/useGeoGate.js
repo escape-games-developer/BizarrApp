@@ -59,6 +59,16 @@ export function useGeoGate() {
     );
   }, []);
 
+  useEffect(() => {
+    if (geoState === "ok" || geoState === "checking" || geoState === "denied" || geoState === "unavailable") return;
+    const id = setInterval(check, 10_000);
+    return () => clearInterval(id);
+  }, [geoState, check]);
+
+  if (import.meta.env.VITE_SKIP_GEO === "true") {
+    return { geoState: "ok", distMeters: 0, loading: false, retry: () => {} };
+  }
+
   const isRestricted = geoState !== "ok";
   const isChecking   = geoState === "checking";
 

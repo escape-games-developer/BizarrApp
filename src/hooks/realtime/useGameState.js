@@ -1,19 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase, getActiveSession } from "../../lib/supabase";
+import { supabase, supabaseAnon } from "../../lib/supabase";
 
 export function useGameState() {
   const [session,   setSession]   = useState(null);
   const [gameState, setGameState] = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
-  const channelRef = useRef(null);
+  const channelRef        = useRef(null);
+  const mountedRef        = useRef(true);
+  const reconnectTimerRef = useRef(null);
 
   const loadInitial = useCallback(async () => {
     try {
       setLoading(true);
-      const sess = await getActiveSession();
+      // supabaseAnon: sin sesión auth, evita AuthApiError en /pantalla
+      const { data: sess, error: sessError } = await supabaseAnon
+        .from("sessions")
+        .select("id, label, date")
+        .eq("is_active", true)
+        .single();
+      if (sessError) throw sessError;
       setSession(sess);
-      const { data, error: gsError } = await supabase
+      const { data, error: gsError } = await supabaseAnon
         .from("game_state")
         .select("*")
         .eq("session_id", sess.id)
@@ -29,10 +37,16 @@ export function useGameState() {
   }, []);
 
   const subscribe = useCallback((sessionId) => {
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
-    const channel = supabase
+    // Limpiar ref ANTES de removeChannel para que el CLOSED del canal viejo no reconecte.
+    const old = channelRef.current;
+    channelRef.current = null;
+    if (old) supabaseAnon.removeChannel(old);
+
+    const channel = supabaseAnon
       .channel(`game-state-${sessionId}`)
       .on(
         "postgres_changes",
@@ -40,15 +54,36 @@ export function useGameState() {
           event:  "UPDATE",
           schema: "public",
           table:  "game_state",
-          filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          setGameState((prev) => ({ ...prev, ...payload.new }));
+          if (payload.new?.session_id === sessionId) {
+            setGameState((prev) => ({ ...prev, ...payload.new }));
+          }
         }
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           console.info("[useGameState] Realtime conectado");
+          // Re-fetch por si llegó un update mientras el canal estaba caído.
+          supabaseAnon
+            .from("game_state")
+            .select("*")
+            .eq("session_id", sessionId)
+            .single()
+            .then(({ data }) => {
+              if (data && mountedRef.current) setGameState(data);
+            });
+        }
+        if (
+          (status === "CLOSED" || status === "TIMED_OUT") &&
+          mountedRef.current &&
+          channelRef.current === channel
+        ) {
+          console.warn(`[useGameState] Canal ${status} — reconectando en 3s`);
+          channelRef.current = null;
+          reconnectTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) subscribe(sessionId);
+          }, 3000);
         }
         if (status === "CHANNEL_ERROR") {
           console.error("[useGameState] Error en canal Realtime");
@@ -59,11 +94,17 @@ export function useGameState() {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadInitial();
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
+      mountedRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
+      const ch = channelRef.current;
+      channelRef.current = null;
+      if (ch) supabaseAnon.removeChannel(ch);
     };
   }, [loadInitial]);
 
