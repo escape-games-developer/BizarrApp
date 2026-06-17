@@ -4,13 +4,14 @@ import {
   useYouTubePlaylists,
   PLAYLIST_TYPES,
   parsePlaylistId,
-} from "../../hooks/useYouTubePlaylists";
+} from "../hooks/useYouTubePlaylists";
 
 const COLORS = {
   videos:  { col:"#00E5FF", bg:"rgba(0,229,255,.08)",  bdr:"rgba(0,229,255,.3)"  },
   karaoke: { col:"#A855F7", bg:"rgba(168,85,247,.08)", bdr:"rgba(168,85,247,.3)" },
   ftl:     { col:"#FF2D78", bg:"rgba(255,45,120,.08)", bdr:"rgba(255,45,120,.3)" },
   pt:      { col:"#00F5A0", bg:"rgba(0,245,160,.08)",  bdr:"rgba(0,245,160,.3)"  },
+  duelo:   { col:"#FF9500", bg:"rgba(255,149,0,.08)",  bdr:"rgba(255,149,0,.3)"  },
 };
 
 function SourceBadge({ source, count }) {

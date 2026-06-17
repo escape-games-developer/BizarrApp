@@ -39,7 +39,7 @@ function MensajesTab({ user, messages, onSend }) {
   );
 }
 
-function VideosTab({ videos, loading, error }) {
+function VideosTab({ videos, loading, error, onSendVideo, user }) {
   const [selVideo, setSelVideo] = useState(null);
   const [sent,     setSent]     = useState(false);
   const reset = useCallback(()=>{setSent(false);setSelVideo(null);},[]);
@@ -79,7 +79,7 @@ function VideosTab({ videos, loading, error }) {
       {videos.map(v=>(
         <VideoRow key={v.ytId} video={v} selected={selVideo?.ytId===v.ytId} onSelect={setSelVideo} color="#00E5FF"/>
       ))}
-      <button disabled={!selVideo} onClick={()=>setSent(true)}
+      <button disabled={!selVideo} onClick={()=>{ onSendVideo?.(selVideo); setSent(true); }}
         style={{width:"100%",padding:14,border:"none",borderRadius:14,marginTop:4,background:"linear-gradient(135deg,#00E5FF,#00F5A0)",color:"#08040F",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",opacity:!selVideo?.3:1}}>
         🎵 Pedir este video
       </button>
@@ -87,9 +87,9 @@ function VideosTab({ videos, loading, error }) {
   );
 }
 
-export default function PantallaView({ user, messages, onSend, isRestricted, onGoProfile, ytConfig }) {
+export default function PantallaView({ user, messages, onSend, isRestricted, onGoProfile, ytConfig, onSendVideo }) {
   const [tab, setTab] = useState("mensajes");
-  const { playlists, loading, errors } = useYouTubePlaylists(ytConfig||{});
+  const { playlists = {}, loading, errors = {} } = useYouTubePlaylists(ytConfig||{});
 
   if (isRestricted) return (
     <BlockedView icon="📺" label="Mandalo a Pantalla"
@@ -112,7 +112,7 @@ export default function PantallaView({ user, messages, onSend, isRestricted, onG
         ))}
       </div>
       {tab==="mensajes"&&<MensajesTab user={user} messages={messages} onSend={onSend}/>}
-      {tab==="videos"&&<VideosTab videos={playlists.videos||[]} loading={loading} error={errors.videos}/>}
+      {tab==="videos"&&<VideosTab videos={playlists.videos||[]} loading={loading} error={errors.videos} onSendVideo={onSendVideo} user={user}/>}
     </div>
   );
 }

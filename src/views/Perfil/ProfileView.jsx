@@ -393,11 +393,11 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
             <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
               background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.25)",
               borderRadius:12,marginBottom:16 }}>
-              <span style={{ fontSize:20,flexShrink:0 }}>📧</span>
+              <span style={{ fontSize:20,flexShrink:0 }}>🎉</span>
               <div>
-                <div style={{ fontSize:12,fontWeight:700,color:"#86EFAC",marginBottom:2 }}>Email enviado</div>
+                <div style={{ fontSize:12,fontWeight:700,color:"#86EFAC",marginBottom:2 }}>¡Cuenta activa!</div>
                 <div style={{ fontSize:11,color:"rgba(245,230,192,.55)",lineHeight:1.4 }}>
-                  Te mandamos los datos de tu cuenta a <strong>{user.email}</strong>
+                  ¡Bienvenido/a a BizarrApp, <strong>{user.name}</strong>! Tu cuenta quedó lista. ¡Ya podés jugar!
                 </div>
               </div>
             </div>

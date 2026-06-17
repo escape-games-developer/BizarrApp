@@ -18,8 +18,14 @@ export function useGameState() {
         .from("sessions")
         .select("id, label, date")
         .eq("is_active", true)
-        .single();
+        .maybeSingle();
       if (sessError) throw sessError;
+      if (!sess) {
+        console.info("[useGameState] No hay sesión activa — esperando");
+        setSession(null);
+        setGameState(null);
+        return;
+      }
       setSession(sess);
       const { data, error: gsError } = await supabaseAnon
         .from("game_state")

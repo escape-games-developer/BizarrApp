@@ -6,6 +6,7 @@ import { useGameState, useAdminControls } from "../hooks/realtime/useGameState";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
+import PlaylistsPanel from "./PlaylistsPanel";
 
 // ── Paleta ─────────────────────────────────────────────────────────────────
 const C = { bg:"#08040F",bg2:"#110820",yellow:"#FFD600",amber:"#FF9500",
@@ -230,7 +231,7 @@ function VRow({v,sel,onSel,color}){
     <div className="vrow" style={{"--col":color||"rgba(0,229,255,.4)"}}
       onClick={()=>onSel(v)}>
       {sel&&<div style={{position:"absolute",left:5,top:5,width:6,height:6,borderRadius:"50%",background:color||"#00E5FF"}}/>}
-      <img src={`https://img.youtube.com/vi/${v.ytId}/mqdefault.jpg`} alt=""
+      <img src={`https://img.youtube.com/vi/${v.yt_id}/mqdefault.jpg`} alt=""
         onError={e=>{e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E";}}/>
       <div style={{flex:1,overflow:"hidden"}}>
         <div className="vtitle">{v.title}</div>
@@ -262,8 +263,8 @@ const SECS = [
   {id:"pt",       icon:"🏋️",label:"Personal Trainer", group:"Escenario",  grad:"linear-gradient(135deg,#00F5A0,#00E5FF)",glow:"rgba(0,245,160,.3)"},
   {id:"karaoke",  icon:"🎤",label:"Si lo sabe cante", group:"Escenario",  grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
   {id:"rey",      icon:"🎰",label:"Rey del Orto",     group:"Juegos",     grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
-  {id:"suma",     icon:"🔢",label:"Sumá el Número",   group:"Juegos",     grad:"linear-gradient(135deg,#FF9500,#A855F7)",glow:"rgba(255,149,0,.3)"},
-  {id:"palabra",  icon:"🔤",label:"Formá la Palabra", group:"Juegos",     grad:"linear-gradient(135deg,#A855F7,#FF2D78)",glow:"rgba(168,85,247,.3)"},
+  {id:"suma",     icon:"🔢",label:"Sumate que sumamos",   group:"Juegos",     grad:"linear-gradient(135deg,#FF9500,#A855F7)",glow:"rgba(255,149,0,.3)"},
+  {id:"palabra",  icon:"🔤",label:"Arma la palabra", group:"Juegos",     grad:"linear-gradient(135deg,#A855F7,#FF2D78)",glow:"rgba(168,85,247,.3)"},
   {id:"trivia",   icon:"🧠",label:"Desafío Demente",  group:"Juegos",     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
   {id:"menu",     icon:"🍹",label:"Menú del Bar",     group:"Contenido",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
   {id:"novedades",icon:"📣",label:"Novedades",        group:"Contenido",  grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
@@ -274,12 +275,12 @@ const SECS = [
 // ══════════════════════════════════════════════════════════════════════════
 // PANEL LANZAR — botonera de show
 // ══════════════════════════════════════════════════════════════════════════
-function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCount,goTo}){
+function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,controls}){
   const ITEMS=[
     {id:"rey",     icon:"🎰",label:"Rey del Orto",    col:"#FFD600",bg:"rgba(255,214,0,.1)", bdr:"rgba(255,214,0,.3)"},
     {id:"trivia",  icon:"🧠",label:"Desafío Demente", col:"#9B2FFF",bg:"rgba(155,47,255,.1)",bdr:"rgba(155,47,255,.3)"},
-    {id:"suma",    icon:"🔢",label:"Sumá el Número",  col:"#FF9500",bg:"rgba(255,149,0,.1)", bdr:"rgba(255,149,0,.3)"},
-    {id:"palabra", icon:"🔤",label:"Formá la Palabra",col:"#A855F7",bg:"rgba(168,85,247,.1)",bdr:"rgba(168,85,247,.3)"},
+    {id:"suma",    icon:"🔢",label:"Sumate que sumamos",  col:"#FF9500",bg:"rgba(255,149,0,.1)", bdr:"rgba(255,149,0,.3)"},
+    {id:"palabra", icon:"🔤",label:"Arma la palabra",col:"#A855F7",bg:"rgba(168,85,247,.1)",bdr:"rgba(168,85,247,.3)"},
     {id:"duelo",   icon:"⚔️", label:"Duelo",          col:"#FF2D78",bg:"rgba(255,45,120,.1)", bdr:"rgba(255,45,120,.3)"},
     {id:"ftl",     icon:"💃",label:"Follow Leader",   col:"#FF9500",bg:"rgba(255,149,0,.1)", bdr:"rgba(255,149,0,.3)"},
     {id:"pt",      icon:"🏋️",label:"Trainer",         col:"#00F5A0",bg:"rgba(0,245,160,.1)", bdr:"rgba(0,245,160,.3)"},
@@ -353,10 +354,10 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
           </button>
         </div>
         <div style={{display:"flex",gap:6}}>
-          {[{e:"🎵",l:"Bienvenida",c:"#FFD600"},{e:"⏸️",l:"Break",c:"#FF9500"},{e:"🌙",l:"Cierre",c:"#9B2FFF"}].map((p,i)=>(
+          {[{e:"🎵",l:"Bienvenida",id:"logo",c:"#FFD600"},{e:"⏸️",l:"Break",id:"break",c:"#FF9500"},{e:"🌙",l:"Cierre",id:"cierre",c:"#9B2FFF"}].map((p,i)=>(
             <button key={i} style={{flex:1,padding:"9px 5px",borderRadius:11,cursor:"pointer",
               border:`1.5px solid ${p.c}44`,background:`${p.c}0F`,transition:"all .18s",textAlign:"center"}}
-              onClick={()=>goTo("placas")}>
+              onClick={()=>controls?.sendPlaca(p.id)}>
               <div style={{fontSize:18,marginBottom:3}}>{p.e}</div>
               <div style={{fontSize:9,fontWeight:700,color:p.c}}>{p.l}</div>
             </button>
@@ -1173,13 +1174,13 @@ function VideosPanel({sec, vids=[], onApprove, onReject}){
             <div className="chip chip-live"><div className="dot-live"/>Proyectando</div>
           </div>
           <div className="vrow" style={{border:"none",background:"rgba(255,45,120,.07)",marginBottom:8}}>
-            <img src={`https://img.youtube.com/vi/${live.ytId}/mqdefault.jpg`} alt=""/>
+            <img src={`https://img.youtube.com/vi/${live.yt_id}/mqdefault.jpg`} alt=""/>
             <div style={{flex:1}}>
               <div className="vtitle">{live.title}</div>
               <div className="vartist">{live.artist} · Pedido por {live.reqBy}</div>
             </div>
           </div>
-          <button className="btn btn-r btn-full" onClick={()=>setLive(null)}>⏹ Detener</button>
+          <button className="btn btn-r btn-full" onClick={()=>{ dismiss(live.id); setLive(null); }}>⏹ Detener</button>
         </div>
       )}
       {vids.length>0?(
@@ -1188,7 +1189,7 @@ function VideosPanel({sec, vids=[], onApprove, onReject}){
           {vids.map((v,i)=>(
             <div key={v.id} className="mrow" style={{animationDelay:`${i*.05}s`}}>
               <div className="vrow" style={{border:"none",padding:0,background:"none",marginBottom:8}}>
-                <img src={`https://img.youtube.com/vi/${v.ytId}/mqdefault.jpg`} alt=""/>
+                <img src={`https://img.youtube.com/vi/${v.yt_id}/mqdefault.jpg`} alt=""/>
                 <div style={{flex:1}}>
                   <div className="vtitle">{v.title}</div>
                   <div className="vartist">{v.artist} · {v.reqBy}</div>
@@ -1229,8 +1230,8 @@ function PlacasPanel({sec, controls}){
     {id:"logo",      emoji:"🎵",title:"Logo animado del bar",    sub:"Pantalla de espera e inicio de noche",col:"#FFD600"},
     {id:"game_rey",  emoji:"🎰",title:"Rey del Orto",            sub:"Antes de lanzar el sorteo",          col:"#FFD600"},
     {id:"game_trivia",emoji:"🧠",title:"Desafío Demente",        sub:"Antes de lanzar la trivia",          col:"#9B2FFF"},
-    {id:"game_suma", emoji:"🔢",title:"Sumá el Número",          sub:"Antes de lanzar el juego",           col:"#FF9500"},
-    {id:"game_palabra",  emoji:"🔤",title:"Formá la Palabra",        sub:"Antes de lanzar el juego",           col:"#A855F7"},
+    {id:"game_suma", emoji:"🔢",title:"Sumate que sumamos",          sub:"Antes de lanzar el juego",           col:"#FF9500"},
+    {id:"game_palabra",  emoji:"🔤",title:"Arma la palabra",        sub:"Antes de lanzar el juego",           col:"#A855F7"},
     {id:"escenario", emoji:"🎤",title:"Escenario Bizarren",      sub:"Invitación al escenario",            col:"#FF2D78"},
     {id:"break",     emoji:"⏸️", title:"Break / Pausa",          sub:"Volvemos en un momento",             col:"#FF9500"},
     {id:"cierre",    emoji:"🌙",title:"Cierre de noche",         sub:"¡Gracias por esta noche!",           col:"#9B2FFF"},
@@ -1480,9 +1481,80 @@ function DashboardPanel({sec, connectedCount}){
 // ══════════════════════════════════════════════════════════════════════════
 // ROOT
 // ══════════════════════════════════════════════════════════════════════════
+function LoginAdmin(){
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [err,      setErr]      = useState(null);
+  const [loading,  setLoading]  = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(null);
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) setErr(error.message);
+    // Si entra OK, onAuthStateChange en AdminPanel re-renderiza al panel.
+  };
+
+  const inputStyle = {
+    width:"100%", padding:"11px 13px", marginBottom:10, borderRadius:10,
+    background:"rgba(240,232,255,.05)", border:"1px solid rgba(240,232,255,.12)",
+    color:C.white, fontFamily:"'Space Grotesk',sans-serif", fontSize:13, outline:"none",
+  };
+
+  return(
+    <>
+      <style>{css}</style>
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
+        justifyContent:"center",background:C.bg,padding:20}}>
+        <form onSubmit={submit} style={{width:320,maxWidth:"90vw",background:C.bg2,
+          border:"1px solid rgba(155,47,255,.18)",borderRadius:18,padding:"28px 24px",
+          boxShadow:"0 12px 48px rgba(0,0,0,.5)"}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:22,
+            color:C.yellow,textAlign:"center",marginBottom:4}}>BizarrApp</div>
+          <div style={{fontSize:11,color:"rgba(240,232,255,.4)",textAlign:"center",
+            marginBottom:22,letterSpacing:1,textTransform:"uppercase"}}>
+            Panel de administración
+          </div>
+          <input type="email" placeholder="Email" value={email} autoComplete="username"
+            onChange={e=>setEmail(e.target.value)} style={inputStyle} required/>
+          <input type="password" placeholder="Contraseña" value={password}
+            autoComplete="current-password"
+            onChange={e=>setPassword(e.target.value)} style={inputStyle} required/>
+          {err&&<div style={{color:"#FCA5A5",fontSize:11,marginBottom:10,
+            textAlign:"center"}}>{err}</div>}
+          <button type="submit" disabled={loading} style={{width:"100%",padding:12,
+            borderRadius:10,border:"none",cursor:loading?"not-allowed":"pointer",
+            opacity:loading?.5:1,fontFamily:"'Syne',sans-serif",fontWeight:800,
+            fontSize:13,color:C.bg,background:C.pink,
+            boxShadow:"0 4px 18px rgba(255,45,120,.3)"}}>
+            {loading?"Ingresando…":"Iniciar sesión"}
+          </button>
+        </form>
+      </div>
+    </>
+  );
+}
+
 export default function AdminPanel(){
   const [sec,      setSec]      = useState("launch");
   const [active,   setActive]   = useState(null);
+  const [authSession, setAuthSession] = useState(undefined); // undefined = verificando sesión
+  const [isAdmin,     setIsAdmin]     = useState(undefined); // undefined = verificando admin_users
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setAuthSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setAuthSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+  useEffect(() => {
+    const uid = authSession?.user?.id;
+    if (!uid) { setIsAdmin(undefined); return; }
+    let cancelled = false;
+    supabase.from("admin_users").select("user_id").eq("user_id", uid).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setIsAdmin(!!data); });
+    return () => { cancelled = true; };
+  }, [authSession?.user?.id]);
   const { session, gameState } = useGameState();
   const controls = useAdminControls(session?.id ?? null);
   const zocaloOn = gameState?.zocalo_active ?? false;
@@ -1503,7 +1575,7 @@ export default function AdminPanel(){
     switch(sec){
       case "launch":    return <LaunchPanel sec={curSec} active={active} setActive={setActive}
                                  zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
-                                 msgCount={msgCount} vidCount={vidCount} goTo={goTo}/>;
+                                 msgCount={msgCount} vidCount={vidCount} goTo={goTo} controls={controls}/>;
       case "duelo":     return <DueloPanel sec={curSec}/>;
       case "ftl":       return <EscenarioPanel sec={curSec} type="ftl"/>;
       case "pt":        return <EscenarioPanel sec={curSec} type="pt"/>;
@@ -1518,14 +1590,59 @@ export default function AdminPanel(){
       case "menu":      return <MenuPanel sec={curSec}/>;
       case "novedades": return <NovedadesPanel sec={curSec}/>;
       case "dashboard": return <DashboardPanel sec={curSec} connectedCount={connectedCount}/>;
+      case "playlists": return <PlaylistsPanel/>;
       default: return <div style={{padding:20,color:"rgba(240,232,255,.25)",fontSize:12}}>Sección en construcción</div>;
     }
   };
 
+  if (authSession === undefined) return (
+    <>
+      <style>{css}</style>
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
+        justifyContent:"center",background:C.bg,color:"rgba(240,232,255,.4)",
+        fontFamily:"'Space Grotesk',sans-serif",fontSize:13}}>
+        Cargando…
+      </div>
+    </>
+  );
+  if (!authSession) return <LoginAdmin/>;
+  if (isAdmin === undefined) return (
+    <>
+      <style>{css}</style>
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
+        justifyContent:"center",background:C.bg,color:"rgba(240,232,255,.4)",
+        fontFamily:"'Space Grotesk',sans-serif",fontSize:13}}>
+        Verificando permisos…
+      </div>
+    </>
+  );
+  if (!isAdmin) return (
+    <>
+      <style>{css}</style>
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",
+        alignItems:"center",justifyContent:"center",background:C.bg,padding:20,
+        textAlign:"center"}}>
+        <div style={{fontSize:40,marginBottom:14}}>🚫</div>
+        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:18,
+          color:C.white,marginBottom:6}}>Sin permisos de administrador</div>
+        <div style={{fontSize:12,color:"rgba(240,232,255,.4)",marginBottom:20,
+          maxWidth:280}}>
+          Esta cuenta no está autorizada para el panel. Ingresá con una cuenta de administrador.
+        </div>
+        <button onClick={async()=>{ await supabase.auth.signOut(); }}
+          style={{padding:"10px 18px",borderRadius:10,border:"none",cursor:"pointer",
+            fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:12,
+            color:C.bg,background:C.pink}}>
+          Cerrar sesión
+        </button>
+      </div>
+    </>
+  );
+
   return(
     <>
       <style>{css}</style>
-      <div className="root">
+      <div className="root" style={{zoom:1.1}}>
         <div className="orbs">
           <div className="orb" style={{width:320,height:320,top:-120,left:-80,
             background:curSec.glow,animationDuration:"15s"}}/>
@@ -1573,15 +1690,26 @@ export default function AdminPanel(){
             <div>
               <div className="mhdr-title">{curSec.icon} {curSec.label}</div>
             </div>
-            {active&&(
-              <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px",
-                borderRadius:9,background:"rgba(0,245,160,.08)",border:"1px solid rgba(0,245,160,.22)"}}>
-                <div className="dot-live"/>
-                <span style={{fontSize:9.5,fontWeight:700,color:"#00F5A0"}}>
-                  {SECS.find(s=>s.id===active)?.label||active} · EN VIVO
-                </span>
-              </div>
-            )}
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {active&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px",
+                  borderRadius:9,background:"rgba(0,245,160,.08)",border:"1px solid rgba(0,245,160,.22)"}}>
+                  <div className="dot-live"/>
+                  <span style={{fontSize:9.5,fontWeight:700,color:"#00F5A0"}}>
+                    {SECS.find(s=>s.id===active)?.label||active} · EN VIVO
+                  </span>
+                </div>
+              )}
+              <button
+                onClick={async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; }}
+                onMouseEnter={e=>{e.currentTarget.style.color=C.amber;e.currentTarget.style.borderColor="rgba(255,149,0,.5)";}}
+                onMouseLeave={e=>{e.currentTarget.style.color=C.pink;e.currentTarget.style.borderColor="rgba(255,45,120,.35)";}}
+                style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:11,fontWeight:700,
+                  color:C.pink,background:C.bg2,border:"1px solid rgba(255,45,120,.35)",
+                  borderRadius:9,padding:"5px 12px",cursor:"pointer",transition:"color .15s,border-color .15s"}}>
+                Cerrar sesión
+              </button>
+            </div>
           </div>
           <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow}} key={sec}>
             {renderPanel()}

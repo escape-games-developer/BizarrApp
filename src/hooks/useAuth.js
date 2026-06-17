@@ -28,7 +28,7 @@ export function useAuth() {
         .from("profiles")
         .select("*")
         .eq("id", session.user.id)
-        .single();
+        .maybeSingle();
 
       if (profile) {
         const fullProfile = {
@@ -45,6 +45,13 @@ export function useAuth() {
         localStorage.setItem(SESSION_KEY, JSON.stringify(fullProfile));
         setUser(fullProfile);
         setRegStep(fullProfile.registered ? 5 : 1);
+      } else {
+        // Sesión válida pero sin perfil (trigger falló o user creado fuera del flujo).
+        // No tiramos error: limpiamos sesión y tratamos al user como deslogueado.
+        console.warn("[useAuth] Sesión sin perfil asociado — limpiando sesión");
+        localStorage.removeItem(SESSION_KEY);
+        setUser(null);
+        setRegStep(1);
       }
     };
 
@@ -108,7 +115,9 @@ export function useAuth() {
       setUser(fullProfile);
       setRegStep(5);
 
-      return { ok: true };
+      // Error parcial: la cuenta (auth + sesión) se creó, pero el upsert del
+      // perfil falló. Devolvemos { user, error } para que el caller pueda avisar.
+      return { ok: true, user: fullProfile, error: profileError?.message ?? null };
     } catch (e) {
       return { ok: false, error: e.message };
     } finally {
@@ -132,7 +141,7 @@ export function useAuth() {
         .from("profiles")
         .select("*")
         .eq("id", data.user.id)
-        .single();
+        .maybeSingle();
 
       const fullProfile = profileData
         ? {

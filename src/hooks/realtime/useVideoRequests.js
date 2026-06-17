@@ -7,22 +7,24 @@ export function useVideoRequests(sessionId) {
   const channelRef = useRef(null);
 
   const fetchRequests = useCallback(async () => {
+    console.log('[useVideoRequests] fetchRequests sessionId:', sessionId);
     if (!sessionId) return;
-    const { data } = await supabaseAnon
+    const { data } = await supabase
       .from("video_requests")
       .select("*")
       .eq("session_id", sessionId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: true });
+      .in("status", ["pending", "launched"])
+      .order("created_at", { ascending: false });
     setRequests(data || []);
     setLoading(false);
   }, [sessionId]);
 
   useEffect(() => {
+    console.log('[useVideoRequests] useEffect sessionId:', sessionId);
     fetchRequests();
     if (!sessionId) return;
-    if (channelRef.current) supabaseAnon.removeChannel(channelRef.current);
-    const channel = supabaseAnon
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    const channel = supabase
       .channel(`video-requests-${sessionId}`)
       .on("postgres_changes", {
         event:  "*",
@@ -32,15 +34,15 @@ export function useVideoRequests(sessionId) {
       }, fetchRequests)
       .subscribe();
     channelRef.current = channel;
-    return () => supabaseAnon.removeChannel(channel);
+    return () => supabase.removeChannel(channel);
   }, [sessionId, fetchRequests]);
 
   const approve = useCallback(async (id) => {
-    await supabase.from("video_requests").update({ status: "approved" }).eq("id", id);
+    await supabase.from("video_requests").update({ status: "launched" }).eq("id", id);
   }, []);
 
   const reject = useCallback(async (id) => {
-    await supabase.from("video_requests").update({ status: "rejected" }).eq("id", id);
+    await supabase.from("video_requests").update({ status: "dismissed" }).eq("id", id);
   }, []);
 
   const send = useCallback(async ({ ytId, title, artist, user }) => {

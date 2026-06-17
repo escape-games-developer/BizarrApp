@@ -230,7 +230,7 @@ function SumaElNumero({ user, gameState }) {
 
   return (
     <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔢</span><h3>Sumá el Número</h3></div>
+      <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔢</span><h3>Sumate que sumamos</h3></div>
       <div style={{ textAlign: "center", marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: "rgba(245,230,192,.4)", marginBottom: 8 }}>
           Objetivo: sumá {target} exacto con otros usuarios
@@ -265,7 +265,7 @@ function FormaLaPalabra({ user, gameState }) {
 
   return (
     <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Formá la Palabra</h3></div>
+      <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Arma la palabra</h3></div>
       <div style={{ textAlign: "center", marginBottom: 12, fontSize: 11, color: "rgba(245,230,192,.4)" }}>
         Encontrá a los que tienen las otras letras
       </div>

@@ -28,7 +28,13 @@ export function useMessages(sessionId, role = "screen") {
     if (role === "admin")  query = query.in("status", ["pending", "approved"]);
 
     const { data } = await query;
-    setMessages(data || []);
+    // Normalizar al shape que esperan los consumidores ({ name, avatar }),
+    // conservando las keys originales (user_name, avatar_emoji, etc.).
+    setMessages((data || []).map(m => ({
+      ...m,
+      name:   m.name   || m.user_name    || "Anónimo",
+      avatar: m.avatar || m.avatar_emoji || "👤",
+    })));
     setLoading(false);
   }, [sessionId, role]);
 

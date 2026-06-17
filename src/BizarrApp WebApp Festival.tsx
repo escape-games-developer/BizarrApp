@@ -361,7 +361,7 @@ function JuegosView({ user, activeGame, isRestricted, onGoProfile }) {
   // Aquí van los juegos activos (Rey del Orto, Sumá, Palabra, Trivia)
   return (
     <div style={{"--mg":m.grad,"--glow":m.glow}}>
-      <SH tag="Juego activo" title={activeGame==="rey del orto"?"Rey del Orto 🎰":activeGame==="trivia"?"Desafío Demente! 🧠":activeGame==="suma"?"Sumá el Número 🔢":"Formá la Palabra 🔤"} mod="games"/>
+      <SH tag="Juego activo" title={activeGame==="rey del orto"?"Rey del Orto 🎰":activeGame==="trivia"?"Desafío Demente! 🧠":activeGame==="suma"?"Sumate que sumamos 🔢":"Arma la palabra 🔤"} mod="games"/>
       <div className="game-card" style={{borderColor:"rgba(255,215,0,.3)",background:"rgba(255,215,0,.05)"}}>
         <div style={{textAlign:"center",padding:"16px 0",fontSize:12,color:"rgba(255,215,0,.5)"}}>
           ⏳ Esperá la instrucción del staff...

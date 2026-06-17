@@ -4,6 +4,7 @@ import globalCss                from "./constants/styles";
 import { useAuth }              from "./hooks/useAuth";
 import { useGameState }         from "./hooks/realtime/useGameState";
 import { useMessages }          from "./hooks/realtime/useMessages";
+import { useVideoRequests }     from "./hooks/realtime/useVideoRequests";
 import { usePresence }          from "./hooks/realtime/usePresence";
 import { AvatarDisplay }        from "./components/AvatarDisplay";
 
@@ -34,6 +35,7 @@ export default function BizarrApp() {
 
   // Mensajes del usuario
   const { messages, send: sendMsg } = useMessages(session?.id, "user");
+  const { send: sendVideo } = useVideoRequests(session?.id);
 
   const isRestricted = !user?.geoOk;
 
@@ -65,7 +67,8 @@ export default function BizarrApp() {
         return <PantallaView user={user}
                  messages={messages.filter(m => m.user_id === user?.id)}
                  onSend={text => sendMsg(text, user)}
-                 isRestricted={isRestricted} onGoProfile={goProfile} ytConfig={ytConfig}/>;
+                 isRestricted={isRestricted} onGoProfile={goProfile} ytConfig={ytConfig}
+                 onSendVideo={(video) => sendVideo({ ytId: video.ytId, title: video.title, artist: video.artist, user })}/>;
       case "profile":
         if (!user?.registered)
           return authMode === "login"
