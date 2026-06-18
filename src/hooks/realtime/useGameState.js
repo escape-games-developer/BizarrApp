@@ -62,12 +62,14 @@ export function useGameState() {
           table:  "game_state",
         },
         (payload) => {
+          console.info("[useGameState] 📡 Realtime payload .new:", payload.new); // [DEBUG-LOG]
           if (payload.new?.session_id === sessionId) {
             setGameState((prev) => ({ ...prev, ...payload.new }));
           }
         }
       )
       .subscribe((status) => {
+        console.info("[useGameState] 🔌 Canal status:", status); // [DEBUG-LOG]
         if (status === "SUBSCRIBED") {
           console.info("[useGameState] Realtime conectado");
           // Re-fetch por si llegó un update mientras el canal estaba caído.
@@ -124,6 +126,7 @@ export function useGameState() {
 export function useAdminControls(sessionId) {
   const update = useCallback(async (updates) => {
     if (!sessionId) return { error: "Sin sesión activa" };
+    console.info("[useAdminControls] 🎛️ update game_state →", updates); // [DEBUG-LOG]
     const { error } = await supabase
       .from("game_state")
       .update(updates)
@@ -132,34 +135,52 @@ export function useAdminControls(sessionId) {
     return { error };
   }, [sessionId]);
 
+  // Dismissa cualquier video launched de la sesión (otra tabla: video_requests).
+  // Se llama al salir de placa/juego/escenario para que el video previo no resurface.
+  const dismissActiveVideo = useCallback(async () => {
+    if (!sessionId) return;
+    console.info("[useAdminControls] 🎬 dismissActiveVideo → video_requests status=dismissed"); // [DEBUG-LOG]
+    await supabase.from("video_requests")
+      .update({ status: "dismissed" })
+      .eq("session_id", sessionId)
+      .eq("status", "launched");
+  }, [sessionId]);
+
   // ── Juegos ────────────────────────────────────────────────────────────────
-  const announceGame = useCallback((game) =>
-    update({ active_placa: `game_${game}`, active_game: null }),
-  [update]);
+  const announceGame = useCallback(async (game) => {
+    await dismissActiveVideo();
+    return update({ active_placa: `game_${game}`, active_game: null });
+  }, [update, dismissActiveVideo]);
 
-  const activateGame = useCallback((game) =>
-    update({ active_game: game, active_placa: null }),
-  [update]);
+  const activateGame = useCallback(async (game) => {
+    await dismissActiveVideo();
+    return update({ active_game: game, active_placa: null,
+                    active_escenario: null, placa_custom: null });
+  }, [update, dismissActiveVideo]);
 
-  const deactivateGame = useCallback(() =>
-    update({ active_game: null, active_placa: null }),
-  [update]);
+  const deactivateGame = useCallback(async () => {
+    await dismissActiveVideo();
+    return update({ active_game: null, active_placa: null });
+  }, [update, dismissActiveVideo]);
 
   const toggleZocalo = useCallback((on) =>
     update({ zocalo_active: on }),
   [update]);
 
-  const sendPlaca = useCallback((placaId, customData = null) =>
-    update({ active_placa: placaId, active_game: null,
-             active_escenario: null, placa_custom: customData }),
-  [update]);
+  const sendPlaca = useCallback(async (placaId, customData = null) => {
+    await dismissActiveVideo();
+    return update({ active_placa: placaId, active_game: null,
+                    active_escenario: null, placa_custom: customData });
+  }, [update, dismissActiveVideo]);
 
-  const clearPlaca = useCallback(() =>
-    update({ active_placa: null, placa_custom: null }),
-  [update]);
+  const clearPlaca = useCallback(async () => {
+    await dismissActiveVideo();
+    return update({ active_placa: null, placa_custom: null });
+  }, [update, dismissActiveVideo]);
 
   // ── Rey del Orto ──────────────────────────────────────────────────────────
   const launchRaffle = useCallback(async (prize, excludePrevious = false) => {
+    await dismissActiveVideo();
     await update({ raffle_state: "launched", active_game: "rey del orto" });
     return async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -181,22 +202,23 @@ export function useAdminControls(sessionId) {
       );
       return res.json();
     };
-  }, [sessionId, update]);
+  }, [sessionId, update, dismissActiveVideo]);
 
   const resetRaffle = useCallback(() =>
     update({ raffle_state: "idle", raffle_winner_id: null, raffle_winner_name: null }),
   [update]);
 
   // ── Desafío Demente ───────────────────────────────────────────────────────
-  const startTrivia = useCallback((coupon) =>
-    update({
+  const startTrivia = useCallback(async (coupon) => {
+    await dismissActiveVideo();
+    return update({
       active_game:        "trivia",
       trivia_state:       "active",
       trivia_question:    0,
       trivia_coupon:      coupon,
       trivia_winner_team: null,
-    }),
-  [update]);
+    });
+  }, [update, dismissActiveVideo]);
 
   const revealTriviaAnswer = useCallback(() =>
     update({ trivia_state: "revealed" }),
@@ -220,41 +242,47 @@ export function useAdminControls(sessionId) {
   [update]);
 
   // ── Escenario ─────────────────────────────────────────────────────────────
-  const activateEscenario = useCallback((type) =>
-    update({ active_escenario: type }),
-  [update]);
+  const activateEscenario = useCallback(async (type) => {
+    await dismissActiveVideo();
+    return update({ active_escenario: type, active_placa: null,
+                    active_game: null, placa_custom: null });
+  }, [update, dismissActiveVideo]);
 
-  const deactivateEscenario = useCallback(() =>
-    update({ active_escenario: null }),
-  [update]);
+  const deactivateEscenario = useCallback(async () => {
+    await dismissActiveVideo();
+    return update({ active_escenario: null });
+  }, [update, dismissActiveVideo]);
 
   // ── Duelo de Talentos ─────────────────────────────────────────────────────
-  const startDuelo = useCallback(() =>
-    update({
+  const startDuelo = useCallback(async () => {
+    await dismissActiveVideo();
+    return update({
       active_escenario: "duelo",
       duelo_state:      "voting",
       duelo_votes_a:    0,
       duelo_votes_b:    0,
-    }),
-  [update]);
+    });
+  }, [update, dismissActiveVideo]);
 
   const revealDuelo = useCallback(() =>
     update({ duelo_state: "revealed" }),
   [update]);
 
-  const openDueloInvitation = useCallback(() =>
-    update({ active_placa: "duelo", active_escenario: null,
-             duelo_state: "inviting", duelo_slot1: null, duelo_slot2: null }),
-  [update]);
+  const openDueloInvitation = useCallback(async () => {
+    await dismissActiveVideo();
+    return update({ active_placa: "duelo", active_escenario: null,
+                    duelo_state: "inviting", duelo_slot1: null, duelo_slot2: null });
+  }, [update, dismissActiveVideo]);
 
   const selectDueloParticipant = useCallback((slot, participant) =>
     update({ [`duelo_slot${slot}`]: participant }),
   [update]);
 
-  const launchDueloVideo = useCallback((ytId, ytTitle) =>
-    update({ active_escenario: "duelo", active_placa: null,
-             duelo_state: "active", duelo_video: { ytId, ytTitle } }),
-  [update]);
+  const launchDueloVideo = useCallback(async (ytId, ytTitle) => {
+    await dismissActiveVideo();
+    return update({ active_escenario: "duelo", active_placa: null,
+                    duelo_state: "active", duelo_video: { ytId, ytTitle } });
+  }, [update, dismissActiveVideo]);
 
   const closeDuelo = useCallback((winnerId) =>
     update({ duelo_state: "finished", duelo_winner: winnerId,
@@ -262,20 +290,32 @@ export function useAdminControls(sessionId) {
   [update]);
 
   // ── FTL / PT / Karaoke ───────────────────────────────────────────────────
-  const openEscenarioInvitation = useCallback((type) =>
-    update({ active_placa: `escenario_${type}`, active_escenario: null,
-             escenario_invite_type: type }),
-  [update]);
+  const openEscenarioInvitation = useCallback(async (type) => {
+    await dismissActiveVideo();
+    return update({ active_placa: `escenario_${type}`, active_escenario: null,
+                    escenario_invite_type: type });
+  }, [update, dismissActiveVideo]);
 
-  const launchEscenario = useCallback((type, participant, ytId, ytTitle) =>
-    update({ active_escenario: type, active_placa: null,
-             escenario_participant: participant,
-             escenario_video: ytId ? { ytId, ytTitle } : null }),
-  [update]);
+  const launchEscenario = useCallback(async (type, participant, ytId, ytTitle) => {
+    await dismissActiveVideo();
+    return update({ active_escenario: type, active_placa: null,
+                    escenario_participant: participant,
+                    escenario_video: ytId ? { ytId, ytTitle } : null });
+  }, [update, dismissActiveVideo]);
 
   // ── Minijuegos ────────────────────────────────────────────────────────────
-  const launchMinijuego = useCallback((type, payload) =>
-    update({ active_game: type, active_placa: null, minijuego_payload: payload }),
+  const launchMinijuego = useCallback(async (type, payload) => {
+    await dismissActiveVideo();
+    return update({ active_game: type, active_placa: null, minijuego_payload: payload });
+  }, [update, dismissActiveVideo]);
+
+  // ── Videos del cliente ────────────────────────────────────────────────────
+  // Al proyectar un video (status='launched' lo hace useVideoRequests.approve),
+  // limpiamos las capas superiores para que el video quede como capa principal
+  // (render: juego > escenario > video > placa). Last-write-wins.
+  const projectVideo = useCallback(() =>
+    update({ active_game: null, active_escenario: null,
+             active_placa: null, placa_custom: null }),
   [update]);
 
   // ── Return — SIN gameState (ese lo da useGameState) ───────────────────────
@@ -289,5 +329,6 @@ export function useAdminControls(sessionId) {
     openEscenarioInvitation, launchEscenario,
     launchMinijuego,
     toggleZocalo, sendPlaca, clearPlaca,
+    projectVideo,
   };
 }

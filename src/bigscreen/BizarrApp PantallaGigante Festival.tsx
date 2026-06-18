@@ -493,7 +493,7 @@ function VideoScreen({ video }) {
     }}>
       <iframe
         key={currentVideo?.yt_id}
-        src={`https://www.youtube.com/embed/${currentVideo?.yt_id}?autoplay=1&controls=0&modestbranding=1&rel=0`}
+        src={`https://www.youtube.com/embed/${currentVideo?.yt_id}?autoplay=1&playsinline=1&controls=0&modestbranding=1&rel=0&mute=1`}
         style={{ width:"100vw", height:"100vh", border:"none" }}
         allow="autoplay; fullscreen"
         allowFullScreen
@@ -565,20 +565,40 @@ export default function PantallaGigante() {
   const hasGame     = !!gameState?.active_game;
   const hasEscenario= !!gameState?.active_escenario;
 
+  // Prioridad de capas: juego > escenario > video > placa > idle.
+  // El video TAPA a la placa (active_placa="logo" es el estado de reposo y
+  // está casi siempre presente). Con last-write-wins en el admin no deberían
+  // coexistir; si lo hacen, gana lo más visible (el video).
   let content;
-  if (liveVideo) {
-    content = <VideoScreen video={liveVideo}/>;
-  } else if (hasPlaca) {
-    content = <PlacaScreen logo={LOGO} gameState={gameState}/>;
-  } else if (gameState?.active_game === "rey del orto") {
+  if (gameState?.active_game === "rey del orto") {
     content = <RaffleScreen logo={LOGO} gameState={gameState}/>;
   } else if (gameState?.active_game === "trivia") {
     content = <TriviaScreen gameState={gameState}/>;
   } else if (hasEscenario) {
     content = <EscenarioScreen gameState={gameState}/>;
+  } else if (liveVideo && !hasGame) {
+    content = <VideoScreen video={liveVideo}/>;
+  } else if (hasPlaca) {
+    content = <PlacaScreen logo={LOGO} gameState={gameState}/>;
   } else {
     content = <IdleScreen logo={LOGO}/>;
   }
+
+  // [DEBUG-LOG] — log de-dupeado del estado que decide el render
+  const lastLogRef = React.useRef("");                                     // [DEBUG-LOG]
+  useEffect(() => {                                                        // [DEBUG-LOG]
+    const snap = {                                                        // [DEBUG-LOG]
+      active_placa:     gameState?.active_placa ?? null,                  // [DEBUG-LOG]
+      active_game:      gameState?.active_game ?? null,                   // [DEBUG-LOG]
+      active_escenario: gameState?.active_escenario ?? null,             // [DEBUG-LOG]
+      liveVideo:        liveVideo?.yt_id ?? null,                         // [DEBUG-LOG]
+    };                                                                    // [DEBUG-LOG]
+    const sig = JSON.stringify(snap);                                     // [DEBUG-LOG]
+    if (sig !== lastLogRef.current) {                                     // [DEBUG-LOG]
+      lastLogRef.current = sig;                                           // [DEBUG-LOG]
+      console.info("[PantallaGigante] 🖥️ render →", snap);                // [DEBUG-LOG]
+    }                                                                     // [DEBUG-LOG]
+  }, [gameState, liveVideo]);                                             // [DEBUG-LOG]
 
   return (
     <>

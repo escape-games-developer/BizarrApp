@@ -1159,9 +1159,9 @@ function MensajesPanel({sec,zocaloOn,setZocaloOn,pending,approved,approve,reject
 // ══════════════════════════════════════════════════════════════════════════
 // VIDEOS
 // ══════════════════════════════════════════════════════════════════════════
-function VideosPanel({sec, vids=[], onApprove, onReject}){
+function VideosPanel({sec, vids=[], onApprove, onReject, onProject}){
   const [live, setLive] = useState(null);
-  const launch  = id => { setLive(vids.find(v=>v.id===id)); onApprove(id); };
+  const launch  = id => { setLive(vids.find(v=>v.id===id)); onApprove(id); onProject?.(); };
   const dismiss = id => onReject(id);
 
 
@@ -1585,7 +1585,7 @@ export default function AdminPanel(){
       case "palabra":   return <PalabraPanel sec={curSec}/>;
       case "trivia":    return <TriviaPanel sec={curSec}/>;
       case "mensajes":  return <MensajesPanel sec={curSec} zocaloOn={zocaloOn} setZocaloOn={setZocaloOn} pending={pending} approved={approved} approve={approve} reject={reject}/>;
-      case "videos":    return <VideosPanel sec={curSec} vids={vidPending} onApprove={approveVid} onReject={rejectVid}/>;
+      case "videos":    return <VideosPanel sec={curSec} vids={vidPending} onApprove={approveVid} onReject={rejectVid} onProject={controls?.projectVideo}/>;
       case "placas":    return <PlacasPanel sec={curSec} controls={controls}/>;
       case "menu":      return <MenuPanel sec={curSec}/>;
       case "novedades": return <NovedadesPanel sec={curSec}/>;

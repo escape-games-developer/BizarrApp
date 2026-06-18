@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { BlockedView, VideoRow } from "../../components/UI";
 import { useYouTubePlaylists } from "../../hooks/useYouTubePlaylists";
+import { ytThumb } from "../../constants/theme";
 
 function MensajesTab({ user, messages, onSend }) {
   const [text, setText] = useState("");
@@ -79,10 +80,43 @@ function VideosTab({ videos, loading, error, onSendVideo, user }) {
       {videos.map(v=>(
         <VideoRow key={v.ytId} video={v} selected={selVideo?.ytId===v.ytId} onSelect={setSelVideo} color="#00E5FF"/>
       ))}
-      <button disabled={!selVideo} onClick={()=>{ onSendVideo?.(selVideo); setSent(true); }}
-        style={{width:"100%",padding:14,border:"none",borderRadius:14,marginTop:4,background:"linear-gradient(135deg,#00E5FF,#00F5A0)",color:"#08040F",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",opacity:!selVideo?.3:1}}>
-        🎵 Pedir este video
-      </button>
+      {selVideo && (
+        <div
+          onClick={() => setSelVideo(null)}
+          style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+        >
+          <div
+            onClick={e=>e.stopPropagation()}
+            style={{position:"relative",width:"100%",maxWidth:340,background:"linear-gradient(160deg,#120A1F,#0A0712)",border:"1.5px solid rgba(0,229,255,.3)",borderRadius:20,padding:20,boxShadow:"0 20px 60px rgba(0,0,0,.6)"}}
+          >
+            <button
+              onClick={()=>setSelVideo(null)}
+              style={{position:"absolute",top:12,right:12,width:30,height:30,borderRadius:"50%",border:"1px solid rgba(240,232,255,.15)",background:"rgba(240,232,255,.06)",color:"rgba(240,232,255,.6)",fontSize:15,cursor:"pointer",lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}
+            >✕</button>
+
+            <img
+              src={ytThumb(selVideo.ytId)}
+              alt={selVideo.title}
+              style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",borderRadius:12,marginBottom:14}}
+            />
+            <div style={{fontFamily:"Syne,sans-serif",fontSize:16,fontWeight:900,color:"#F0E8FF",marginBottom:4,lineHeight:1.25}}>
+              {selVideo.title}
+            </div>
+            {selVideo.artist && (
+              <div style={{fontSize:12,color:"rgba(0,229,255,.7)",marginBottom:18}}>{selVideo.artist}</div>
+            )}
+
+            <button
+              onClick={()=>{ onSendVideo?.(selVideo); setSent(true); }}
+              style={{width:"100%",padding:14,border:"none",borderRadius:14,background:"linear-gradient(135deg,#00E5FF,#00F5A0)",color:"#08040F",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8}}
+            >🎵 Pedir este video</button>
+            <button
+              onClick={()=>setSelVideo(null)}
+              style={{width:"100%",padding:11,border:"1px solid rgba(240,232,255,.12)",borderRadius:12,background:"transparent",color:"rgba(240,232,255,.5)",fontFamily:"Syne,sans-serif",fontSize:13,fontWeight:700,cursor:"pointer"}}
+            >Volver</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
