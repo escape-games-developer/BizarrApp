@@ -61,11 +61,21 @@ export function useMessages(sessionId, role = "screen") {
 
   // Para el Admin Panel: aprobar / rechazar
   const approve = useCallback(async (messageId) => {
+    // "Último mensaje gana": archivar los approved anteriores de esta sesión
+    // para que en PantallaGigante haya como máximo 1 mensaje a la vez.
+    if (sessionId) {
+      await supabase
+        .from("messages")
+        .update({ status: "archived" })
+        .eq("session_id", sessionId)
+        .eq("status", "approved")
+        .neq("id", messageId);
+    }
     await supabase
       .from("messages")
       .update({ status: "approved" })
       .eq("id", messageId);
-  }, []);
+  }, [sessionId]);
 
   const reject = useCallback(async (messageId) => {
     await supabase

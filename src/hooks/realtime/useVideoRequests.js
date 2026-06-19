@@ -48,14 +48,16 @@ export function useVideoRequests(sessionId) {
   const send = useCallback(async ({ ytId, title, artist, user }) => {
     if (!sessionId || !user?.id) return { error: "Sin sesión" };
     const { error } = await supabase.from("video_requests").insert({
-      session_id: sessionId,
-      user_id:    user.id,
-      user_name:  user.name,
-      avatar_id:  user.avatarId || null,
-      yt_id:      ytId,
+      session_id:   sessionId,
+      user_id:      user.id,
+      user_name:    user.name,
+      avatar_id:    user.avatarId    || null,  // compatibilidad
+      avatar_emoji: user.avatarEmoji || null,  // snapshot denormalizado
+      photo_url:    user.photoUrl    || null,  // snapshot denormalizado
+      yt_id:        ytId,
       title,
       artist,
-      status:     "pending",
+      status:       "pending",
     });
     return { error };
   }, [sessionId]);

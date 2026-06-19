@@ -62,14 +62,12 @@ export function useGameState() {
           table:  "game_state",
         },
         (payload) => {
-          console.info("[useGameState] 📡 Realtime payload .new:", payload.new); // [DEBUG-LOG]
           if (payload.new?.session_id === sessionId) {
             setGameState((prev) => ({ ...prev, ...payload.new }));
           }
         }
       )
       .subscribe((status) => {
-        console.info("[useGameState] 🔌 Canal status:", status); // [DEBUG-LOG]
         if (status === "SUBSCRIBED") {
           console.info("[useGameState] Realtime conectado");
           // Re-fetch por si llegó un update mientras el canal estaba caído.
@@ -126,7 +124,6 @@ export function useGameState() {
 export function useAdminControls(sessionId) {
   const update = useCallback(async (updates) => {
     if (!sessionId) return { error: "Sin sesión activa" };
-    console.info("[useAdminControls] 🎛️ update game_state →", updates); // [DEBUG-LOG]
     const { error } = await supabase
       .from("game_state")
       .update(updates)
@@ -139,7 +136,6 @@ export function useAdminControls(sessionId) {
   // Se llama al salir de placa/juego/escenario para que el video previo no resurface.
   const dismissActiveVideo = useCallback(async () => {
     if (!sessionId) return;
-    console.info("[useAdminControls] 🎬 dismissActiveVideo → video_requests status=dismissed"); // [DEBUG-LOG]
     await supabase.from("video_requests")
       .update({ status: "dismissed" })
       .eq("session_id", sessionId)
