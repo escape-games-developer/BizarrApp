@@ -354,7 +354,7 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
           </button>
         </div>
         <div style={{display:"flex",gap:6}}>
-          {[{e:"🎵",l:"Bienvenida",id:"logo",c:"#FFD600"},{e:"⏸️",l:"Break",id:"break",c:"#FF9500"},{e:"🌙",l:"Cierre",id:"cierre",c:"#9B2FFF"}].map((p,i)=>(
+          {[{e:"🎵",l:"Bienvenida",id:"logo_animado",c:"#FFD600"},{e:"⏸️",l:"Break",id:"break",c:"#FF9500"},{e:"🌙",l:"Cierre",id:"cierre",c:"#9B2FFF"}].map((p,i)=>(
             <button key={i} style={{flex:1,padding:"9px 5px",borderRadius:11,cursor:"pointer",
               border:`1.5px solid ${p.c}44`,background:`${p.c}0F`,transition:"all .18s",textAlign:"center"}}
               onClick={()=>controls?.sendPlaca(p.id)}>
@@ -1227,12 +1227,16 @@ function PlacasPanel({sec, controls}){
   const notify = (txt) => { setLaunched(txt); setTimeout(()=>setLaunched(null),2500); };
 
   const PRESETS=[
-    {id:"logo",      emoji:"🎵",title:"Logo animado del bar",    sub:"Pantalla de espera e inicio de noche",col:"#FFD600"},
+    {id:"logo_animado", emoji:"🎵",title:"Logo animado del bar",    sub:"Pantalla de espera e inicio de noche",col:"#FFD600"},
     {id:"game_rey",  emoji:"🎰",title:"Rey del Orto",            sub:"Antes de lanzar el sorteo",          col:"#FFD600"},
     {id:"game_trivia",emoji:"🧠",title:"Desafío Demente",        sub:"Antes de lanzar la trivia",          col:"#9B2FFF"},
     {id:"game_suma", emoji:"🔢",title:"Sumate que sumamos",          sub:"Antes de lanzar el juego",           col:"#FF9500"},
     {id:"game_palabra",  emoji:"🔤",title:"Arma la palabra",        sub:"Antes de lanzar el juego",           col:"#A855F7"},
     {id:"escenario", emoji:"🎤",title:"Escenario Bizarren",      sub:"Invitación al escenario",            col:"#FF2D78"},
+    {id:"duelo",            emoji:"⚔️", title:"Duelo de Talentos",   sub:"Invitación al duelo",                col:"#FF2D78"},
+    {id:"escenario_ftl",    emoji:"💃",title:"Follow the Leader",    sub:"Invitación a la pista",              col:"#FF9500"},
+    {id:"escenario_pt",     emoji:"🏋️",title:"Personal Trainer",     sub:"A mover el cuerpo",                  col:"#00F5A0"},
+    {id:"escenario_karaoke",emoji:"🎤",title:"Si lo sabe cante",     sub:"Invitación al karaoke",              col:"#9B2FFF"},
     {id:"break",     emoji:"⏸️", title:"Break / Pausa",          sub:"Volvemos en un momento",             col:"#FF9500"},
     {id:"cierre",    emoji:"🌙",title:"Cierre de noche",         sub:"¡Gracias por esta noche!",           col:"#9B2FFF"},
   ];
