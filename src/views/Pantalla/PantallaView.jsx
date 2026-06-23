@@ -25,8 +25,8 @@ function MensajesTab({ user, messages, onSend }) {
         placeholder="¿Qué querés decirle al bar?" value={text}
         onChange={e=>setText(e.target.value.slice(0,100))}/>
       <div style={{textAlign:"right",fontSize:10,color:"rgba(240,232,255,.22)",marginBottom:10}}>{text.length}/100</div>
-      <button style={{width:"100%",padding:14,border:"none",borderRadius:14,background:"linear-gradient(135deg,#00E5FF,#00F5A0)",color:"#08040F",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",opacity:!text.trim()?.3:1}}
-        disabled={!text.trim()} onClick={send}>📢 Mandar a pantalla</button>
+      <button className="btn-enviar" style={{width:"100%",padding:14,border:"none",borderRadius:14,background:"rgba(220,38,38,1)",color:"#FFD600",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",opacity:!text.trim()?.3:1,outline:"none",WebkitTapHighlightColor:"transparent",textShadow:"-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000"}}
+        disabled={!text.trim()} onClick={send}>Mandar mensaje</button>
       {myMsgs.length>0&&(<>
         <div style={{fontSize:10,fontWeight:700,color:"rgba(240,232,255,.35)",letterSpacing:"1px",marginTop:18,marginBottom:8}}>TUS MENSAJES</div>
         {myMsgs.map((m,i)=>{const st=statusInfo[m.status]||statusInfo.pending;return(
@@ -87,7 +87,7 @@ function VideosTab({ videos, loading, error, onSendVideo, user }) {
         >
           <div
             onClick={e=>e.stopPropagation()}
-            style={{position:"relative",width:"100%",maxWidth:340,background:"linear-gradient(160deg,#120A1F,#0A0712)",border:"1.5px solid rgba(0,229,255,.3)",borderRadius:20,padding:20,boxShadow:"0 20px 60px rgba(0,0,0,.6)"}}
+            style={{position:"relative",width:"100%",maxWidth:340,background:"linear-gradient(160deg,#120A1F,#0A0712)",border:"none",borderRadius:20,padding:20,boxShadow:"0 20px 60px rgba(0,0,0,.6)"}}
           >
             <button
               onClick={()=>setSelVideo(null)}
@@ -106,10 +106,10 @@ function VideosTab({ videos, loading, error, onSendVideo, user }) {
               <div style={{fontSize:12,color:"rgba(0,229,255,.7)",marginBottom:18}}>{selVideo.artist}</div>
             )}
 
-            <button
+            <button className="btn-enviar"
               onClick={()=>{ onSendVideo?.(selVideo); setSent(true); }}
-              style={{width:"100%",padding:14,border:"none",borderRadius:14,background:"linear-gradient(135deg,#00E5FF,#00F5A0)",color:"#08040F",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8}}
-            >🎵 Pedir este video</button>
+              style={{width:"100%",padding:14,border:"none",borderRadius:14,background:"rgba(220,38,38,1)",color:"#FFD600",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8,outline:"none",WebkitTapHighlightColor:"transparent",textShadow:"-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000"}}
+            >Pedir este video</button>
             <button
               onClick={()=>setSelVideo(null)}
               style={{width:"100%",padding:11,border:"1px solid rgba(240,232,255,.12)",borderRadius:12,background:"transparent",color:"rgba(240,232,255,.5)",fontFamily:"Syne,sans-serif",fontSize:13,fontWeight:700,cursor:"pointer"}}
@@ -123,6 +123,7 @@ function VideosTab({ videos, loading, error, onSendVideo, user }) {
 
 export default function PantallaView({ user, messages, onSend, isRestricted, onGoProfile, ytConfig, onSendVideo }) {
   const [tab, setTab] = useState("mensajes");
+  const [pressed, setPressed] = useState(null);
   const { playlists = {}, loading, errors = {} } = useYouTubePlaylists(ytConfig||{});
 
   if (isRestricted) return (
@@ -132,18 +133,26 @@ export default function PantallaView({ user, messages, onSend, isRestricted, onG
   );
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
-        <span style={{fontSize:20}}>📺</span>
-        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:24,background:"linear-gradient(135deg,#00E5FF,#00F5A0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-          Mandalo a Pantalla
-        </div>
+      <div role="heading" aria-level={1} style={{marginTop:0,marginBottom:14}}>
+        <img src="/placas/Directo_a_pantall-removebg-preview.png" alt="Directo a pantalla"
+          style={{width:"96%",maxWidth:"98%",height:"auto",objectFit:"contain",display:"block",margin:"0 auto"}}/>
       </div>
-      <div style={{display:"flex",gap:6,marginBottom:16}}>
-        {[{id:"mensajes",label:"💬 Mensajes"},{id:"videos",label:"🎵 Videoclips"}].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"9px 8px",borderRadius:10,border:`1.5px solid ${tab===t.id?"rgba(0,229,255,.4)":"rgba(240,232,255,.1)"}`,fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",background:tab===t.id?"rgba(0,229,255,.1)":"rgba(240,232,255,.03)",color:tab===t.id?"#00E5FF":"rgba(240,232,255,.4)"}}>
-            {t.label}{t.id==="videos"&&playlists.videos?.length>0&&<span style={{marginLeft:6,fontSize:9,opacity:.6}}>{playlists.videos.length}</span>}
+      <div style={{display:"flex",gap:44,marginTop:-12,marginBottom:16,justifyContent:"center"}}>
+        {[{id:"mensajes",img:"/placas/Mensajes-removebg-preview.png",alt:"Mensajes"},{id:"videos",img:"/placas/Videos-removebg-preview.png",alt:"Videoclips"}].map(t=>{
+          const isSel = tab===t.id, isPressed = pressed===t.id;
+          return (
+          <button key={t.id} className="btn-pantalla"
+            onClick={()=>setTab(t.id)}
+            onPointerDown={()=>setPressed(t.id)}
+            onPointerUp={()=>setPressed(null)}
+            onPointerLeave={()=>setPressed(null)}
+            onPointerCancel={()=>setPressed(null)}
+            style={{width:79,maxWidth:79,aspectRatio:"1/1",padding:0,borderRadius:"50%",overflow:"hidden",border:"2px solid rgba(240,232,255,.12)",cursor:"pointer",background:(isSel||isPressed)?"rgba(220,38,38,1)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",boxShadow:"none",transform:isPressed?"scale(.96)":"scale(1)",transition:"background-color 200ms ease, transform 150ms ease",WebkitTapHighlightColor:"transparent",outline:"none",userSelect:"none"}}>
+            <img src={t.img} alt={t.alt} style={{width:"88%",height:"88%",objectFit:"contain"}}/>
+            {t.id==="videos"&&playlists.videos?.length>0&&<span style={{position:"absolute",top:3,right:6,fontSize:9,fontWeight:700,opacity:.9,color:"rgba(255,255,255,.92)"}}>{playlists.videos.length}</span>}
           </button>
-        ))}
+          );
+        })}
       </div>
       {tab==="mensajes"&&<MensajesTab user={user} messages={messages} onSend={onSend}/>}
       {tab==="videos"&&<VideosTab videos={playlists.videos||[]} loading={loading} error={errors.videos} onSendVideo={onSendVideo} user={user}/>}

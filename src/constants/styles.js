@@ -66,23 +66,24 @@ const globalCss = `
 
   /* ── Header ── */
   .app-header {
+    position: relative;
     background: rgba(13,7,0,.98);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255,215,0,.1);
-    padding: 10px 16px;
+    padding: 10px 16px 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     flex-shrink: 0;
     z-index: 10;
   }
-  .app-header-logo { height: 34px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255,215,0,.3)); }
+  .app-header-logo { height: 144px; width: auto; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255,215,0,.3)); }
 
   /* ── Content area ── */
   .app-content {
     flex: 1;
     overflow-y: auto;
-    padding: 14px 16px 16px;
+    padding: 4px 16px 16px;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -99,23 +100,17 @@ const globalCss = `
   }
   .nav-btn {
     flex: 1;
+    min-width: 0;
+    height: 56px;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 7px 4px;
-    border-radius: 10px;
+    justify-content: center;
+    padding: 2px;
     border: none;
     background: transparent;
-    color: rgba(245,230,192,.3);
     cursor: pointer;
-    transition: all .18s;
-    font-family: 'DM Sans', sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
-  .nav-btn.active { background: rgba(255,215,0,.1); color: #FFD700; }
-  .nav-btn .nav-icon { font-size: 18px; }
-  .nav-btn .nav-label { font-size: 9px; font-weight: 500; }
 
   /* ── Section header ── */
   .sec-hdr {
@@ -166,6 +161,24 @@ const globalCss = `
   }
   .btn-primary:disabled { opacity: .3; cursor: not-allowed; }
   .btn-primary:active:not(:disabled) { transform: scale(.97); }
+
+  /* ── Botones circulares Pantalla (Mensajes / Videoclips) ──
+     Sin anillo celeste en ningún estado. El press rojo se maneja
+     por estado React (onPointerDown) en PantallaView.jsx. */
+  .btn-pantalla {
+    outline: none;
+    box-shadow: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .btn-pantalla:focus, .btn-pantalla:focus-visible { outline: none; box-shadow: none; }
+
+  /* ── CTA primario Pantalla/Mensajes: rojo sólido + texto amarillo ── */
+  .btn-enviar { transition: all 150ms ease; outline: none; -webkit-tap-highlight-color: transparent; }
+  .btn-enviar:focus, .btn-enviar:focus-visible { outline: none; }
+  .btn-enviar:hover:not(:disabled)  { background: rgba(220,38,38,.9) !important; }
+  .btn-enviar:active:not(:disabled) { background: rgba(185,28,28,1) !important; }
 
   .btn-ghost {
     background: rgba(255,255,255,.05);

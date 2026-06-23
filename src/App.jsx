@@ -45,12 +45,12 @@ export default function BizarrApp() {
   }, [user, setRegStep]);
 
   const NAV = useMemo(() => [
-    { id: "novedades", icon: "📣", label: "Bienvenidos"},
-    { id: "menu",      icon: "🍹", label: "Menú"      },
-    { id: "pantalla",  icon: "📺", label: "Pantalla"  },
-    { id: "games",     icon: "🎮", label: "Juegos"    },
-    { id: "escenario", icon: "🎤", label: "Escenario" },
-    ...(!isLoggedIn ? [{ id: "profile", icon: "👤", label: "Registro" }] : []),
+    { id: "novedades", icon: "📣", label: "Bienvenidos", img: "/botones/boton_noti.png"      },
+    { id: "menu",      icon: "🍹", label: "Menú",        img: "/botones/boton_menu.png"      },
+    { id: "pantalla",  icon: "📺", label: "Pantalla",    img: "/botones/boton_pantalla.png"  },
+    { id: "games",     icon: "🎮", label: "Juegos",      img: "/botones/boton_juegos.png"    },
+    { id: "escenario", icon: "🎤", label: "Escenario",   img: "/botones/boton_escenario.png" },
+    ...(!isLoggedIn ? [{ id: "profile", icon: "👤", label: "Registro", img: "/botones/botones_perfil.png" }] : []),
   ], [isLoggedIn]);
 
   const renderContent = () => {
@@ -102,17 +102,15 @@ export default function BizarrApp() {
       <div className="app-root">
         <div className="phone-shell">
           <header className="app-header">
-            <img src={LOGO_URL} alt="BizarrApp" className="app-header-logo"
+            <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
               onError={e => { e.target.style.display="none"; }}/>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:14,color:"#FFD700"}}>
-              BizarrApp
-            </div>
             {isLoggedIn && (
               <button onClick={goProfile} style={{
                 background:  view==="profile" ? "rgba(255,215,0,.12)" : "transparent",
                 border:      `1px solid ${view==="profile" ? "rgba(255,215,0,.3)" : "transparent"}`,
                 borderRadius:"50%", padding:0, cursor:"pointer",
                 width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center",
+                position:"absolute", right:16, top:"50%", transform:"translateY(-50%)",
                 WebkitTapHighlightColor:"transparent",
               }}>
                 <AvatarDisplay user={user} size={32} fontSize={14}/>
@@ -121,17 +119,32 @@ export default function BizarrApp() {
           </header>
           <main className="app-content">{renderContent()}</main>
           <nav className="app-nav">
-            {NAV.map(n => (
-              <button key={n.id}
-                className={`nav-btn${view===n.id?" active":""}`}
-                onClick={() => n.id==="profile" ? goProfile() : setView(n.id)}
-                style={{opacity: isRestricted&&RESTRICTED_VIEWS.includes(n.id) ? .45 : 1}}>
-                <span className="nav-icon">{n.icon}</span>
-                <span className="nav-label">
-                  {n.label}{isRestricted&&RESTRICTED_VIEWS.includes(n.id)&&" 🔒"}
-                </span>
-              </button>
-            ))}
+            {NAV.map(n => {
+              const isActive = view === n.id;
+              const gated    = isRestricted && RESTRICTED_VIEWS.includes(n.id);
+              return (
+                <button key={n.id}
+                  className="nav-btn"
+                  aria-label={n.label}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => n.id==="profile" ? goProfile() : setView(n.id)}
+                  style={{
+                    position:  "relative",
+                    opacity:   gated ? 0.4 : (isActive ? 1 : 0.55),
+                    transform: isActive ? "scale(1.1)" : "scale(1)",
+                    transition:"all 200ms ease",
+                  }}>
+                  <img src={n.img} alt={n.label}
+                    style={{ width:"100%", height:"100%", objectFit:"contain", pointerEvents:"none" }}/>
+                  {gated && (
+                    <span aria-hidden="true" style={{
+                      position:"absolute", top:1, right:5, fontSize:11,
+                      pointerEvents:"none", filter:"drop-shadow(0 0 2px #000)",
+                    }}>🔒</span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
         </div>
       </div>
