@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 import { useGameState } from "../hooks/realtime/useGameState";
 import { useMessages }  from "../hooks/realtime/useMessages";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
@@ -218,7 +219,7 @@ function Confetti() {
 // ── ESTADOS ───────────────────────────────────────────────────────────────────
 
 // Pantalla de espera — logo animado
-function IdleScreen({ logo }) {
+export function IdleScreen({ logo }) {
   return (
     <div className="idle">
       <Orbs colors={["rgba(155,47,255,.15)","rgba(0,229,255,.08)","rgba(255,45,120,.06)"]}/>
@@ -230,7 +231,7 @@ function IdleScreen({ logo }) {
 }
 
 // Rey del Orto — sorteo estroboscópico
-function RaffleScreen({ logo, gameState }) {
+export function RaffleScreen({ logo, gameState }) {
   // gameState.raffle_state: "launched" | "winner"
   // gameState.raffle_winner: { name, avatar, prize }
   const state  = gameState?.raffle_state  || "launched";
@@ -279,7 +280,7 @@ function RaffleScreen({ logo, gameState }) {
 }
 
 // Desafío Demente — trivia en tiempo real
-function TriviaScreen({ gameState }) {
+export function TriviaScreen({ gameState }) {
   const q      = gameState?.trivia_question || "¿Cuál es el mejor bar de Buenos Aires?";
   const bataPct= gameState?.bata_pct  ?? 58;
   const membPct= gameState?.memb_pct  ?? 42;
@@ -310,7 +311,7 @@ function TriviaScreen({ gameState }) {
 }
 
 // Escenario activo
-function EscenarioScreen({ gameState }) {
+export function EscenarioScreen({ gameState }) {
   const type = gameState?.active_escenario || "duelo";
   const INFO = {
     duelo:   { label:"DUELO DE TALENTOS",   col:C.pink,   glow:"rgba(255,45,120,.4)",  sub:"Votá desde tu celular · Tu voto cuenta" },
@@ -349,7 +350,7 @@ function EscenarioScreen({ gameState }) {
 }
 
 // Placa de pantalla entera
-function PlacaScreen({ logo, gameState }) {
+export function PlacaScreen({ logo, gameState }) {
   // gameState.active_placa: id de la placa
   // gameState.placa_custom: { emoji, title, subtitle, grad, bg, glow, border }
   const custom = gameState?.placa_custom;
@@ -469,40 +470,104 @@ function PlacaScreen({ logo, gameState }) {
 }
 
 // Zócalo de mensajes
-function VideoScreen({ video }) {
-  const [visible, setVisible] = useState(false);
-  const [currentVideo, setCurrentVideo] = useState(video);
+export function VideoScreen({ video, onEnded, audioEnabled = false }) {
+  const [visible, setVisible] = React.useState(false);
+  const [currentVideo, setCurrentVideo] = React.useState(null);
+  const videoRef = React.useRef(null);
 
-  useEffect(() => {
-    setVisible(false);
-    const t = setTimeout(() => {
-      setCurrentVideo(video);
-      setVisible(true);
-    }, 600);
-    return () => clearTimeout(t);
+  // Crossfade al cambiar de video
+  React.useEffect(() => {
+    if (!video?.id) {
+      setVisible(false);
+      const t = setTimeout(() => setCurrentVideo(null), 600);
+      return () => clearTimeout(t);
+    }
+
+    if (currentVideo?.id !== video.id) {
+      // Hay cambio de video: fade out → swap → fade in
+      setVisible(false);
+      const t = setTimeout(() => {
+        setCurrentVideo(video);
+        setVisible(true);
+      }, 600);
+      return () => clearTimeout(t);
+    }
   }, [video?.id]);
 
-  useEffect(() => {
-    setVisible(true);
-  }, []);
+  React.useEffect(() => {
+    if (video?.id && !currentVideo) {
+      setCurrentVideo(video);
+      setVisible(true);
+    }
+  }, [video, currentVideo]);
+
+  if (!currentVideo) return null;
+
+  const isLocal = currentVideo.source === "local";
+  const isYoutube = !isLocal && currentVideo.yt_id;
 
   return (
     <div style={{
-      position:"fixed", inset:0, background:"#000",
-      display:"flex", alignItems:"center", justifyContent:"center",
+      position: "absolute", inset: 0, zIndex: 50,
+      background: "#000",
       opacity: visible ? 1 : 0,
       transition: "opacity 0.6s ease",
-      zIndex: 10,
+      pointerEvents: visible ? "auto" : "none",
     }}>
-      <iframe
-        key={currentVideo?.yt_id}
-        src={`https://www.youtube.com/embed/${currentVideo?.yt_id}?autoplay=1&playsinline=1&controls=0&modestbranding=1&rel=0&mute=1`}
-        style={{ width:"100vw", height:"100vh", border:"none" }}
-        allow="autoplay; fullscreen"
-        allowFullScreen
-      />
-      {/* Atribución del pedido (usuario + tema): el Zócalo fue removido; por ahora
-          el video se muestra sin franja de atribución. */}
+      {isLocal && currentVideo.video_url && (
+        <video
+          ref={videoRef}
+          key={currentVideo.id}
+          src={currentVideo.video_url}
+          autoPlay
+          playsInline
+          muted={!audioEnabled}
+          onEnded={() => { if (onEnded) onEnded(currentVideo); }}
+          onError={(e) => console.error("[VideoScreen] local video error:", e)}
+          style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }}
+        />
+      )}
+
+      {isYoutube && (
+        <iframe
+          key={currentVideo.yt_id}
+          src={`https://www.youtube.com/embed/${currentVideo.yt_id}?autoplay=1&controls=0&modestbranding=1&rel=0&mute=${audioEnabled?"0":"1"}&enablejsapi=1&showinfo=0&iv_load_policy=3&fs=0&playsinline=1&disablekb=1`}
+          style={{ width: "100%", height: "100%", border: "none" }}
+          allow="autoplay; fullscreen"
+          allowFullScreen
+        />
+      )}
+
+      {/* Cartel fijo con título del tema arriba izquierda */}
+      <div style={{
+        position: "absolute",
+        top: 20,
+        left: 20,
+        maxWidth: "55%",
+        padding: "12px 20px 12px 18px",
+        background: "linear-gradient(90deg, #08040Fdd 0%, #08040F88 80%, transparent 100%)",
+        borderLeft: "4px solid #FFD600",
+        borderRadius: "0 12px 12px 0",
+        zIndex: 60,
+        pointerEvents: "none",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
+      }}>
+        <div style={{
+          fontSize: 28,
+          fontWeight: 800,
+          color: "#FFD600",
+          lineHeight: 1.15,
+          letterSpacing: 0.5,
+          textShadow: "0 2px 12px #000",
+          maxWidth: "100%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>
+          {currentVideo.title || "Sin título"}
+        </div>
+      </div>
     </div>
   );
 }
@@ -564,7 +629,19 @@ export default function PantallaGigante() {
   const { gameState, session } = useGameState();
   const { approved: messages } = useMessages(session?.id ?? null, "screen");
   const { requests: videoRequests } = useVideoRequests(session?.id ?? null);
-  const liveVideo = videoRequests.find(v => v.status === "launched") ?? null;
+  const liveVideo = [...videoRequests]
+    .filter(v => v.status === "launched")
+    .sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0))[0]
+    || null;
+
+  const [audioEnabled, setAudioEnabled] = React.useState(() => {
+    return localStorage.getItem("bizarrapp_audio_enabled") === "true";
+  });
+
+  const enableAudio = React.useCallback(() => {
+    setAudioEnabled(true);
+    localStorage.setItem("bizarrapp_audio_enabled", "true");
+  }, []);
 
   // ── Determinar qué mostrar ─────────────────────────────────────────────────
   const hasPlaca    = !!gameState?.active_placa;
@@ -586,7 +663,22 @@ export default function PantallaGigante() {
   } else if (hasEscenario) {
     content = <EscenarioScreen gameState={gameState}/>;
   } else if (liveVideo && !hasGame) {
-    content = <VideoScreen video={liveVideo}/>;
+    content = <VideoScreen
+      video={liveVideo}
+      audioEnabled={audioEnabled}
+      onEnded={async (endedVideo) => {
+        console.log("[PantallaGigante] video ended:", endedVideo?.title);
+        // Marcar el video terminado como dismissed
+        if (endedVideo?.id) {
+          await supabase
+            .from("video_requests")
+            .update({ status: "dismissed" })
+            .eq("id", endedVideo.id);
+        }
+        // No lanzo el siguiente automáticamente - eso es Etapa 3 (Prompt 18)
+        // Al quedar sin liveVideo, vuelve solo al logo del bar (idle)
+      }}
+    />;
   } else if (hasPlaca) {
     content = <PlacaScreen logo={LOGO} gameState={gameState}/>;
     // El admin envía "logo" (botón "Bienvenida"/preset "Logo animado del bar");
@@ -603,6 +695,13 @@ export default function PantallaGigante() {
   return (
     <>
       <style>{css}</style>
+      <style>{`
+        @keyframes audioFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes audioPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+        }
+      `}</style>
       <div className="screen">
         <div className="scanline"/>
         {content}
@@ -638,13 +737,35 @@ export default function PantallaGigante() {
 
         {/* Modo video: crédito del usuario que pidió el tema (avatar + nombre,
             sin globo), en la misma esquina superior derecha. */}
-        {liveVideo && (
+        {liveVideo && !liveVideo.requested_by_admin && (
           <VideoRequestOverlay
             userName={liveVideo.user_name}
             avatarEmoji={liveVideo.avatar_emoji}
             photoUrl={liveVideo.photo_url}
             avatarId={liveVideo.avatar_id}
           />
+        )}
+
+        {!audioEnabled && liveVideo && (
+          <div onClick={enableAudio}
+            style={{
+              position:"fixed",inset:0,zIndex:9999,
+              background:"rgba(0,0,0,.75)",
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              cursor:"pointer",backdropFilter:"blur(8px)",
+              color:"#FFD600",textAlign:"center",padding:40,
+              animation:"audioFadeIn .4s ease",
+            }}>
+            <div style={{fontSize:96,marginBottom:20,animation:"audioPulse 2s ease infinite"}}>🔊</div>
+            <div style={{fontSize:48,fontWeight:900,marginBottom:12,letterSpacing:2}}>TOCÁ PARA ACTIVAR EL SONIDO</div>
+            <div style={{fontSize:20,color:"#F0E8FF",opacity:.8,maxWidth:600,lineHeight:1.4}}>
+              El navegador requiere una interacción para permitir audio automático.
+              <br/>Una sola vez al iniciar la noche.
+            </div>
+            <div style={{marginTop:30,fontSize:14,color:"#9B2FFF",opacity:.7}}>
+              (No se va a volver a pedir esta noche)
+            </div>
+          </div>
         )}
       </div>
     </>

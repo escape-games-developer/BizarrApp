@@ -34,6 +34,7 @@ export function useMessages(sessionId, role = "screen") {
       ...m,
       name:   m.name   || m.user_name    || "Anónimo",
       avatar: m.avatar || m.avatar_emoji || "👤",
+      photo:  m.photo_url || null,
     })));
     setLoading(false);
   }, [sessionId, role]);
@@ -61,8 +62,12 @@ export function useMessages(sessionId, role = "screen") {
 
   // Para el Admin Panel: aprobar / rechazar
   const approve = useCallback(async (messageId) => {
-    // "Último mensaje gana": archivar los approved anteriores de esta sesión
-    // para que en PantallaGigante haya como máximo 1 mensaje a la vez.
+    // Update optimista: marcar como approved en el array local YA
+    setMessages(prev => prev.map(m =>
+      m.id === messageId ? {...m, status: "approved"} : m
+    ));
+
+    // Archivar approved previos de la sesión (last-message-wins)
     if (sessionId) {
       await supabase
         .from("messages")
@@ -70,18 +75,46 @@ export function useMessages(sessionId, role = "screen") {
         .eq("session_id", sessionId)
         .eq("status", "approved")
         .neq("id", messageId);
+
+      // Update optimista del archivado
+      setMessages(prev => prev.map(m =>
+        (m.status === "approved" && m.id !== messageId)
+          ? {...m, status: "archived"}
+          : m
+      ));
     }
-    await supabase
+
+    // Update real en DB del mensaje aprobado
+    const { error } = await supabase
       .from("messages")
       .update({ status: "approved" })
       .eq("id", messageId);
+
+    if (error) {
+      console.error("[useMessages] approve error:", error);
+      // Rollback si falla
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? {...m, status: "pending"} : m
+      ));
+    }
   }, [sessionId]);
 
   const reject = useCallback(async (messageId) => {
-    await supabase
+    setMessages(prev => prev.map(m =>
+      m.id === messageId ? {...m, status: "rejected"} : m
+    ));
+
+    const { error } = await supabase
       .from("messages")
       .update({ status: "rejected" })
       .eq("id", messageId);
+
+    if (error) {
+      console.error("[useMessages] reject error:", error);
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? {...m, status: "pending"} : m
+      ));
+    }
   }, []);
 
   // Para el celular: enviar mensaje

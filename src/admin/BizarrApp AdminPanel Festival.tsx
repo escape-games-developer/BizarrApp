@@ -6,7 +6,17 @@ import { useGameState, useAdminControls } from "../hooks/realtime/useGameState";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
+import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import PlaylistsPanel from "./PlaylistsPanel";
+import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
+import {
+  RaffleScreen,
+  TriviaScreen,
+  EscenarioScreen,
+  PlacaScreen,
+  VideoScreen,
+  IdleScreen
+} from "../bigscreen/BizarrApp PantallaGigante Festival";
 
 // ── Paleta ─────────────────────────────────────────────────────────────────
 const C = { bg:"#08040F",bg2:"#110820",yellow:"#FFD600",amber:"#FF9500",
@@ -19,6 +29,7 @@ const css = `
   body{background:#08040F;font-family:'Space Grotesk',sans-serif;color:#F0E8FF;overflow:hidden;height:100vh;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  @keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
   @keyframes popIn{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
   @keyframes orbDrift{0%{transform:translate(0,0)}50%{transform:translate(20px,-15px)}100%{transform:translate(0,0)}}
 
@@ -27,8 +38,20 @@ const css = `
   .orb{position:absolute;border-radius:50%;filter:blur(90px);animation:orbDrift ease-in-out infinite;}
 
   /* Sidebar */
-  .sb{width:196px;flex-shrink:0;background:rgba(8,4,15,.97);border-right:1px solid rgba(155,47,255,.15);
-    display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:20;}
+  .sb{width:210px;min-width:210px;height:100vh;background:#0A0514;border-right:1px solid #9B2FFF44;display:flex;flex-direction:column;overflow:hidden;transition:width .2s ease,min-width .2s ease;}
+  .sb.collapsed{width:60px;min-width:60px;}
+  .sb-nav{flex:1 1 0;min-height:0;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:1px;}
+  .sb-nav::-webkit-scrollbar{width:4px;}
+  .sb-nav::-webkit-scrollbar-track{background:transparent;}
+  .sb-nav::-webkit-scrollbar-thumb{background:#9B2FFF44;border-radius:2px;}
+  .sb-footer{padding:8px 6px;border-top:1px solid #9B2FFF44;flex-shrink:0;background:#0A0514;}
+  .sb-group-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.3px;color:#FFD600;padding:8px 8px 3px;opacity:.9;}
+  .sb-group-sep{height:1px;background:#9B2FFF33;margin:4px 8px;}
+  .sb-btn{display:flex;align-items:center;width:100%;background:none;border:none;color:#F0E8FF;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;text-align:left;transition:background .12s;position:relative;}
+  .sb-btn:hover{background:#9B2FFF22;}
+  .sb-btn-active{background:#9B2FFF33;color:#FFD600;}
+  .sb-btn-icon{font-size:17px;width:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .sb-btn-label{margin-left:8px;flex:1;}
   .sb-top{padding:12px 10px 8px;border-bottom:1px solid rgba(155,47,255,.1);flex-shrink:0;}
   .sb-logo{height:48px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(255,214,0,.5));display:block;margin-bottom:5px;}
   .sb-pills{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
@@ -39,17 +62,6 @@ const css = `
   .sb-users strong{color:#FFD600;}
   .sb-body{flex:1;overflow-y:auto;padding:6px 5px;scrollbar-width:none;}
   .sb-body::-webkit-scrollbar{display:none;}
-  .sb-group{font-size:7px;font-weight:800;letter-spacing:2px;color:rgba(240,232,255,.15);padding:7px 6px 2px;margin-top:1px;}
-  .sb-btn{width:100%;display:flex;align-items:center;gap:7px;padding:7px 7px;border-radius:10px;
-    border:none;background:transparent;cursor:pointer;transition:all .15s;margin-bottom:1px;
-    font-family:'Space Grotesk',sans-serif;position:relative;}
-  .sb-btn:hover{background:rgba(240,232,255,.05);}
-  .sb-btn.on{background:rgba(240,232,255,.07);}
-  .sb-btn.on::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
-    width:2.5px;height:22px;border-radius:2px;background:var(--sg);}
-  .sb-icon{font-size:14px;flex-shrink:0;}
-  .sb-lbl{font-size:10.5px;font-weight:600;color:rgba(240,232,255,.38);flex:1;text-align:left;transition:color .15s;}
-  .sb-btn.on .sb-lbl{color:#F0E8FF;}
   .sb-badge{min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;
     font-size:8px;font-weight:800;background:var(--sg);color:#08040F;padding:0 3px;}
 
@@ -305,8 +317,6 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
       {/* Zócalo */}
       <div className="card" style={{marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <Toggle on={zocaloOn} onToggle={()=>setZocaloOn(z=>!z)}
-            label={zocaloOn?"Zócalo activo":"Zócalo desactivado"} color="#00E5FF"/>
           {msgCount>0&&(
             <button onClick={()=>goTo("mensajes")} style={{background:"rgba(0,229,255,.1)",
               border:"1px solid rgba(0,229,255,.25)",borderRadius:8,padding:"4px 9px",
@@ -1108,17 +1118,17 @@ function MensajesPanel({sec,zocaloOn,setZocaloOn,pending,approved,approve,reject
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      <div className="card">
-        <div className="ctitle">Control del zócalo</div>
-        <Toggle on={zocaloOn} onToggle={()=>setZocaloOn(z=>!z)}
-          label={zocaloOn?"Zócalo activo — rotando en pantalla":"Zócalo desactivado"} color="#00E5FF"/>
-      </div>
       {pending.length>0&&(
         <div className="card">
           <div className="ctitle">Pendientes ({pending.length})</div>
           {pending.map((m,i)=>(
             <div key={m.id} className="mrow" style={{animationDelay:`${i*.06}s`}}>
-              <div className="mrow-name">{m.avatar} {m.name}</div>
+              <div className="mrow-name">{m.photo ? (
+                <img src={m.photo} alt={m.name||"avatar"}
+                  style={{width:32,height:32,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
+              ) : (
+                <span style={{fontSize:22}}>{m.avatar||"👤"}</span>
+              )} {m.name}</div>
               <div className="mrow-text">{m.text}</div>
               <div style={{display:"flex",gap:6}}>
                 <button className="btn" style={{flex:1,padding:"7px",fontSize:10.5,
@@ -1159,56 +1169,676 @@ function MensajesPanel({sec,zocaloOn,setZocaloOn,pending,approved,approve,reject
 // ══════════════════════════════════════════════════════════════════════════
 // VIDEOS
 // ══════════════════════════════════════════════════════════════════════════
-function VideosPanel({sec, vids=[], onApprove, onReject, onProject}){
-  const [live, setLive] = useState(null);
-  const launch  = id => { setLive(vids.find(v=>v.id===id)); onApprove(id); onProject?.(); };
-  const dismiss = id => onReject(id);
+function VDivider({ onDrag }) {
+  const [dragging, setDragging] = React.useState(false);
+  React.useEffect(() => {
+    if (!dragging) return;
+    const handleMove = (e) => onDrag(e.clientX);
+    const handleUp = () => setDragging(false);
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [dragging, onDrag]);
+  return (
+    <div
+      onMouseDown={(e) => { e.preventDefault(); setDragging(true); }}
+      style={{
+        width: 6, cursor: "col-resize", flexShrink: 0,
+        background: dragging ? "#9B2FFF" : "transparent",
+        position: "relative", zIndex: 5,
+        transition: dragging ? "none" : "background .12s",
+      }}
+      onMouseEnter={(e) => { if (!dragging) e.currentTarget.style.background = "#9B2FFF44"; }}
+      onMouseLeave={(e) => { if (!dragging) e.currentTarget.style.background = "transparent"; }}
+    >
+      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:2,height:34,background:dragging?"#FFD600":"#9B2FFF66",borderRadius:2,pointerEvents:"none"}}/>
+    </div>
+  );
+}
 
+function HDivider({ onDrag }) {
+  const [dragging, setDragging] = React.useState(false);
+  React.useEffect(() => {
+    if (!dragging) return;
+    const handleMove = (e) => onDrag(e.clientY);
+    const handleUp = () => setDragging(false);
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [dragging, onDrag]);
+  return (
+    <div
+      onMouseDown={(e) => { e.preventDefault(); setDragging(true); }}
+      style={{
+        height: 6, cursor: "row-resize", flexShrink: 0,
+        background: dragging ? "#9B2FFF" : "transparent",
+        position: "relative", zIndex: 5,
+        transition: dragging ? "none" : "background .12s",
+      }}
+      onMouseEnter={(e) => { if (!dragging) e.currentTarget.style.background = "#9B2FFF44"; }}
+      onMouseLeave={(e) => { if (!dragging) e.currentTarget.style.background = "transparent"; }}
+    >
+      <div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",height:2,width:50,background:dragging?"#FFD600":"#9B2FFF66",borderRadius:2,pointerEvents:"none"}}/>
+    </div>
+  );
+}
 
+function PantallaPreview() {
+  const { gameState, session } = useGameState();
+  const { requests: videoRequests } = useVideoRequests(session?.id ?? null);
 
-  return(
-    <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {live&&(
-        <div className="card" style={{borderColor:"rgba(255,45,120,.3)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div className="chip chip-live"><div className="dot-live"/>Proyectando</div>
-          </div>
-          <div className="vrow" style={{border:"none",background:"rgba(255,45,120,.07)",marginBottom:8}}>
-            <img src={`https://img.youtube.com/vi/${live.yt_id}/mqdefault.jpg`} alt=""/>
-            <div style={{flex:1}}>
-              <div className="vtitle">{live.title}</div>
-              <div className="vartist">{live.artist} · Pedido por {live.reqBy}</div>
+  const liveVideo = [...videoRequests]
+    .filter(v => v.status === "launched")
+    .sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0))[0]
+    || null;
+
+  const hasPlaca = !!gameState?.active_placa;
+  const hasGame = !!gameState?.active_game;
+  const hasEscenario = !!gameState?.active_escenario;
+  const activeGame = gameState?.active_game;
+
+  let content = null;
+
+  if (activeGame === "rey del orto") {
+    content = <RaffleScreen gameState={gameState}/>;
+  } else if (activeGame === "trivia") {
+    content = <TriviaScreen gameState={gameState}/>;
+  } else if (hasEscenario) {
+    content = <EscenarioScreen gameState={gameState}/>;
+  } else if (liveVideo && !hasGame) {
+    // En el preview, audio siempre activo (no muestra overlay 🔊)
+    content = <VideoScreen video={liveVideo} audioEnabled={false} onEnded={()=>{}}/>;
+  } else if (hasPlaca) {
+    content = <PlacaScreen gameState={gameState}/>;
+  } else {
+    content = <IdleScreen/>;
+  }
+
+  return (
+    <div style={{
+      position:"absolute",
+      inset:0,
+      width:"100%",
+      height:"100%",
+      overflow:"hidden",
+      background:"#000",
+      // Truco para escalar el contenido (Pantalla Gigante usa 100vw/100vh,
+      // acá lo encerramos en un contenedor más chico)
+      transform:"scale(1)",
+      transformOrigin:"top left",
+    }}>
+      <div style={{
+        position:"absolute",
+        inset:0,
+        // Resetear los 100vw/100vh internos para que se ajusten al contenedor
+        contain:"strict",
+      }}>
+        {content}
+      </div>
+    </div>
+  );
+}
+
+function VideosPanel({sec, vids=[], launched=[], myVotes=[], onApprove, onReject, onProject, onUploadLocal, onListLocal, onAddByAdmin, adminUser}){
+  // Anchos de columnas y alto del reproductor (persistidos en localStorage)
+  const [leftWidth, setLeftWidth] = React.useState(() =>
+    parseInt(localStorage.getItem("bizarrapp_video_left_w")) || 320
+  );
+  const [rightWidth, setRightWidth] = React.useState(() =>
+    parseInt(localStorage.getItem("bizarrapp_video_right_w")) || 340
+  );
+  const [playerHeight, setPlayerHeight] = React.useState(() =>
+    parseInt(localStorage.getItem("bizarrapp_video_player_h")) || 360
+  );
+
+  // Estado de tabs y búsqueda
+  const [tab, setTab] = React.useState("search");
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchResults, setSearchResults] = React.useState([]);
+  const [searching, setSearching] = React.useState(false);
+  const searchTimerRef = React.useRef(null);
+  const [activePlaylist, setActivePlaylist] = React.useState(null);
+  const [localFiles, setLocalFiles] = React.useState([]);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadStatus, setUploadStatus] = React.useState(null);
+  // formato: { type: "info"|"success"|"error", text: "...", detail: "..." }
+  const fileInputRef = React.useRef(null);
+  const containerRef = React.useRef(null);
+  const [addingToQueue, setAddingToQueue] = React.useState(null); // ytId del que se está agregando
+  const [queueFeedback, setQueueFeedback] = React.useState(null); // { type, text }
+
+  const { playlists: internalPlaylists } = useInternalPlaylists();
+  const videoPlaylists = internalPlaylists.filter(p =>
+    p.categories?.some(c => c.slug === "videos" || c.slug === "general")
+  );
+  const [showPlaylistMenuFor, setShowPlaylistMenuFor] = React.useState(null);
+  const [addingToPlaylist, setAddingToPlaylist] = React.useState(null);
+
+  const { playlists, sources, totalVideos } = useYouTubePlaylists();
+
+  React.useEffect(() => {
+    if (onListLocal) onListLocal().then(setLocalFiles);
+  }, [onListLocal]);
+
+  // Persistir cambios en localStorage
+  React.useEffect(() => { localStorage.setItem("bizarrapp_video_left_w", leftWidth); }, [leftWidth]);
+  React.useEffect(() => { localStorage.setItem("bizarrapp_video_right_w", rightWidth); }, [rightWidth]);
+  React.useEffect(() => { localStorage.setItem("bizarrapp_video_player_h", playerHeight); }, [playerHeight]);
+
+  // Handlers de los divisores
+  const handleLeftDrag = (clientX) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const newW = Math.max(180, Math.min(600, clientX - rect.left));
+    setLeftWidth(newW);
+  };
+  const handleRightDrag = (clientX) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const newW = Math.max(180, Math.min(600, rect.right - clientX));
+    setRightWidth(newW);
+  };
+  const handlePlayerDrag = (clientY) => {
+    const centerEl = document.getElementById("video-player-area");
+    if (!centerEl) return;
+    const rect = centerEl.getBoundingClientRect();
+    const newH = Math.max(180, Math.min(700, clientY - rect.top));
+    setPlayerHeight(newH);
+  };
+
+  const doSearch = React.useCallback(async (query) => {
+    const q = (query ?? searchQuery).trim();
+    if (q.length < 3) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const { results } = await searchYouTube(q, 12);
+    setSearchResults(results);
+    setSearching(false);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (searchQuery.trim().length < 3) {
+      setSearchResults([]);
+      return;
+    }
+    searchTimerRef.current = setTimeout(() => {
+      doSearch(searchQuery);
+    }, 400);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery, doSearch]);
+
+  const addToQueue = async (videoData) => {
+    if (!onAddByAdmin) {
+      setQueueFeedback({type:"error", text:"Función no disponible"});
+      setTimeout(()=>setQueueFeedback(null), 3000);
+      return;
+    }
+    if (!adminUser) {
+      setQueueFeedback({type:"error", text:"No estás logueado"});
+      setTimeout(()=>setQueueFeedback(null), 3000);
+      return;
+    }
+    setAddingToQueue(videoData.ytId);
+    const result = await onAddByAdmin({
+      ytId: videoData.ytId,
+      title: videoData.title,
+      artist: videoData.artist,
+      thumb: videoData.thumb,
+    }, adminUser);
+    setAddingToQueue(null);
+    if (result) {
+      setQueueFeedback({type:"success", text:`✓ "${videoData.title.slice(0,40)}..." agregado`});
+    } else {
+      setQueueFeedback({type:"error", text:"Error al agregar a la cola"});
+    }
+    setTimeout(()=>setQueueFeedback(null), 3000);
+  };
+
+  const addToInternalPlaylist = async (videoData, playlistId) => {
+    setShowPlaylistMenuFor(null);
+    setAddingToPlaylist(videoData.ytId);
+    try {
+      const { supabase } = await import("../lib/supabase");
+      const playlist = internalPlaylists.find(p => p.id === playlistId);
+      const maxPos = (playlist?.items || []).reduce((m, i) => Math.max(m, i.position || 0), 0);
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data, error } = await supabase
+        .from("playlist_items")
+        .insert({
+          playlist_id: playlistId,
+          yt_id: videoData.ytId,
+          title: videoData.title || "Sin título",
+          artist: videoData.artist || null,
+          thumb_url: videoData.thumb || null,
+          position: maxPos + 1,
+          added_by: user?.id || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === "23505") {
+          setQueueFeedback({type:"error", text:"Este tema ya está en esa playlist"});
+        } else {
+          console.error("[addToInternalPlaylist] error:", error);
+          setQueueFeedback({type:"error", text:"Error al agregar a la playlist"});
+        }
+      } else {
+        setQueueFeedback({type:"success", text:`✓ Agregado a "${playlist?.name||"playlist"}"`});
+      }
+      setTimeout(()=>setQueueFeedback(null), 3000);
+    } finally {
+      setAddingToPlaylist(null);
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamaño
+    const sizeMB = file.size / 1024 / 1024;
+    if (sizeMB > 100) {
+      setUploadStatus({type:"error", text:"Archivo demasiado grande", detail:`${sizeMB.toFixed(1)} MB · máximo 100 MB`});
+      e.target.value = "";
+      return;
+    }
+
+    // Validar tipo
+    if (!["video/mp4","video/webm"].includes(file.type)) {
+      setUploadStatus({type:"error", text:"Formato no permitido", detail:`Tipo: ${file.type || "desconocido"} · solo MP4 o WebM`});
+      e.target.value = "";
+      return;
+    }
+
+    if (!onUploadLocal) {
+      setUploadStatus({type:"error", text:"Upload no disponible", detail:"El hook no expone uploadLocal. Reportá esto."});
+      e.target.value = "";
+      return;
+    }
+
+    setUploadStatus({type:"info", text:`Subiendo ${file.name}`, detail:`${sizeMB.toFixed(1)} MB · esto puede tardar...`});
+    setUploading(true);
+
+    try {
+      if (!adminUser) {
+        setUploadStatus({type:"error", text:"No estás logueado", detail:"Refrescá la página y volvé a iniciar sesión"});
+        setUploading(false);
+        e.target.value = "";
+        return;
+      }
+
+      const result = await onUploadLocal(file, {
+        title: file.name,
+        user: {
+          id: adminUser.id,
+          name: adminUser.email?.split("@")[0] || "Admin",
+          email: adminUser.email,
+          avatarEmoji: "🎵",
+          photoUrl: null,
+        }
+      });
+      if (result) {
+        setUploadStatus({type:"success", text:"Archivo subido", detail:`${file.name} · ya está en la cola de pedidos`});
+        if (onListLocal) onListLocal().then(setLocalFiles);
+      } else {
+        setUploadStatus({type:"error", text:"Error al subir", detail:"Verificá el bucket 'videos-locales' en Supabase Storage y sus policies"});
+      }
+    } catch (err) {
+      setUploadStatus({type:"error", text:"Excepción al subir", detail:String(err?.message || err)});
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+      // Auto-limpiar mensaje de éxito después de 4s
+      setTimeout(() => setUploadStatus(prev => prev?.type === "success" ? null : prev), 4000);
+    }
+  };
+
+  const nowPlaying = launched[0] || null;
+  const allInQueue = [...launched, ...vids];
+  const totalPedidos = vids.length + launched.length;
+
+  // Estilo común para listas con scroll invisible pero funcional
+  const scrollListStyle = {
+    overflowY: "auto",
+    flex: 1,
+    padding: 8,
+    scrollbarWidth: "thin",
+    scrollbarColor: "#9B2FFF22 transparent",
+  };
+
+  return (
+    <>
+      <style>{`
+        .vp-scroll::-webkit-scrollbar { width: 4px; }
+        .vp-scroll::-webkit-scrollbar-track { background: transparent; }
+        .vp-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; transition: background .15s; }
+        .vp-scroll:hover::-webkit-scrollbar-thumb { background: #9B2FFF44; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+      <div ref={containerRef} style={{display:"flex",height:"100%",overflow:"hidden"}}>
+
+        {/* ═══ COLUMNA IZQUIERDA: COLA ═══ */}
+        <div style={{width:leftWidth,minWidth:180,background:"#110820",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+          <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #9B2FFF22",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:8}}>
+            <h3 style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:1.5,color:"#9B2FFF",margin:0,whiteSpace:"nowrap"}}>Cola</h3>
+            <div style={{display:"flex",gap:5,alignItems:"center"}}>
+              <span style={{background:"#9B2FFF33",color:"#9B2FFF",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{allInQueue.length} en cola</span>
+              <span style={{background:"#FFD60022",color:"#FFD600",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",border:"1px solid #FFD60044"}}>{totalPedidos} pedidos</span>
             </div>
           </div>
-          <button className="btn btn-r btn-full" onClick={()=>{ dismiss(live.id); setLive(null); }}>⏹ Detener</button>
+          {queueFeedback && (
+            <div style={{
+              padding:"8px 12px",
+              background:queueFeedback.type==="error"?"#FF2D7822":"#00F5A022",
+              border:`1px solid ${queueFeedback.type==="error"?"#FF2D78":"#00F5A0"}`,
+              color:queueFeedback.type==="error"?"#FF2D78":"#00F5A0",
+              fontSize:11,fontWeight:600,
+              margin:"0 8px 6px",borderRadius:8,flexShrink:0,
+            }}>
+              {queueFeedback.text}
+            </div>
+          )}
+          <div className="vp-scroll" style={scrollListStyle}>
+            {allInQueue.length === 0 ? (
+              <div style={{textAlign:"center",color:"#7A6E8A",padding:"30px 10px",fontSize:13}}>
+                <div style={{fontSize:32,marginBottom:8,opacity:.5}}>🎵</div>
+                Sin pedidos en cola
+              </div>
+            ) : (
+              allInQueue.map((v, idx) => {
+                const isPlaying = v.status === "launched";
+                const isTop = !isPlaying && idx === launched.length;
+                const rank = isPlaying ? "▶" : (idx - launched.length + 1);
+                return (
+                  <div key={v.id} style={{
+                    background:"#1A0D2E",
+                    border:`1px solid ${isPlaying?"#00F5A0":(isTop && v.vote_count>0)?"#FFD60066":"#9B2FFF22"}`,
+                    borderRadius:10,padding:"10px 12px",marginBottom:6,
+                    display:"flex",alignItems:"center",gap:10,position:"relative",
+                    ...(isPlaying ? {background:"#00F5A011"} : {})
+                  }}>
+                    {isPlaying && <div style={{position:"absolute",top:-8,right:8,background:"#00F5A0",color:"#08040F",fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:6,letterSpacing:.5}}>▶ REPRODUCIENDO</div>}
+                    {isTop && v.vote_count > 0 && <div style={{position:"absolute",top:-8,right:8,background:"#FFD600",color:"#08040F",fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:6,letterSpacing:.5}}>🔥 +VOTADO</div>}
+                    <div style={{width:20,fontSize:11,fontWeight:700,color:"#7A6E8A",textAlign:"center",flexShrink:0}}>{rank}</div>
+                    {v.source === "local" ? (
+                      <div style={{width:44,height:30,borderRadius:5,background:"#FF950022",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>📁</div>
+                    ) : (
+                      <img src={`https://img.youtube.com/vi/${v.yt_id}/mqdefault.jpg`}
+                        style={{width:44,height:30,borderRadius:5,objectFit:"cover",flexShrink:0}}
+                        onError={(e)=>{e.target.style.display="none"}}/>
+                    )}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#F0E8FF",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.title}</div>
+                      {!v.requested_by_admin && (
+                        <div style={{fontSize:10,color:"#7A6E8A",marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+                          <span>{v.avatar||"👤"}</span>
+                          <span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.name || "Anónimo"}</span>
+                        </div>
+                      )}
+                      {v.requested_by_admin && v.artist && (
+                        <div style={{fontSize:10,color:"#7A6E8A",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {v.artist}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{
+                      background:isPlaying?"#00F5A022":(v.vote_count>=5?"#FFD60022":"#FF2D7822"),
+                      border:`1px solid ${isPlaying?"#00F5A066":(v.vote_count>=5?"#FFD60066":"#FF2D7855")}`,
+                      color:isPlaying?"#00F5A0":(v.vote_count>=5?"#FFD600":"#FF2D78"),
+                      fontSize:11,fontWeight:800,padding:"2px 7px",borderRadius:8,minWidth:32,textAlign:"center",flexShrink:0
+                    }}>
+                      {isPlaying ? "NOW" : `${v.vote_count||0} ▲`}
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      {!isPlaying && (
+                        <button onClick={()=>{onApprove&&onApprove(v.id);onProject&&onProject(v);}}
+                          title="Proyectar" style={{width:26,height:26,borderRadius:6,border:"1px solid #00F5A066",background:"transparent",color:"#00F5A0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>▶</button>
+                      )}
+                      <button onClick={()=>onReject&&onReject(v.id)}
+                        title={isPlaying?"Detener":"Rechazar"} style={{width:26,height:26,borderRadius:6,border:"1px solid #FF2D7866",background:"transparent",color:"#FF2D78",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{isPlaying?"■":"✕"}</button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-      )}
-      {vids.length>0?(
-        <div className="card">
-          <div className="ctitle">Cola de pedidos ({vids.length})</div>
-          {vids.map((v,i)=>(
-            <div key={v.id} className="mrow" style={{animationDelay:`${i*.05}s`}}>
-              <div className="vrow" style={{border:"none",padding:0,background:"none",marginBottom:8}}>
-                <img src={`https://img.youtube.com/vi/${v.yt_id}/mqdefault.jpg`} alt=""/>
-                <div style={{flex:1}}>
-                  <div className="vtitle">{v.title}</div>
-                  <div className="vartist">{v.artist} · {v.reqBy}</div>
+
+        {/* ═══ DIVISOR IZQUIERDO ═══ */}
+        <VDivider onDrag={handleLeftDrag}/>
+
+        {/* ═══ COLUMNA CENTRAL: REPRODUCTOR + TABS ═══ */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#08040F",minWidth:200}}>
+
+          {/* Reproductor (altura ajustable) */}
+          <div id="video-player-area" style={{
+            height:playerHeight,
+            background:"#000",
+            flexShrink:0,
+            position:"relative",
+            overflow:"hidden",
+          }}>
+            <PantallaPreview/>
+
+            {/* Overlay del operador encima del preview */}
+            <div style={{
+              position:"absolute",
+              top:0,left:0,right:0,
+              padding:"8px 12px",
+              background:"linear-gradient(180deg,#08040Fcc,transparent)",
+              display:"flex",alignItems:"center",justifyContent:"space-between",
+              zIndex:10,pointerEvents:"none",
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:6,pointerEvents:"auto"}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:"#FF2D78",animation:"pulse 1.2s infinite"}}/>
+                <span style={{fontSize:11,fontWeight:700,color:"#FF2D78",letterSpacing:1}}>VISTA PREVIA · PANTALLA GIGANTE</span>
+              </div>
+              {nowPlaying && (
+                <button onClick={()=>onReject&&onReject(nowPlaying.id)}
+                  style={{background:"#FF2D7822",border:"1px solid #FF2D78",color:"#FF2D78",fontSize:11,padding:"4px 10px",borderRadius:6,cursor:"pointer",fontWeight:700,pointerEvents:"auto"}}>
+                  ■ Detener
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* DIVISOR HORIZONTAL entre reproductor y tabs */}
+          <HDivider onDrag={handlePlayerDrag}/>
+
+          {/* Tabs (sin stats arriba) */}
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",padding:"12px 16px",gap:10,minHeight:120}}>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              {[
+                {id:"search",icon:"🔴",label:"Buscar YT"},
+                {id:"local",icon:"📁",label:"Archivos locales"},
+              ].map(t => (
+                <button key={t.id} onClick={()=>setTab(t.id)}
+                  style={{
+                    flex:1,padding:"8px 4px",borderRadius:8,
+                    border:`1px solid ${tab===t.id?"#9B2FFF":"#9B2FFF33"}`,
+                    background:tab===t.id?"#9B2FFF22":"transparent",
+                    color:tab===t.id?"#F0E8FF":"#7A6E8A",
+                    fontSize:11,fontWeight:600,cursor:"pointer",
+                    display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+                  }}>
+                  <span style={{fontSize:16}}>{t.icon}</span>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {tab === "search" && (
+              <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",gap:8,minHeight:0}}>
+                <div style={{display:"flex",gap:6,flexShrink:0,position:"relative"}}>
+                  <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                    placeholder="Buscar en YouTube... (3+ letras)"
+                    style={{flex:1,background:"#1A0D2E",border:"1px solid #9B2FFF44",color:"#F0E8FF",padding:"9px 12px",borderRadius:8,fontSize:13,outline:"none"}}/>
+                  <div style={{background:"#9B2FFF",color:"white",padding:"9px 14px",borderRadius:8,fontSize:14,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",minWidth:44}}>
+                    {searching ? (
+                      <span style={{display:"inline-block",animation:"spin 1s linear infinite"}}>⟳</span>
+                    ) : "🔍"}
+                  </div>
+                </div>
+                <div className="vp-scroll" style={{flex:1,overflowY:"auto"}}>
+                  {searchResults.length === 0 && !searching && (
+                    <div style={{textAlign:"center",color:"#7A6E8A",padding:"30px 10px",fontSize:13}}>
+                      {searchQuery ? "Sin resultados" : "Buscá temas en YouTube para agregar a la cola"}
+                    </div>
+                  )}
+                  {searchResults.map(r => (
+                    <div key={r.ytId} style={{display:"flex",alignItems:"center",gap:10,padding:8,borderRadius:8,border:"1px solid transparent"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background="#1A0D2E";e.currentTarget.style.borderColor="#9B2FFF22"}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent"}}>
+                      <img src={r.thumb} style={{width:64,height:42,borderRadius:5,objectFit:"cover",flexShrink:0,background:"#9B2FFF22"}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,color:"#F0E8FF",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.title}</div>
+                        <div style={{fontSize:10,color:"#7A6E8A",marginTop:2}}>{r.artist}</div>
+                      </div>
+                      <button onClick={()=>addToQueue(r)}
+                        disabled={addingToQueue===r.ytId}
+                        style={{
+                          background:addingToQueue===r.ytId?"#00F5A022":"transparent",
+                          border:"1px solid #00F5A066",color:"#00F5A0",
+                          fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:6,
+                          cursor:addingToQueue===r.ytId?"wait":"pointer",whiteSpace:"nowrap",flexShrink:0,
+                          opacity:addingToQueue===r.ytId?.6:1,
+                        }}>
+                        {addingToQueue===r.ytId ? "..." : "+ Cola"}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div style={{display:"flex",gap:6}}>
-                <button className="btn btn-p btn-full" style={{flex:1}} onClick={()=>launch(v.id)}>▶ Proyectar</button>
-                <button className="btn btn-r" style={{padding:"9px 11px"}} onClick={()=>dismiss(v.id)}>✕</button>
+            )}
+
+            {tab === "local" && (
+              <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",gap:8,minHeight:0}}>
+                <input ref={fileInputRef} type="file" accept="video/mp4,video/webm"
+                  onChange={handleFileUpload} style={{display:"none"}}/>
+                <button onClick={()=>fileInputRef.current?.click()} disabled={uploading}
+                  style={{padding:"16px",border:"2px dashed #9B2FFF44",borderRadius:12,background:"transparent",color:"#F0E8FF",cursor:"pointer",fontSize:12,fontWeight:700,flexShrink:0,opacity:uploading?.6:1}}>
+                  {uploading ? "⏳ Subiendo..." : "📂 Subir MP4 al bucket"}
+                  <div style={{fontSize:10,color:"#7A6E8A",marginTop:4,fontWeight:400}}>video/mp4 o video/webm · máx 100MB</div>
+                </button>
+
+                {uploadStatus && (
+                  <div style={{
+                    padding:"10px 12px",borderRadius:8,fontSize:11,fontWeight:600,
+                    background:uploadStatus.type==="error"?"#FF2D7822":uploadStatus.type==="success"?"#00F5A022":"#9B2FFF22",
+                    border:`1px solid ${uploadStatus.type==="error"?"#FF2D78":uploadStatus.type==="success"?"#00F5A0":"#9B2FFF"}`,
+                    color:uploadStatus.type==="error"?"#FF2D78":uploadStatus.type==="success"?"#00F5A0":"#9B2FFF",
+                    flexShrink:0,display:"flex",flexDirection:"column",gap:3,position:"relative"
+                  }}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                      <span>{uploadStatus.type==="error"?"❌":uploadStatus.type==="success"?"✓":"ℹ️"} {uploadStatus.text}</span>
+                      <button onClick={()=>setUploadStatus(null)} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:13,opacity:.7}}>✕</button>
+                    </div>
+                    {uploadStatus.detail && <div style={{fontSize:10,opacity:.85,fontWeight:400}}>{uploadStatus.detail}</div>}
+                  </div>
+                )}
+
+                <div style={{fontSize:10,color:"#7A6E8A",padding:"4px 4px",flexShrink:0,textTransform:"uppercase",letterSpacing:1}}>
+                  Bucket: videos-locales · {localFiles.length} archivos
+                </div>
+
+                <div className="vp-scroll" style={{flex:1,overflowY:"auto"}}>
+                  {localFiles.length === 0 ? (
+                    <div style={{textAlign:"center",color:"#7A6E8A",padding:"30px 10px",fontSize:13}}>
+                      Sin archivos subidos todavía
+                    </div>
+                  ) : (
+                    localFiles.map(f => (
+                      <div key={f.path} style={{display:"flex",alignItems:"center",gap:10,padding:8,background:"#1A0D2E",border:"1px solid #9B2FFF22",borderRadius:8,marginBottom:6}}>
+                        <div style={{fontSize:20,flexShrink:0}}>🎞️</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:11,fontWeight:600,color:"#F0E8FF",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.name}</div>
+                          <div style={{fontSize:10,color:"#7A6E8A"}}>{(f.size/1024/1024).toFixed(1)} MB</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )}
+          </div>
         </div>
-      ):!live&&(
-        <div style={{textAlign:"center",padding:"28px",color:"rgba(240,232,255,.2)"}}>
-          <div style={{fontSize:32,marginBottom:8,opacity:.3}}>🎵</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontSize:12,fontWeight:800}}>Sin pedidos en cola</div>
+
+        {/* ═══ DIVISOR DERECHO ═══ */}
+        <VDivider onDrag={handleRightDrag}/>
+
+        {/* ═══ COLUMNA DERECHA: PLAYLISTS YOUTUBE ═══ */}
+        <div style={{width:rightWidth,minWidth:180,background:"#110820",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+          <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #9B2FFF22",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <h3 style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:1.5,color:"#9B2FFF",margin:0}}>Playlists de YouTube</h3>
+            <span style={{background:"#FFD60022",color:"#FFD600",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,border:"1px solid #FFD60044"}}>{totalVideos||0} temas</span>
+          </div>
+          <div className="vp-scroll" style={{padding:8,overflowY:"auto",flex:1}}>
+            {Object.entries(playlists||{}).map(([type, videos]) => {
+              const isActive = activePlaylist === `right_${type}`;
+              const src = sources?.[type];
+              return (
+                <div key={type} style={{marginBottom:6,background:"#1A0D2E",border:"1px solid #9B2FFF22",borderRadius:8,overflow:"hidden"}}>
+                  <button onClick={()=>setActivePlaylist(isActive?null:`right_${type}`)}
+                    style={{width:"100%",background:"transparent",border:"none",color:"#F0E8FF",cursor:"pointer",padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}>
+                      <span style={{fontSize:14,opacity:isActive?1:.6}}>{isActive?"▼":"▶"}</span>
+                      <span style={{fontSize:12,fontWeight:700,textTransform:"capitalize",textAlign:"left"}}>{type}</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                      <span style={{fontSize:10,color:"#7A6E8A"}}>{videos.length}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:6,
+                        background:src==="youtube"?"#00F5A022":"#FF950022",
+                        color:src==="youtube"?"#00F5A0":"#FF9500",
+                        border:`1px solid ${src==="youtube"?"#00F5A066":"#FF950066"}`
+                      }}>{src==="youtube"?"YT":"Local"}</span>
+                    </div>
+                  </button>
+                  {isActive && (
+                    <div style={{borderTop:"1px solid #9B2FFF22",maxHeight:240,overflowY:"auto"}} className="vp-scroll">
+                      {videos.map(v => (
+                        <div key={v.ytId||v.yt_id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderBottom:"1px solid #9B2FFF11"}}>
+                          <img src={ytThumb?.(v.ytId||v.yt_id) || `https://img.youtube.com/vi/${v.ytId||v.yt_id}/mqdefault.jpg`}
+                            style={{width:44,height:28,borderRadius:4,objectFit:"cover",flexShrink:0}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:600,color:"#F0E8FF",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v.title}</div>
+                          </div>
+                          <button onClick={()=>addToQueue({ytId:v.ytId||v.yt_id,title:v.title,artist:v.artist,thumb:v.thumb})}
+                            disabled={addingToQueue===(v.ytId||v.yt_id)}
+                            title="Agregar a la cola"
+                            style={{
+                              background:addingToQueue===(v.ytId||v.yt_id)?"#00F5A022":"transparent",
+                              border:"1px solid #00F5A066",color:"#00F5A0",
+                              fontSize:10,fontWeight:700,padding:"3px 7px",borderRadius:5,
+                              cursor:addingToQueue===(v.ytId||v.yt_id)?"wait":"pointer",flexShrink:0,
+                              opacity:addingToQueue===(v.ytId||v.yt_id)?.6:1,
+                            }}>
+                            {addingToQueue===(v.ytId||v.yt_id) ? "..." : "+"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -1543,9 +2173,16 @@ function LoginAdmin(){
 
 export default function AdminPanel(){
   const [sec,      setSec]      = useState("launch");
+  const [sbCollapsed, setSbCollapsed] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
   const [active,   setActive]   = useState(null);
   const [authSession, setAuthSession] = useState(undefined); // undefined = verificando sesión
   const [isAdmin,     setIsAdmin]     = useState(undefined); // undefined = verificando admin_users
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({data:{user}}) => setUser(user));
+  }, []);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setAuthSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setAuthSession(s));
@@ -1568,9 +2205,39 @@ export default function AdminPanel(){
   };
   const { connectedCount } = usePresence(session?.id, null);
   const { pending, approved, approve, reject } = useMessages(session?.id, "admin");
-  const { pending: vidPending, approve: approveVid, reject: rejectVid } = useVideoRequests(session?.id);
+  const {
+    pending: vidPending,
+    launched: vidLaunched,
+    myVotes: vidMyVotes,
+    approve: approveVid,
+    reject: rejectVid,
+    uploadLocal: uploadLocalVid,
+    listLocalFiles: listLocalVids,
+    addByAdmin: addByAdminVid,
+  } = useVideoRequests(session?.id, user?.id);
   const vidCount = vidPending.length;
   const msgCount = pending.length;
+  const showToast = (toast) => {
+    const id = Date.now();
+    setToasts(prev=>[...prev,{id,...toast}]);
+    setTimeout(()=>setToasts(prev=>prev.filter(t=>t.id!==id)), 20000);
+  };
+  const prevMsgCount = useRef(0);
+  useEffect(()=>{
+    if(pending.length > prevMsgCount.current){
+      const newest = pending[pending.length-1];
+      if(newest) showToast({
+        type:"message",
+        photo: newest.photo,
+        avatar: newest.avatar||"👤",
+        title: newest.name||"Anónimo",
+        text: newest.text||"",
+        msgId: newest.id,
+      });
+    }
+    prevMsgCount.current = pending.length;
+  },[pending]);
+  useEffect(()=>{ window.__bizarrToast = showToast; },[]);
   const curSec = SECS.find(s=>s.id===sec)||SECS[0];
   const groups = [...new Set(SECS.map(s=>s.group))];
   const goTo   = useCallback(id=>setSec(id),[]);
@@ -1589,7 +2256,19 @@ export default function AdminPanel(){
       case "palabra":   return <PalabraPanel sec={curSec}/>;
       case "trivia":    return <TriviaPanel sec={curSec}/>;
       case "mensajes":  return <MensajesPanel sec={curSec} zocaloOn={zocaloOn} setZocaloOn={setZocaloOn} pending={pending} approved={approved} approve={approve} reject={reject}/>;
-      case "videos":    return <VideosPanel sec={curSec} vids={vidPending} onApprove={approveVid} onReject={rejectVid} onProject={controls?.projectVideo}/>;
+      case "videos":    return <VideosPanel
+        sec={curSec}
+        vids={vidPending}
+        launched={vidLaunched}
+        myVotes={vidMyVotes}
+        onApprove={approveVid}
+        onReject={rejectVid}
+        onProject={controls?.projectVideo}
+        onUploadLocal={uploadLocalVid}
+        onListLocal={listLocalVids}
+        onAddByAdmin={addByAdminVid}
+        adminUser={user}
+      />;
       case "placas":    return <PlacasPanel sec={curSec} controls={controls}/>;
       case "menu":      return <MenuPanel sec={curSec}/>;
       case "novedades": return <NovedadesPanel sec={curSec}/>;
@@ -1646,7 +2325,7 @@ export default function AdminPanel(){
   return(
     <>
       <style>{css}</style>
-      <div className="root" style={{zoom:1.1}}>
+      <div className="root">
         <div className="orbs">
           <div className="orb" style={{width:320,height:320,top:-120,left:-80,
             background:curSec.glow,animationDuration:"15s"}}/>
@@ -1655,36 +2334,48 @@ export default function AdminPanel(){
         </div>
 
         {/* Sidebar */}
-        <aside className="sb">
+        <aside className={`sb${sbCollapsed?" collapsed":""}`}>
           <div className="sb-top">
             <img src={LOGO} alt="BizarrApp" className="sb-logo"
               onError={e=>{e.target.style.display="none";}}/>
-            <div className="sb-pills">
-              <div className="pill pill-live"><span style={{width:5,height:5,borderRadius:"50%",background:"#EF4444",display:"inline-block",marginRight:3,animation:"blink 1.2s infinite"}}/>EN VIVO</div>
-              {zocaloOn&&<div className="pill pill-zoc">ZÓCALO ●</div>}
+            <div style={{padding:"10px 10px 6px",display:"flex",justifyContent:"flex-start"}}>
+              <button onClick={()=>setSbCollapsed(c=>!c)}
+                title={sbCollapsed?"Expandir menú":"Contraer menú"}
+                style={{background:"none",border:"none",color:"#F0E8FF",fontSize:20,cursor:"pointer",lineHeight:1,padding:"2px 6px"}}>
+                ☰
+              </button>
             </div>
-            <div className="sb-users">👥 <strong>{connectedCount}</strong> conectados</div>
           </div>
-          <div className="sb-body">
-            {groups.map(g=>{
-              const items=SECS.filter(s=>s.group===g);
-              return(
-                <div key={g}>
-                  <div className="sb-group">{g}</div>
-                  {items.map(s=>(
-                    <button key={s.id}
-                      className={`sb-btn ${sec===s.id?"on":""}`}
-                      style={sec===s.id?{"--sg":s.grad,"--gw":s.glow,position:"relative"}:{}}
-                      onClick={()=>setSec(s.id)}>
-                      <span className="sb-icon">{s.icon}</span>
-                      <span className="sb-lbl">{s.label}</span>
-                      {s.id==="mensajes"&&msgCount>0&&<span className="sb-badge" style={{"--sg":s.grad}}>{msgCount}</span>}
-                      {s.id==="videos"&&vidCount>0&&<span className="sb-badge" style={{"--sg":s.grad}}>{vidCount}</span>}
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
+          <div className="sb-nav">
+            {[...new Set(SECS.map(s=>s.group))].map((grp, gi)=>(
+              <div key={grp}>
+                {!sbCollapsed ? (
+                  <div className="sb-group-label">{grp}</div>
+                ) : (
+                  gi>0 && <div className="sb-group-sep"/>
+                )}
+                {SECS.filter(s=>s.group===grp).map(s=>(
+                  <button key={s.id}
+                    className={`sb-btn${sec===s.id?" sb-btn-active":""}`}
+                    onClick={()=>setSec(s.id)}
+                    title={s.label}
+                    style={{justifyContent:sbCollapsed?"center":"flex-start"}}>
+                    <span className="sb-btn-icon">{s.icon}</span>
+                    {!sbCollapsed && <span className="sb-btn-label">{s.label}</span>}
+                    {!sbCollapsed && s.id==="mensajes" && msgCount>0 && <span className="sb-badge">{msgCount}</span>}
+                    {!sbCollapsed && s.id==="videos" && vidCount>0 && <span className="sb-badge">{vidCount}</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="sb-footer">
+            <button onClick={async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; }}
+              title="Cerrar sesión"
+              style={{width:"100%",background:"none",border:"1px solid #FF2D7855",color:"#FF2D78",borderRadius:8,padding:"7px 6px",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:sbCollapsed?"center":"flex-start"}}>
+              <span style={{fontSize:15,width:24,display:"flex",justifyContent:"center"}}>🚪</span>
+              {!sbCollapsed && <span style={{marginLeft:8}}>Cerrar sesión</span>}
+            </button>
           </div>
         </aside>
 
@@ -1694,30 +2385,132 @@ export default function AdminPanel(){
             <div>
               <div className="mhdr-title">{curSec.icon} {curSec.label}</div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              {active&&(
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px",
-                  borderRadius:9,background:"rgba(0,245,160,.08)",border:"1px solid rgba(0,245,160,.22)"}}>
-                  <div className="dot-live"/>
-                  <span style={{fontSize:9.5,fontWeight:700,color:"#00F5A0"}}>
-                    {SECS.find(s=>s.id===active)?.label||active} · EN VIVO
-                  </span>
-                </div>
-              )}
-              <button
-                onClick={async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; }}
-                onMouseEnter={e=>{e.currentTarget.style.color=C.amber;e.currentTarget.style.borderColor="rgba(255,149,0,.5)";}}
-                onMouseLeave={e=>{e.currentTarget.style.color=C.pink;e.currentTarget.style.borderColor="rgba(255,45,120,.35)";}}
-                style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:11,fontWeight:700,
-                  color:C.pink,background:C.bg2,border:"1px solid rgba(255,45,120,.35)",
-                  borderRadius:9,padding:"5px 12px",cursor:"pointer",transition:"color .15s,border-color .15s"}}>
-                Cerrar sesión
-              </button>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{position:"relative"}}>
+                <button onClick={()=>setBellOpen(b=>!b)}
+                  style={{background:"#1A0D2E",border:"1px solid #9B2FFF44",borderRadius:"50%",width:36,height:36,color:"#F0E8FF",cursor:"pointer",position:"relative",padding:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"border-color .15s"}}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                  </svg>
+                  {msgCount>0 && (
+                    <span style={{position:"absolute",top:0,right:0,background:"#FF2D78",color:"white",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {msgCount>9?"9+":msgCount}
+                    </span>
+                  )}
+                </button>
+
+                {bellOpen && (
+                  <div style={{position:"absolute",top:40,right:0,width:320,background:"#1A0D2E",border:"1px solid #9B2FFF55",borderRadius:12,boxShadow:"0 8px 32px #00000088",zIndex:999,overflow:"hidden"}}>
+                    <div style={{padding:"10px 14px",borderBottom:"1px solid #9B2FFF22",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"#F0E8FF"}}>Mensajes pendientes</span>
+                      <button onClick={()=>setBellOpen(false)} style={{background:"none",border:"none",color:"#7A6E8A",cursor:"pointer",fontSize:16}}>✕</button>
+                    </div>
+                    <div style={{maxHeight:300,overflowY:"auto"}}>
+                      {pending.length===0 ? (
+                        <div style={{padding:"20px 14px",textAlign:"center",color:"#7A6E8A",fontSize:13}}>Sin mensajes pendientes</div>
+                      ) : (
+                        pending.slice(0,5).map(msg=>(
+                          <div key={msg.id} style={{padding:"10px 14px",borderBottom:"1px solid #9B2FFF11",display:"flex",gap:10,alignItems:"center"}}>
+                            {msg.photo ? (
+                              <img src={msg.photo} alt={msg.name||"avatar"}
+                                style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",flexShrink:0,border:"2px solid #9B2FFF55"}}/>
+                            ) : (
+                              <span style={{fontSize:24,flexShrink:0,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",background:"#9B2FFF22",borderRadius:"50%"}}>{msg.avatar||"👤"}</span>
+                            )}
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:11,fontWeight:700,color:"#9B2FFF",marginBottom:2}}>{msg.name||"Anónimo"}</div>
+                              <div style={{fontSize:12,color:"#F0E8FF",wordBreak:"break-word"}}>{msg.text||""}</div>
+                            </div>
+                            <button onClick={()=>{ approve(msg.id); if(pending.length<=1) setBellOpen(false); }}
+                              title="Enviar a pantalla"
+                              style={{flexShrink:0,background:"#00F5A0",border:"none",color:"#08040F",width:34,height:34,borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform .12s"}}
+                              onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
+                              onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="12" y1="19" x2="12" y2="5"/>
+                                <polyline points="5 12 12 5 19 12"/>
+                              </svg>
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {pending.length>5 && (
+                      <div style={{padding:"8px 14px",borderTop:"1px solid #9B2FFF22",textAlign:"center"}}>
+                        <button onClick={()=>{setSec("mensajes");setBellOpen(false);}} style={{background:"none",border:"none",color:"#9B2FFF",fontSize:12,cursor:"pointer",fontWeight:700}}>
+                          Ver todos ({pending.length}) →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6,background:"#FF2D7822",border:"1px solid #FF2D78",borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box"}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:"#FF2D78",display:"inline-block",animation:"pulse 1.2s infinite"}}/>
+                <span style={{fontSize:12,fontWeight:700,color:"#FF2D78"}}>EN VIVO</span>
+              </div>
+
+              <div style={{display:"flex",alignItems:"center",gap:6,background:"#FFD60022",border:"1px solid #FFD60088",borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box"}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#FFD600"}}>👥 {connectedCount}</span>
+              </div>
+
+              <div onClick={()=>setZocaloOn(z=>!z)}
+                style={{display:"flex",alignItems:"center",gap:6,background:zocaloOn?"#00F5A022":"#7A6E8A22",border:`1px solid ${zocaloOn?"#00F5A0":"#7A6E8A"}`,borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box",cursor:"pointer",transition:"all .15s"}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:zocaloOn?"#00F5A0":"#7A6E8A",display:"inline-block",boxShadow:zocaloOn?"0 0 6px #00F5A0":"none"}}/>
+                <span style={{fontSize:12,fontWeight:700,color:zocaloOn?"#00F5A0":"#7A6E8A"}}>ZÓCALO</span>
+              </div>
+
+              <div style={{
+                display:"flex",alignItems:"center",gap:6,
+                background: "#7A6E8A22",
+                border: "1px solid #7A6E8A55",
+                borderRadius:20,padding:"5px 14px",minWidth:100,
+                justifyContent:"center",height:30,boxSizing:"border-box",
+              }}
+              title="El operador debe tocar la Pantalla Gigante una vez para activar el audio">
+                <span style={{fontSize:13}}>🔇</span>
+                <span style={{fontSize:11,fontWeight:700,color:"#7A6E8A"}}>AUDIO PANTALLA</span>
+              </div>
             </div>
           </div>
           <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow}} key={sec}>
             {renderPanel()}
           </div>
+        </div>
+
+        <div style={{position:"fixed",bottom:20,right:20,zIndex:9999,display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end",pointerEvents:"none"}}>
+          {toasts.map(t=>(
+            <div key={t.id} style={{background:"#1A0D2E",border:`1px solid ${t.type==="winner"?"#FFD600":"#9B2FFF55"}`,borderRadius:14,padding:"12px 14px",display:"flex",gap:10,alignItems:"center",width:340,boxShadow:"0 8px 32px #00000099",pointerEvents:"all",animation:"slideIn .25s ease"}}>
+              {t.photo ? (
+                <img src={t.photo} alt={t.title||"avatar"}
+                  style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",flexShrink:0,border:`2px solid ${t.type==="winner"?"#FFD600":"#9B2FFF55"}`}}/>
+              ) : (
+                <span style={{fontSize:24,flexShrink:0,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",background:t.type==="winner"?"#FFD60022":"#9B2FFF22",borderRadius:"50%"}}>{t.avatar||t.emoji||"💬"}</span>
+              )}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:11,fontWeight:700,color:t.type==="winner"?"#FFD600":"#9B2FFF",marginBottom:2,textTransform:"uppercase",letterSpacing:1}}>{t.title}</div>
+                <div style={{fontSize:13,color:"#F0E8FF",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.text}</div>
+              </div>
+              {t.msgId && (
+                <button onClick={()=>{ approve(t.msgId); setToasts(prev=>prev.filter(x=>x.id!==t.id)); }}
+                  title="Enviar a pantalla"
+                  style={{flexShrink:0,background:"#00F5A0",border:"none",color:"#08040F",width:34,height:34,borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"/>
+                    <polyline points="5 12 12 5 19 12"/>
+                  </svg>
+                </button>
+              )}
+              {t.type==="winner" && t.action && (
+                <button onClick={t.action} style={{flexShrink:0,background:"#FFD600",border:"none",color:"#08040F",fontSize:11,fontWeight:800,padding:"6px 10px",borderRadius:8,cursor:"pointer"}}>
+                  {t.actionLabel||"Ver"}
+                </button>
+              )}
+              <button onClick={()=>setToasts(prev=>prev.filter(x=>x.id!==t.id))}
+                style={{flexShrink:0,background:"none",border:"none",color:"#7A6E8A",cursor:"pointer",fontSize:14,padding:"0 2px",alignSelf:"flex-start"}}>✕</button>
+            </div>
+          ))}
         </div>
       </div>
     </>

@@ -342,3 +342,50 @@ export function parsePlaylistId(input) {
   try { return new URL(t).searchParams.get("list") || null; }
   catch { return null; }
 }
+
+export async function searchYouTube(query, maxResults = 10) {
+  const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
+
+  if (!apiKey) {
+    console.warn("[searchYouTube] VITE_YOUTUBE_API_KEY no configurada");
+    return { results: [], source: "no_key" };
+  }
+
+  if (!query || query.trim().length < 2) {
+    return { results: [], source: "youtube" };
+  }
+
+  try {
+    const url = new URL("https://www.googleapis.com/youtube/v3/search");
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("type", "video");
+    url.searchParams.set("videoEmbeddable", "true");
+    url.searchParams.set("maxResults", String(maxResults));
+    url.searchParams.set("q", query);
+    url.searchParams.set("key", apiKey);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("[searchYouTube] HTTP error:", res.status, errText);
+      return { results: [], source: "error" };
+    }
+
+    const data = await res.json();
+    const results = (data.items || [])
+      .filter(item => item.id?.videoId)
+      .map(item => ({
+        ytId: item.id.videoId,
+        title: item.snippet?.title || "",
+        artist: item.snippet?.channelTitle || "",
+        thumb: item.snippet?.thumbnails?.medium?.url ||
+               item.snippet?.thumbnails?.default?.url || "",
+        publishedAt: item.snippet?.publishedAt,
+      }));
+
+    return { results, source: "youtube" };
+  } catch (err) {
+    console.error("[searchYouTube] exception:", err);
+    return { results: [], source: "error" };
+  }
+}

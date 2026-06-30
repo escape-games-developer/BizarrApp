@@ -475,7 +475,10 @@ function PantallaView({ user, messages, onSend, isRestricted, onGoProfile }) {
   const [selVid, setSelVid] = useState(null);
   const [sent, setSent] = useState(false);
   const VIDEOS = [{id:"v1",ytId:"OPf0YbXqDm0",title:"Blinding Lights",artist:"The Weeknd"},{id:"v2",ytId:"JGwWNGJdvx8",title:"Shape of You",artist:"Ed Sheeran"},{id:"v3",ytId:"ktvTqknDobU",title:"Uptown Funk",artist:"Bruno Mars"},{id:"v4",ytId:"09R8_2nJtjg",title:"Shake It Off",artist:"Taylor Swift"}];
-  const myMsgs = (messages||[]).filter(ms=>ms.userId==="me"||ms.user_id===user?.id);
+  const myMsgs = (messages||[]).filter(ms =>
+    (ms.userId==="me" || ms.user_id === user?.id) &&
+    (ms.status === "pending" || ms.status === "approved")
+  );
 
   if (isRestricted) return (
     <div className="blk" style={{"--mg":m.grad,"--glow":m.glow}}>
