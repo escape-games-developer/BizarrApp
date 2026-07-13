@@ -2,7 +2,26 @@
 // Importar una sola vez en App.jsx
 
 const globalCss = `
+  @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Poppins:wght@400;600;700&display=swap');
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800;900&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body, #root {
+    background: #000000;
+    font-family: 'Poppins', sans-serif;
+    color: #FFFFFF;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, .title-display {
+    font-family: 'Bangers', cursive;
+    letter-spacing: 0.04em;
+  }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

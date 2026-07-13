@@ -7,6 +7,7 @@ import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
+import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
 import PlaylistsPanel from "./PlaylistsPanel";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
 import {
@@ -559,86 +560,111 @@ function DueloPanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 // FTL / PT — misma lógica, distinto tipo
 // ══════════════════════════════════════════════════════════════════════════
-function EscenarioPanel({sec,type}){
+function EscenarioPanel({sec, type}) {
   const INFO = {
-    ftl:  {label:"Follow the Leader",icon:"💃",col:"#FF9500",videos:MOCK_FTL_VIDEOS,
-           sub:"El líder sube al escenario y el bar lo sigue al ritmo de la música."},
-    pt:   {label:"Personal Trainer",  icon:"🏋️",col:"#00F5A0",videos:MOCK_FTL_VIDEOS,
-           sub:"Clase de gym dance grupal. Vestuario: polainas, muñequeras y bandana."},
+    ftl: {label:"Follow the Leader", icon:"💃", col:"#FF9500",
+          sub:"El líder sube al escenario y el bar lo sigue al ritmo de la música."},
+    pt:  {label:"Personal Trainer",  icon:"🏋️", col:"#00F5A0",
+          sub:"Clase de gym dance grupal. Vestuario: polainas, muñequeras y bandana."},
   };
   const info = INFO[type];
-  const [phase,  setPhase]  = useState("idle");
-  const [queue,  setQueue]  = useState(MOCK_DUELO_QUEUE.slice(0,2));
-  const [sel,    setSel]    = useState(null);
-  const [selVid, setSelVid] = useState(null);
 
-  const reset = () => { setPhase("idle"); setSel(null); setSelVid(null); };
+  const [sessionId, setSessionId] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("sessions").select("id")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1).maybeSingle();
+      if (!cancelled && data) setSessionId(data.id);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  return(
-    <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {phase==="idle"&&(
+  const { queue, call, finish } = useEscenarioQueue(sessionId, type);
+
+  // waiting = todavía en cola. called = en escenario ahora.
+  const waiting = queue.filter(q => q.status === "waiting");
+  const active  = queue.find(q => q.status === "called") || null;
+
+  const handleCall = async (entry) => {
+    const { error } = await call(entry.id);
+    if (error) console.error("call error", error);
+  };
+  const handleFinish = async () => {
+    if (!active) return;
+    const { error } = await finish(active.id);
+    if (error) console.error("finish error", error);
+  };
+
+  return (
+    <div style={{"--sg": sec.grad, "--gw": sec.glow}}>
+      {/* Sin sesión activa */}
+      {!sessionId && (
         <div className="card">
           <div className="ctitle">{info.icon} {info.label}</div>
-          <p style={{fontSize:11.5,color:"rgba(240,232,255,.4)",lineHeight:1.5,marginBottom:12}}>{info.sub}</p>
-          <button className="btn btn-p btn-full" onClick={()=>setPhase("inviting")}>
-            {info.icon} Lanzar invitación
-          </button>
+          <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)"}}>
+            Esperando sesión activa…
+          </p>
         </div>
       )}
 
-      {phase==="inviting"&&(
+      {/* Nadie en escenario: mostrar cola */}
+      {sessionId && !active && (
         <div className="card">
-          <div className="ctitle" style={{marginBottom:4}}>Lista de espera</div>
-          <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)",marginBottom:10}}>
-            {queue.length} inscriptos · Elegí al líder de hoy
+          <div className="ctitle" style={{marginBottom:4}}>
+            {info.icon} {info.label}
           </div>
-          {queue.map((p,i)=>(
-            <div key={p.id} className="qrow" style={{animationDelay:`${i*.05}s`}}>
-              <div className="qavatar">{p.avatar}</div>
-              <div className="qname">{p.name}</div>
-              <button className="btn btn-p" style={{padding:"5px 12px",fontSize:10}}
-                onClick={()=>setSel(p)}>Elegir</button>
+          <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
+            {info.sub}
+          </p>
+          <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", marginBottom:10}}>
+            {waiting.length} inscripto{waiting.length === 1 ? "" : "s"} en espera
+          </div>
+          {waiting.length === 0 && (
+            <div style={{fontSize:12, color:"rgba(240,232,255,.35)", padding:"12px 0"}}>
+              Todavía no hay postulantes. Los usuarios se anotan desde su celular.
+            </div>
+          )}
+          {waiting.map((p, i) => (
+            <div key={p.id} className="qrow" style={{animationDelay: `${i * .05}s`}}>
+              <div className="qavatar">{p.avatar_emoji || "👤"}</div>
+              <div className="qname">{p.user_name}</div>
+              <button className="btn btn-p" style={{padding:"5px 12px", fontSize:10}}
+                onClick={() => handleCall(p)}>
+                Llamar al escenario
+              </button>
             </div>
           ))}
-          {sel&&(
-            <button className="btn btn-p btn-full" style={{marginTop:8}}
-              onClick={()=>setPhase("selecting")}>
-              ✓ {sel.name} → Elegir video
-            </button>
-          )}
         </div>
       )}
 
-      {phase==="selecting"&&(
-        <div className="card">
-          <div className="ctitle">Video para {sel?.name}</div>
-          <div style={{maxHeight:200,overflowY:"auto",marginBottom:10}}>
-            {info.videos.map(v=>(
-              <VRow key={v.ytId} v={v} sel={selVid?.ytId===v.ytId}
-                onSel={setSelVid} color={info.col}/>
-            ))}
-          </div>
-          <button className="btn btn-p btn-full" disabled={!selVid}
-            onClick={()=>setPhase("active")}>
-            ▶ Lanzar con "{selVid?.title||"..."}"
-          </button>
-        </div>
-      )}
-
-      {phase==="active"&&(
-        <div className="card" style={{borderColor:`${info.col}44`}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+      {/* Alguien en escenario (status='called') */}
+      {sessionId && active && (
+        <div className="card" style={{borderColor: `${info.col}44`}}>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
             <div className="chip chip-live"><div className="dot-live"/>En vivo</div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,
-            padding:"10px",background:`${info.col}10`,border:`1px solid ${info.col}33`,borderRadius:11}}>
-            <div style={{fontSize:28}}>{sel?.avatar}</div>
+          <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12,
+                       padding:"10px", background:`${info.col}10`,
+                       border:`1px solid ${info.col}33`, borderRadius:11}}>
+            <div style={{fontSize:28}}>{active.avatar_emoji || "👤"}</div>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:info.col}}>{sel?.name}</div>
-              <div style={{fontSize:10,color:"rgba(240,232,255,.35)"}}>{selVid?.title}</div>
+              <div style={{fontSize:13, fontWeight:700, color: info.col}}>
+                {active.user_name}
+              </div>
+              {active.yt_title && (
+                <div style={{fontSize:10, color:"rgba(240,232,255,.35)"}}>
+                  {active.yt_title}
+                </div>
+              )}
             </div>
           </div>
-          <button className="btn btn-r btn-full" onClick={reset}>⏹ Cerrar experiencia</button>
+          <button className="btn btn-r btn-full" onClick={handleFinish}>
+            ⏹ Cerrar experiencia
+          </button>
         </div>
       )}
     </div>

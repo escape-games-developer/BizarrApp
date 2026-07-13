@@ -4,19 +4,24 @@ export default function NovedadesView({ banners = [] }) {
   if (visible.length === 0) {
     return (
       <div style={{
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        padding: "48px 20px", textAlign: "center",
+        background: "linear-gradient(135deg, #0D0010, #130018)",
+        border: "3px dashed #FFD600",
+        borderRadius: "20px",
+        padding: "40px 24px",
+        textAlign: "center",
       }}>
-        <div style={{ fontSize: 44, marginBottom: 14, opacity: .2 }}>📣</div>
+        <div style={{ fontSize: "4rem", marginBottom: 14 }}>📣</div>
         <div style={{
-          fontFamily: "Syne, sans-serif", fontSize: 15, fontWeight: 800,
-          color: "rgba(255,215,0,.25)", marginBottom: 8,
+          fontFamily: "'Bangers', cursive", fontSize: "2rem",
+          color: "#FFD600", marginBottom: 8,
         }}>
-          Sin novedades por ahora
+          NADA POR AHORA
         </div>
-        <div style={{ fontSize: 12, color: "rgba(245,230,192,.22)", lineHeight: 1.5 }}>
-          El staff publicará las promos y novedades de la noche acá.
+        <div style={{
+          fontFamily: "'Poppins', sans-serif", fontSize: 13,
+          color: "#9E9E9E", lineHeight: 1.5,
+        }}>
+          El staff cargará las novedades de la noche
         </div>
       </div>
     );
@@ -24,9 +29,24 @@ export default function NovedadesView({ banners = [] }) {
 
   return (
     <div>
-      <div className="sec-hdr">
-        <span style={{ fontSize: 20 }}>📣</span>
-        <h3>Novedades y Promos</h3>
+      <div className="sec-hdr" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+        <h3 style={{
+          fontFamily: "'Bangers', cursive",
+          fontSize: "2.8rem",
+          color: "#FFD600",
+          textShadow: "0 0 16px #FFD600, 0 0 32px rgba(255,214,0,0.3)",
+        }}>
+          HOY EN BIZARREN 🎉
+        </h3>
+        <p style={{
+          fontFamily: "'Poppins', sans-serif",
+          fontSize: "1rem",
+          fontWeight: 600,
+          color: "#FF2D78",
+          margin: 0,
+        }}>
+          Enterate de todo lo que se viene
+        </p>
       </div>
 
       {visible.map((b, i) => (
@@ -34,11 +54,12 @@ export default function NovedadesView({ banners = [] }) {
           key={b.id || i}
           className="fade-up"
           style={{
-            padding:      "14px 16px",
+            padding:      "16px",
             marginBottom: 10,
-            borderRadius: 14,
-            background:   b.bg     || "rgba(255,215,0,.07)",
-            border:       `1px solid ${b.border || "rgba(255,215,0,.18)"}`,
+            borderRadius: 16,
+            background:   "linear-gradient(135deg, #0D0010 0%, #130018 100%)",
+            border:       "2px solid #9B2FFF",
+            boxShadow:    "0 0 16px rgba(155,47,255,0.3)",
             animationDelay: `${i * .07}s`,
             animationFillMode: "both",
           }}

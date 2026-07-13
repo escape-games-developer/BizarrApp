@@ -21,11 +21,15 @@ function MensajesTab({ user, messages, onSend }) {
       <div style={{fontSize:12,color:"rgba(240,232,255,.4)",marginBottom:12,lineHeight:1.5}}>
         El staff revisa tu mensaje antes de mostrarlo en la pantalla gigante.
       </div>
-      <textarea style={{width:"100%",height:80,resize:"none",background:"rgba(240,232,255,.05)",border:"1.5px solid rgba(240,232,255,.1)",borderRadius:13,padding:"11px 14px",color:"#F0E8FF",fontFamily:"Space Grotesk,sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:4}}
+      <textarea style={{width:"100%",height:80,resize:"none",background:"#0D0010",border:"2px solid #FFD600",borderRadius:12,padding:12,color:"#FFF",fontFamily:"Space Grotesk,sans-serif",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:4,transition:"border-color .18s, box-shadow .18s"}}
+        onFocus={e=>{e.currentTarget.style.borderColor="#FF2D78";e.currentTarget.style.boxShadow="0 0 8px #FF2D78";}}
+        onBlur={e=>{e.currentTarget.style.borderColor="#FFD600";e.currentTarget.style.boxShadow="none";}}
         placeholder="¿Qué querés decirle al bar?" value={text}
         onChange={e=>setText(e.target.value.slice(0,100))}/>
       <div style={{textAlign:"right",fontSize:10,color:"rgba(240,232,255,.22)",marginBottom:10}}>{text.length}/100</div>
-      <button className="btn-enviar" style={{width:"100%",padding:14,border:"none",borderRadius:14,background:"rgba(220,38,38,1)",color:"#FFD600",fontFamily:"Syne,sans-serif",fontSize:14,fontWeight:800,cursor:"pointer",opacity:!text.trim()?.3:1,outline:"none",WebkitTapHighlightColor:"transparent",textShadow:"-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000"}}
+      <button style={{width:"100%",padding:14,border:"none",borderRadius:12,background:"#FF1744",color:"#FFF",fontFamily:"'Bangers', cursive",fontSize:"1.3rem",cursor:"pointer",opacity:!text.trim()?.3:1,outline:"none",WebkitTapHighlightColor:"transparent",boxShadow:"0 4px 0 #8B0000, 0 0 16px rgba(255,23,68,0.5)",transition:"transform .15s"}}
+        onMouseEnter={e=>{if(!e.currentTarget.disabled)e.currentTarget.style.transform="translateY(-2px)";}}
+        onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";}}
         disabled={!text.trim()} onClick={send}>Mandar mensaje</button>
       {myMsgs.length>0&&(<>
         <div style={{fontSize:10,fontWeight:700,color:"rgba(240,232,255,.35)",letterSpacing:"1px",marginTop:18,marginBottom:8}}>TUS MENSAJES</div>
@@ -133,13 +137,12 @@ export default function PantallaView({ user, messages, onSend, isRestricted, onG
   );
   return (
     <div>
-      <div role="heading" aria-level={1} style={{marginTop:0,marginBottom:14}}>
-        <img src="/placas/Directo_a_pantall-removebg-preview.png" alt="Directo a pantalla"
-          style={{width:"96%",maxWidth:"98%",height:"auto",objectFit:"contain",display:"block",margin:"0 auto"}}/>
-      </div>
-      <div style={{display:"flex",gap:44,marginTop:-12,marginBottom:16,justifyContent:"center"}}>
-        {[{id:"mensajes",img:"/placas/Mensajes-removebg-preview.png",alt:"Mensajes"},{id:"videos",img:"/placas/Videos-removebg-preview.png",alt:"Videoclips"}].map(t=>{
+      <div style={{display:"flex",gap:44,marginTop:8,marginBottom:16,justifyContent:"center"}}>
+        {[{id:"mensajes",label:"MENSAJES",emoji:"💬"},{id:"videos",label:"VIDEOS",emoji:"📺"}].map(t=>{
           const isSel = tab===t.id, isPressed = pressed===t.id;
+          const palette = t.id==="mensajes"
+            ? {activeBg:"radial-gradient(circle, #FF2D78 0%, #C4006A 100%)",activeBorder:"3px solid #FF2D78",activeShadow:"0 0 20px rgba(255,45,120,0.7), inset 0 2px 4px rgba(255,255,255,0.2)",activeColor:"#FFFFFF",inactiveBg:"#1A001A",inactiveBorder:"3px solid #FF2D78",inactiveColor:"#FF2D78"}
+            : {activeBg:"radial-gradient(circle, #FFD600 0%, #CC8800 100%)",activeBorder:"3px solid #FFD600",activeShadow:"0 0 20px rgba(255,214,0,0.7), inset 0 2px 4px rgba(255,255,255,0.2)",activeColor:"#000000",inactiveBg:"#1A1000",inactiveBorder:"3px solid #FFD600",inactiveColor:"#FFD600"};
           return (
           <button key={t.id} className="btn-pantalla"
             onClick={()=>setTab(t.id)}
@@ -147,9 +150,10 @@ export default function PantallaView({ user, messages, onSend, isRestricted, onG
             onPointerUp={()=>setPressed(null)}
             onPointerLeave={()=>setPressed(null)}
             onPointerCancel={()=>setPressed(null)}
-            style={{width:79,maxWidth:79,aspectRatio:"1/1",padding:0,borderRadius:"50%",overflow:"hidden",border:"2px solid rgba(240,232,255,.12)",cursor:"pointer",background:(isSel||isPressed)?"rgba(220,38,38,1)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",boxShadow:"none",transform:isPressed?"scale(.96)":"scale(1)",transition:"background-color 200ms ease, transform 150ms ease",WebkitTapHighlightColor:"transparent",outline:"none",userSelect:"none"}}>
-            <img src={t.img} alt={t.alt} style={{width:"88%",height:"88%",objectFit:"contain"}}/>
-            {t.id==="videos"&&playlists.videos?.length>0&&<span style={{position:"absolute",top:3,right:6,fontSize:9,fontWeight:700,opacity:.9,color:"rgba(255,255,255,.92)"}}>{playlists.videos.length}</span>}
+            style={{width:"100px",height:"100px",borderRadius:"50%",fontFamily:"'Bangers', cursive",fontSize:"1.1rem",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"4px",transition:"all 0.2s ease",position:"relative",background:isSel?palette.activeBg:palette.inactiveBg,border:isSel?palette.activeBorder:palette.inactiveBorder,color:isSel?palette.activeColor:palette.inactiveColor,boxShadow:isSel?palette.activeShadow:"none",transform:isPressed?"scale(.96)":"scale(1)",WebkitTapHighlightColor:"transparent",outline:"none",userSelect:"none"}}>
+            <span style={{fontSize:"1.6rem",lineHeight:1}}>{t.emoji}</span>
+            <span>{t.label}</span>
+            {t.id==="videos"&&playlists.videos?.length>0&&<span style={{position:"absolute",top:6,right:10,fontSize:9,fontWeight:700,opacity:.9}}>{playlists.videos.length}</span>}
           </button>
           );
         })}

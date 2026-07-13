@@ -11,11 +11,6 @@ export default function CartaView() {
 
   return (
     <div>
-      <div className="sec-hdr">
-        <span style={{ fontSize: 20 }}>🍹</span>
-        <h3>Carta del Bar</h3>
-      </div>
-
       {/* Tabs de categoría */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
         {MENU.map((c) => (
@@ -24,17 +19,17 @@ export default function CartaView() {
             onClick={() => setCat(c.id)}
             style={{
               flexShrink: 0,
-              padding: "7px 14px",
+              padding: "6px 16px",
               borderRadius: 20,
-              border: "1px solid",
               fontFamily: "Syne, sans-serif",
               fontSize: 12,
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: "pointer",
               transition: "all .18s",
-              background:   cat === c.id ? "#FFD700" : "rgba(255,215,0,.05)",
-              borderColor:  cat === c.id ? "#FFD700" : "rgba(255,215,0,.15)",
-              color:        cat === c.id ? "#1A0A00" : "rgba(255,215,0,.5)",
+              background:  cat === c.id ? "#FF2D78" : "#1A001A",
+              border:      "2px solid #FF2D78",
+              color:       cat === c.id ? "#000" : "#FF2D78",
+              boxShadow:   cat === c.id ? "0 0 10px #FF2D78" : "none",
               WebkitTapHighlightColor: "transparent",
             }}
           >
@@ -44,31 +39,38 @@ export default function CartaView() {
       </div>
 
       {/* Items */}
-      <div className="card">
+      <div>
         {items.map((item, i) => (
           <div
             key={i}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#FFD600"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.border = "2px solid #2A0040"; e.currentTarget.style.borderLeft = "4px solid #FFD600"; }}
             style={{
               display:       "flex",
               alignItems:    "center",
-              padding:       "11px 0",
-              borderBottom:  i < items.length - 1 ? "1px solid rgba(255,215,0,.07)" : "none",
               gap: 10,
+              background:    "#0D0010",
+              border:        "2px solid #2A0040",
+              borderLeft:    "4px solid #FFD600",
+              borderRadius:  12,
+              padding:       "12px 16px",
+              marginBottom:  8,
+              transition:    "border-color .18s",
             }}
           >
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#F5E6C0", marginBottom: 3 }}>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "#FFFFFF", marginBottom: 3 }}>
                 {item.name}
               </div>
-              <div style={{ fontSize: 11, color: "rgba(245,230,192,.42)", lineHeight: 1.4 }}>
+              <div style={{ fontSize: "0.85rem", color: "#9E9E9E", lineHeight: 1.4 }}>
                 {item.desc}
               </div>
             </div>
             <div style={{
-              fontFamily: "Syne, sans-serif",
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#FFD700",
+              fontFamily: "'Bangers', cursive",
+              fontSize: "1.1rem",
+              fontWeight: 700,
+              color: "#FFD600",
               flexShrink: 0,
             }}>
               ${item.price.toLocaleString("es-AR")}

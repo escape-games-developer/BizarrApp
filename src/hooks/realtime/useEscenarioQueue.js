@@ -20,7 +20,7 @@ export function useEscenarioQueue(sessionId, type) {
       .select("*")
       .eq("session_id", sessionId)
       .eq("type", type)
-      .eq("status", "waiting")
+      .in("status", ["waiting","called"])
       .order("position", { ascending: true });
     setQueue(data || []);
   }, [sessionId, type]);
@@ -78,7 +78,25 @@ export function useEscenarioQueue(sessionId, type) {
     setMyEntry(null);
   }, [myEntry]);
 
+  const call = useCallback(async (entryId) => {
+    if (!entryId) return { error: "Sin entryId" };
+    const { error } = await supabase
+      .from("escenario_queue")
+      .update({ status: "called" })
+      .eq("id", entryId);
+    return { error };
+  }, []);
+
+  const finish = useCallback(async (entryId) => {
+    if (!entryId) return { error: "Sin entryId" };
+    const { error } = await supabase
+      .from("escenario_queue")
+      .update({ status: "done" })
+      .eq("id", entryId);
+    return { error };
+  }, []);
+
   const isEnrolled = !!myEntry;
 
-  return { queue, myEntry, isEnrolled, loading, enroll, leave };
+  return { queue, myEntry, isEnrolled, loading, enroll, leave, call, finish };
 }

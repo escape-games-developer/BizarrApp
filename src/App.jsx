@@ -102,8 +102,29 @@ export default function BizarrApp() {
       <div className="app-root">
         <div className="phone-shell">
           <header className="app-header">
-            <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
-              onError={e => { e.target.style.display="none"; }}/>
+            {(() => {
+              const sectionHeaderStyle = {
+                fontFamily: "'Bangers', cursive",
+                fontSize: "2.6rem",
+                letterSpacing: "0.05em",
+                textAlign: "center",
+                padding: "16px 0 8px",
+                lineHeight: 1.1,
+                margin: 0,
+                width: "100%",
+              };
+              const SECTION_TITLES = {
+                menu:      { text: "Carta del Bar",      color: "#FFD600", shadow: "0 0 16px rgba(255,214,0,0.5)" },
+                pantalla:  { text: "Directo a Pantalla", color: "#FFD600", shadow: "0 0 16px rgba(255,214,0,0.5)" },
+                games:     { text: "Juegos",             color: "#00E5FF", shadow: "0 0 16px rgba(0,229,255,0.5)" },
+                escenario: { text: "Escenario",          color: "#FF2D78", shadow: "0 0 16px rgba(255,45,120,0.5)" },
+              };
+              const t = SECTION_TITLES[view];
+              return t
+                ? <h1 style={{ ...sectionHeaderStyle, color: t.color, textShadow: t.shadow }}>{t.text}</h1>
+                : <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
+                    onError={e => { e.target.style.display="none"; }}/>;
+            })()}
             {isLoggedIn && (
               <button onClick={goProfile} style={{
                 background:  view==="profile" ? "rgba(255,215,0,.12)" : "transparent",
@@ -118,7 +139,11 @@ export default function BizarrApp() {
             )}
           </header>
           <main className="app-content">{renderContent()}</main>
-          <nav className="app-nav">
+          <nav className="app-nav" style={{
+            background: "#000000",
+            borderTop: "2px solid #1A001A",
+            backdropFilter: "blur(10px)",
+          }}>
             {NAV.map(n => {
               const isActive = view === n.id;
               const gated    = isRestricted && RESTRICTED_VIEWS.includes(n.id);
@@ -141,6 +166,14 @@ export default function BizarrApp() {
                       position:"absolute", top:1, right:5, fontSize:11,
                       pointerEvents:"none", filter:"drop-shadow(0 0 2px #000)",
                     }}>🔒</span>
+                  )}
+                  {isActive && (
+                    <span aria-hidden="true" style={{
+                      position:"absolute", bottom:-2, left:"50%", transform:"translateX(-50%)",
+                      width:6, height:6, borderRadius:"50%",
+                      background:"#FFD600", boxShadow:"0 0 6px #FFD600",
+                      pointerEvents:"none",
+                    }}/>
                   )}
                 </button>
               );
