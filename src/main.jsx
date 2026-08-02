@@ -16,3 +16,10 @@ createRoot(document.getElementById("root")).render(
     <Component />
   </React.StrictMode>
 );
+
+// Registro del Service Worker — habilita las notificaciones push nativas.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => console.warn("[SW] registro falló:", err));
+  });
+}
