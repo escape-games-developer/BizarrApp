@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 600" width="1440" height="600">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2A1400"/>
+      <stop offset="50%" stop-color="#0D0A00"/>
+      <stop offset="100%" stop-color="#2A2400"/>
+    </linearGradient>
+    <radialGradient id="gO" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FF9500" stop-opacity=".55"/>
+      <stop offset="100%" stop-color="#FF9500" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gY" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FFD600" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#FFD600" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="s4" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="11"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="600" fill="url(#bg4)"/>
+  <ellipse cx="180"  cy="300" rx="380" ry="320" fill="url(#gO)"/>
+  <ellipse cx="1260" cy="300" rx="380" ry="320" fill="url(#gY)"/>
+
+  <!-- Divisoria central -->
+  <line x1="720" y1="70" x2="720" y2="530" stroke="#FFFFFF" stroke-opacity=".12" stroke-width="3"/>
+
+  <!-- Equipos -->
+  <text x="215" y="330" font-size="150" text-anchor="middle">🍠</text>
+  <text x="215" y="412" font-family="'Arial Black', Impact, sans-serif" font-size="34"
+        letter-spacing="2" fill="#FF9500" text-anchor="middle">TEAM BATATA</text>
+
+  <text x="1225" y="330" font-size="150" text-anchor="middle">🍋</text>
+  <text x="1225" y="412" font-family="'Arial Black', Impact, sans-serif" font-size="34"
+        letter-spacing="2" fill="#FFD600" text-anchor="middle">TEAM MEMBRILLO</text>
+
+  <!-- Centro -->
+  <rect x="612" y="112" width="216" height="50" rx="25" fill="#FFFFFF" fill-opacity=".1"/>
+  <text x="720" y="147" font-family="'Arial Black', Impact, sans-serif" font-size="25"
+        letter-spacing="3" fill="#FFD600" text-anchor="middle">TRIVIA</text>
+
+  <text x="720" y="262" font-family="Impact, 'Arial Black', sans-serif" font-size="86"
+        fill="#FF9500" text-anchor="middle" filter="url(#s4)" opacity=".7">DESAFÍO</text>
+  <text x="720" y="262" font-family="Impact, 'Arial Black', sans-serif" font-size="86"
+        fill="#FFFFFF" text-anchor="middle">DESAFÍO</text>
+  <text x="720" y="352" font-family="Impact, 'Arial Black', sans-serif" font-size="86"
+        fill="#FFD600" text-anchor="middle" filter="url(#s4)" opacity=".7">DEMENTE</text>
+  <text x="720" y="352" font-family="Impact, 'Arial Black', sans-serif" font-size="86"
+        fill="#FFD600" text-anchor="middle">DEMENTE</text>
+
+  <text x="720" y="450" font-family="Verdana, Geneva, sans-serif" font-size="30"
+        fill="#D8CDB4" text-anchor="middle">Elegí tu equipo y jugá desde Juegos</text>
+</svg>

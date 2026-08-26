@@ -2,25 +2,12 @@
 // Importar una sola vez en App.jsx
 
 const globalCss = `
-  @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Poppins:wght@400;600;700&display=swap');
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800;900&family=DM+Sans:wght@300;400;500;600&display=swap');
 
   * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-  }
-
-  body, #root {
-    background: #000000;
-    font-family: 'Poppins', sans-serif;
-    color: #FFFFFF;
-    min-height: 100vh;
-  }
-
-  h1, h2, h3, .title-display {
-    font-family: 'Bangers', cursive;
-    letter-spacing: 0.04em;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -89,20 +76,22 @@ const globalCss = `
     background: rgba(13,7,0,.98);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255,215,0,.1);
-    padding: 10px 16px 0;
+    padding: 10px 16px;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     flex-shrink: 0;
     z-index: 10;
   }
-  .app-header-logo { height: 144px; width: auto; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255,215,0,.3)); }
+  .app-header-brand { display:flex; align-items:center; gap:10px; min-width:0; }
+  .app-header-logo { height: 34px; width:auto; object-fit:contain; filter:drop-shadow(0 0 8px rgba(255,215,0,.3)); }
+  .app-header-name { font-family:'Syne',sans-serif; font-weight:900; font-size:14px; color:#FFD700; }
 
   /* ── Content area ── */
   .app-content {
     flex: 1;
     overflow-y: auto;
-    padding: 4px 16px 16px;
+    padding: 14px 16px 16px;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -119,17 +108,31 @@ const globalCss = `
   }
   .nav-btn {
     flex: 1;
-    min-width: 0;
-    height: 56px;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 2px;
+    gap: 2px;
+    padding: 7px 4px;
+    border-radius: 10px;
     border: none;
     background: transparent;
+    color: rgba(245,230,192,.3);
     cursor: pointer;
+    transition: all .18s;
+    font-family: 'DM Sans', sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
+  .nav-btn.active { background: rgba(255,215,0,.1); color: #FFD700; }
+  .nav-btn .nav-icon { font-size: 18px; line-height:1; }
+  .nav-btn .nav-image {
+    display: block;
+    width: 24px;
+    height: 24px;
+    max-width: 100%;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .nav-btn .nav-label { font-size: 9px; font-weight: 500; white-space:nowrap; }
 
   /* ── Section header ── */
   .sec-hdr {
@@ -181,9 +184,7 @@ const globalCss = `
   .btn-primary:disabled { opacity: .3; cursor: not-allowed; }
   .btn-primary:active:not(:disabled) { transform: scale(.97); }
 
-  /* ── Botones circulares Pantalla (Mensajes / Videoclips) ──
-     Sin anillo celeste en ningún estado. El press rojo se maneja
-     por estado React (onPointerDown) en PantallaView.jsx. */
+  /* Controles de Pantalla conservan comportamiento actual con foco dorado. */
   .btn-pantalla {
     outline: none;
     box-shadow: none;
@@ -193,11 +194,9 @@ const globalCss = `
   }
   .btn-pantalla:focus, .btn-pantalla:focus-visible { outline: none; box-shadow: none; }
 
-  /* ── CTA primario Pantalla/Mensajes: rojo sólido + texto amarillo ── */
   .btn-enviar { transition: all 150ms ease; outline: none; -webkit-tap-highlight-color: transparent; }
   .btn-enviar:focus, .btn-enviar:focus-visible { outline: none; }
-  .btn-enviar:hover:not(:disabled)  { background: rgba(220,38,38,.9) !important; }
-  .btn-enviar:active:not(:disabled) { background: rgba(185,28,28,1) !important; }
+  .btn-enviar:active:not(:disabled) { transform: scale(.97); }
 
   .btn-ghost {
     background: rgba(255,255,255,.05);
@@ -279,6 +278,7 @@ const globalCss = `
 
   /* ── Fade animation helper ── */
   .fade-up { animation: fadeUp .4s ease both; }
+
 `;
 
 export default globalCss;

@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { STROBE_COLORS, RAFFLE_NAMES } from "../constants/data";
-import { rand } from "../constants/theme";
+import { STROBE_COLORS } from "../constants/data";
 
 /**
  * useRaffle
@@ -13,7 +12,7 @@ export function useRaffle() {
   const [color,   setColor]   = useState("#000");
   const [dark,    setDark]    = useState(true);
   const [winner,  setWinner]  = useState(null);
-  const [prize,   setPrize]   = useState("Consumición libre para dos");
+  const [prize,   setPrize]   = useState("");
 
   const strobeRef = useRef(null);
   const cdRef     = useRef(null);
@@ -55,10 +54,8 @@ export function useRaffle() {
         stop();
         setDark(false);
         setColor("#22C55E");
-        setTimeout(() => {
-          setWinner(RAFFLE_NAMES[rand(0, RAFFLE_NAMES.length - 1)]);
-          setState("winner");
-        }, 400);
+        setWinner(null);
+        setState("idle");
       }
     }, 1_000);
   }, [stop]);

@@ -1,0 +1,3 @@
+const registry=new Map();
+export const registerDesignerAction=(id,handler)=>{if(typeof handler!=="function")throw new Error("La acción debe ser una función");registry.set(id,handler);return()=>registry.delete(id)};
+export function executeDesignerAction(action,context={}){if(!action||action.type==="none")return;if(action.type==="navigate"&&action.target)context.navigate?.(action.target);else if(action.type==="url"&&action.target)window.open(action.target,"_blank","noopener,noreferrer");else if(action.type==="modal")context.openModal?.(action.target);else if(action.type==="custom"&&action.actionId)registry.get(action.actionId)?.(context)}

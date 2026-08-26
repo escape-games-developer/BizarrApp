@@ -3,13 +3,19 @@ const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAGQCAYAAACAvzbM
 import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useGameState, useAdminControls } from "../hooks/realtime/useGameState";
+import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
+import { useApplauseRound } from "../hooks/realtime/useApplauseRound";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
 import PlaylistsPanel from "./PlaylistsPanel";
+import NovedadesPanel from "./NovedadesPanel";
+import DesignerView from "../views/Designer/DesignerView";
+import TvDesigner from "../designers/tv/TvDesigner";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
+import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import {
   RaffleScreen,
   TriviaScreen,
@@ -179,49 +185,6 @@ const css = `
   .dot-live{width:6px;height:6px;border-radius:50%;background:#EF4444;animation:blink 1.2s infinite;flex-shrink:0;}
 `;
 
-// ── Mock data ──────────────────────────────────────────────────────────────
-const MOCK_DUELO_QUEUE = [
-  {id:"q1",name:"Valentina R.",avatar:"💃",status:"pending"},
-  {id:"q2",name:"Ramiro V.",  avatar:"🎤",status:"pending"},
-  {id:"q3",name:"Sofía D.",   avatar:"🌟",status:"pending"},
-];
-const MOCK_KARAOKE_QUEUE = [
-  {id:"k1",name:"Martín L.",  avatar:"🎸",status:"pending",title:"Bohemian Rhapsody"},
-  {id:"k2",name:"Ana P.",     avatar:"🎵",status:"pending",title:"Shake It Off"},
-];
-const MOCK_MSGS = [
-  {id:"m1",name:"Carlos V.",  avatar:"🎸",text:"¡La mejor noche del año! 🎉"},
-  {id:"m2",name:"Laura M.",   avatar:"💃",text:"¡El barman es un genio! 🍹"},
-];
-const MOCK_VIDS = [
-  {id:"v1",ytId:"ktvTqknDobU",title:"Uptown Funk",artist:"Bruno Mars",   reqBy:"Pablo S."},
-  {id:"v2",ytId:"OPf0YbXqDm0",title:"Blinding Lights",artist:"The Weeknd",reqBy:"Ana L."},
-];
-const MOCK_DUELO_VIDEOS = [
-  {ytId:"ktvTqknDobU",title:"Uptown Funk",       artist:"Bruno Mars"},
-  {ytId:"8UVNT4wvIGY",title:"Single Ladies",     artist:"Beyoncé"},
-  {ytId:"lWA2pjMjpBs",title:"Smooth Criminal",   artist:"Michael Jackson"},
-  {ytId:"fJ9rUzIMcZQ",title:"Don't Stop Me Now", artist:"Queen"},
-  {ytId:"OPf0YbXqDm0",title:"Blinding Lights",   artist:"The Weeknd"},
-  {ytId:"kXYiU_JCYtU",title:"Bohemian Rhapsody", artist:"Queen"},
-];
-const MOCK_FTL_VIDEOS = [
-  {ytId:"ktvTqknDobU",title:"Uptown Funk",       artist:"Bruno Mars"},
-  {ytId:"09R8_2nJtjg",title:"Shake It Off",      artist:"Taylor Swift"},
-  {ytId:"YqeW9_5kURI",title:"Party Rock Anthem", artist:"LMFAO"},
-  {ytId:"pRpeEdMmmQ0",title:"Waka Waka",         artist:"Shakira"},
-];
-const MOCK_MENU = {
-  "Tragos":    [{id:"t1",name:"Campari Spritz",price:1800,available:true},{id:"t2",name:"Aperol Spritz",price:1900,available:true},{id:"t3",name:"Gin Tonic",price:2000,available:true}],
-  "Cervezas":  [{id:"c1",name:"Pinta artesanal",price:1600,available:true},{id:"c2",name:"Media pinta",price:1000,available:false}],
-  "Shots":     [{id:"s1",name:"Shot de Fernet",price:800,available:true},{id:"s2",name:"Shot de tequila",price:900,available:true}],
-  "Para comer":[{id:"f1",name:"Tabla de quesos",price:3200,available:true},{id:"f2",name:"Bruschetas",price:2200,available:true}],
-};
-const TRIVIA_QS = [
-  {text:"¿Cuántas cuerdas tiene una guitarra estándar?",opts:["4","5","6","7"],correct:2},
-  {text:"¿En qué año se inauguró el Teatro Colón?",opts:["1895","1908","1922","1930"],correct:1},
-  {text:"¿Cuál es la capital de Japón?",opts:["Osaka","Kioto","Nagoya","Tokio"],correct:3},
-];
 const STROBE = ["#FF2D78","#FFD600","#9B2FFF","#00E5FF","#FF9500","#FFF","#FF2D78","#000"];
 const EMOJIS = ["🍺","🍹","🎉","🎰","🍔","🎤","💃","🏆","⭐","🔥","🎵","✨","🍕","🥂","🎁"];
 
@@ -269,8 +232,7 @@ function StatusAlert({text,color,onClose}){
 const SECS = [
   {id:"launch",   icon:"🚀",label:"Lanzar",          group:"Control",    grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
   {id:"placas",   icon:"🖼️", label:"Placas",          group:"Control",    grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
-  {id:"mensajes", icon:"💬",label:"Mensajes",         group:"Moderación", grad:"linear-gradient(135deg,#00E5FF,#00F5A0)",glow:"rgba(0,229,255,.3)"},
-  {id:"videos",   icon:"🎵",label:"Videos",           group:"Moderación", grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)",glow:"rgba(255,45,120,.3)"},
+  {id:"pantallaDj",icon:"🎧",label:"Pantalla",group:"Moderación",grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
   {id:"duelo",    icon:"⚔️", label:"Duelo de Talentos",group:"Escenario", grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
   {id:"ftl",      icon:"💃",label:"Follow the Leader",group:"Escenario",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
   {id:"pt",       icon:"🏋️",label:"Personal Trainer", group:"Escenario",  grad:"linear-gradient(135deg,#00F5A0,#00E5FF)",glow:"rgba(0,245,160,.3)"},
@@ -283,6 +245,9 @@ const SECS = [
   {id:"novedades",icon:"📣",label:"Novedades",        group:"Contenido",  grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
   {id:"playlists",icon:"▶️", label:"Playlists YouTube",group:"Contenido",  grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
   {id:"dashboard",icon:"📊",label:"Dashboard",        group:"General",    grad:"linear-gradient(135deg,#FFD600,#00E5FF)",glow:"rgba(255,214,0,.3)"},
+  {id:"designer", icon:"✦", label:"Diseñador",        group:"General",    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"designerTv",icon:"📺",label:"Pantalla TV",group:"Diseñadores de Pantalla",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
+  {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",group:"Diseñadores de Pantalla",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
 ];
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -382,175 +347,241 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
 // ══════════════════════════════════════════════════════════════════════════
 // DUELO DE TALENTOS
 // ══════════════════════════════════════════════════════════════════════════
-function DueloPanel({sec}){
-  const [phase,    setPhase]    = useState("idle"); // idle|inviting|selecting|active|finished
-  const [queue,    setQueue]    = useState(MOCK_DUELO_QUEUE);
-  const [slot1,    setSlot1]    = useState(null);
-  const [slot2,    setSlot2]    = useState(null);
-  const [selVid,   setSelVid]   = useState(null);
-  const [bata,     setBata]     = useState(62);
-  const [memb,     setMemb]     = useState(38);
-  const [winner,   setWinner]   = useState(null);
-  const [alert,    setAlert]    = useState(null);
+// Avatar mini para duelo: foto propia o emoji del preset.
+function DueloAvatar({emoji,photo,size=40,col}){
+  const base={width:size,height:size,borderRadius:"50%",flexShrink:0,display:"flex",
+    alignItems:"center",justifyContent:"center",fontSize:size*0.5,overflow:"hidden",
+    background:"rgba(240,232,255,.06)",border:`1.5px solid ${col||"rgba(240,232,255,.14)"}`};
+  if(photo) return <div style={base}><img src={photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>;
+  return <div style={base}>{emoji||"👤"}</div>;
+}
+
+// DueloPanel — postulaciones (realtime) → 2 slots → video → lanzar con push.
+// Fuente de verdad del estado: game_state.active_escenario + applause_session.
+function DueloPanel({sec, controls, sessionId, gameState}){
+  const { postulaciones } = useDueloPostulaciones(sessionId, null);
+  const { round, counts } = useApplauseRound(sessionId);
+
+  const [slot1, setSlot1]           = useState(null); // fila de duelo_postulaciones
+  const [slot2, setSlot2]           = useState(null);
+  const [videoInput, setVideoInput] = useState("");
+  const [busy,  setBusy]            = useState(false);
+  const [alert, setAlert]           = useState(null);
+  const seededRef = useRef(false);
 
   const notify = (txt,col="#00F5A0") => { setAlert({txt,col}); setTimeout(()=>setAlert(null),3000); };
 
-  const selectToSlot = (p, slot) => {
-    if(slot===1) setSlot1(p); else setSlot2(p);
-    setQueue(q=>q.map(x=>x.id===p.id?{...x,status:"selected"}:x));
-    notify(`${p.name} → Competidor ${slot}`, "#FFD600");
+  // Estado derivado: A idle · B postulaciones abiertas · C duelo en curso.
+  const escenario = gameState?.active_escenario;
+  const enCurso   = round?.game_type==="duelo" && round?.status==="voting";
+  const estado    = escenario!=="duelo" ? "A" : (enCurso ? "C" : "B");
+  const estadoLabel = estado==="A" ? "En reposo"
+    : estado==="B" ? "Postulaciones abiertas" : "Duelo en curso";
+
+  // Reconstruir slots desde postulaciones 'selected' tras refresh (una sola vez).
+  useEffect(()=>{
+    if(seededRef.current || estado!=="B" || slot1 || slot2) return;
+    const sel = postulaciones.filter(p=>p.status==="selected");
+    if(sel.length===0) return;
+    setSlot1(sel[0]||null);
+    setSlot2(sel[1]||null);
+    seededRef.current = true;
+  },[postulaciones, estado, slot1, slot2]);
+
+  // Al salir de Estado B, limpiar el estado local de selección.
+  useEffect(()=>{
+    if(estado!=="B"){ setSlot1(null); setSlot2(null); setVideoInput(""); seededRef.current=false; }
+  },[estado]);
+
+  // Mantener sincronizado el slot local si su fila desaparece (borrado en otra pantalla).
+  useEffect(()=>{
+    if(slot1 && !postulaciones.some(p=>p.id===slot1.id)) setSlot1(null);
+    if(slot2 && !postulaciones.some(p=>p.id===slot2.id)) setSlot2(null);
+  },[postulaciones, slot1, slot2]);
+
+  // ── Acciones ────────────────────────────────────────────────────────────────
+  const assignSlot = async (p, slot) => {
+    const cur    = slot===1 ? slot1 : slot2;
+    const setCur = slot===1 ? setSlot1 : setSlot2;
+    if(cur && cur.id===p.id){            // toggle: ya está en este slot → soltar
+      setCur(null);
+      await controls?.setPostulacionStatus(p.id, "waiting");
+      return;
+    }
+    if(cur && cur.id!==p.id){            // slot ocupado → la anterior vuelve a waiting
+      await controls?.setPostulacionStatus(cur.id, "waiting");
+    }
+    setCur(p);
+    await controls?.setPostulacionStatus(p.id, "selected");
   };
-  const finishDuelo = (w) => { setWinner(w); setPhase("finished"); notify(`¡${w.name} ganó el Duelo!`, "#00F5A0"); };
-  const resetAll    = () => { setPhase("idle"); setQueue(MOCK_DUELO_QUEUE); setSlot1(null); setSlot2(null); setSelVid(null); setWinner(null); };
+
+  const removePostulacion = async (p) => {
+    if(slot1?.id===p.id) setSlot1(null);
+    if(slot2?.id===p.id) setSlot2(null);
+    await controls?.deletePostulacion(p.id);
+  };
+
+  const doOpen = async () => {
+    setBusy(true);
+    try{ await controls?.openPostulacionesDuelo(); notify("🎤 Postulaciones abiertas"); }
+    catch(e){ notify("Error: "+(e?.message||e), "#FF2D78"); }
+    finally{ setBusy(false); }
+  };
+
+  const canLaunch = !!slot1 && !!slot2 && videoInput.trim().length>0 && !busy;
+  const doLaunch = async () => {
+    if(!canLaunch) return;
+    setBusy(true);
+    try{
+      await controls?.launchDuelo({ p1: slot1, p2: slot2, videoInput: videoInput.trim() });
+      notify("🚀 Duelo lanzado");
+    }catch(e){ notify("Error al lanzar: "+(e?.message||e), "#FF2D78"); }
+    finally{ setBusy(false); }
+  };
+
+  const doCancel = async () => {
+    setBusy(true);
+    try{ await controls?.cerrarDuelo(); notify("Duelo cancelado","#FFD600"); }
+    catch(e){ notify("Error: "+(e?.message||e), "#FF2D78"); }
+    finally{ setBusy(false); }
+  };
+
+  // Slots para Estado C: leer de game_state (persistido en launchDuelo).
+  const cSlot1 = gameState?.duelo_slot1;
+  const cSlot2 = gameState?.duelo_slot2;
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
       {alert&&<StatusAlert text={alert.txt} color={alert.col} onClose={()=>setAlert(null)}/>}
 
-      {/* PASO 1 — Invitación */}
-      {phase==="idle"&&(
+      {/* HEADER */}
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div className="ctitle" style={{margin:0}}>🎤 Duelo de Talentos</div>
+            <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>Estado: {estadoLabel}</div>
+          </div>
+          {estado!=="A" && <div className="chip chip-live"><div className="dot-live"/>{estado==="C"?"En vivo":"Invitando"}</div>}
+        </div>
+      </div>
+
+      {/* ── ESTADO A — idle ── */}
+      {estado==="A" && (
         <div className="card">
-          <div className="ctitle">Paso 1 — Abrir convocatoria</div>
           <p style={{fontSize:12,color:"rgba(240,232,255,.45)",lineHeight:1.5,marginBottom:12}}>
-            Aparece la placa en pantalla gigante y una invitación en todos los celulares:
-            "¿Querés participar en el Duelo de Talentos?"
+            Abrí la convocatoria: llega un push nativo a todos los celulares conectados
+            invitándolos a postularse al Duelo de Talentos.
           </p>
-          <button className="btn btn-p btn-full" onClick={()=>setPhase("inviting")}>
-            ⚔️ Lanzar invitación a pantalla y app
+          <button className="btn btn-p btn-full" onClick={doOpen} disabled={busy}>
+            🎤 Abrir postulaciones
           </button>
         </div>
       )}
 
-      {/* PASO 2 — Lista de espera */}
-      {phase==="inviting"&&(
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div>
-              <div className="ctitle" style={{margin:0}}>Paso 2 — Lista de espera</div>
-              <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)",marginTop:2}}>
-                {queue.filter(q=>q.status==="pending").length} inscriptos · Elegí 2 competidores
-              </div>
-            </div>
-            <div className="chip chip-live"><div className="dot-live"/>Invitando</div>
-          </div>
-
-          {/* Slots seleccionados */}
-          <div style={{display:"flex",gap:8,marginBottom:10}}>
-            {[{slot:1,p:slot1,col:"#FF2D78"},{slot:2,p:slot2,col:"#FF9500"}].map(({slot,p,col})=>(
-              <div key={slot} style={{flex:1,borderRadius:11,padding:"10px 8px",textAlign:"center",
-                background:p?`${col}14`:"rgba(240,232,255,.04)",
-                border:`1.5px solid ${p?col:"rgba(240,232,255,.1)"}`}}>
-                {p?(
-                  <>
-                    <div style={{fontSize:22,marginBottom:4}}>{p.avatar}</div>
-                    <div style={{fontSize:11,fontWeight:700,color}}>{p.name}</div>
-                    <div style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>Competidor {slot}</div>
-                  </>
-                ):(
-                  <div style={{fontSize:11,color:"rgba(240,232,255,.2)",fontWeight:600,padding:"8px 0"}}>
-                    Competidor {slot}<br/>sin elegir
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Cola */}
-          {queue.filter(q=>q.status==="pending").map((p,i)=>(
-            <div key={p.id} className="qrow" style={{animationDelay:`${i*.05}s`}}>
-              <div className="qavatar">{p.avatar}</div>
-              <div className="qname">{p.name}</div>
-              <div style={{display:"flex",gap:5}}>
-                <button className="btn" style={{padding:"5px 9px",fontSize:10,
-                  background:"rgba(255,45,120,.1)",border:"1px solid rgba(255,45,120,.25)",color:"#FF2D78"}}
-                  onClick={()=>selectToSlot(p,1)} disabled={!!slot1}>1</button>
-                <button className="btn" style={{padding:"5px 9px",fontSize:10,
-                  background:"rgba(255,149,0,.1)",border:"1px solid rgba(255,149,0,.25)",color:"#FF9500"}}
-                  onClick={()=>selectToSlot(p,2)} disabled={!!slot2}>2</button>
-              </div>
-            </div>
-          ))}
-
-          {slot1&&slot2&&(
-            <button className="btn btn-p btn-full" style={{marginTop:10}}
-              onClick={()=>setPhase("selecting")}>
-              ✓ Confirmar competidores → Elegir video
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* PASO 3 — Elegir video */}
-      {phase==="selecting"&&(
-        <div className="card">
-          <div className="ctitle">Paso 3 — Elegir video del duelo</div>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
-            {[slot1,slot2].map((p,i)=>p&&(
-              <div key={i} style={{flex:1,borderRadius:10,padding:"8px",textAlign:"center",
-                background:[`rgba(255,45,120,.08)`,`rgba(255,149,0,.08)`][i],
-                border:`1px solid ${["rgba(255,45,120,.25)","rgba(255,149,0,.25)"][i]}`}}>
-                <div style={{fontSize:18,marginBottom:2}}>{p.avatar}</div>
-                <div style={{fontSize:10.5,fontWeight:700,color:["#FF2D78","#FF9500"][i]}}>{p.name}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{maxHeight:200,overflowY:"auto",marginBottom:10}}>
-            {MOCK_DUELO_VIDEOS.map(v=>(
-              <VRow key={v.ytId} v={v} sel={selVid?.ytId===v.ytId}
-                onSel={setSelVid} color="#FF2D78"/>
-            ))}
-          </div>
-          <button className="btn btn-p btn-full" disabled={!selVid}
-            onClick={()=>setPhase("active")}>
-            ▶ Lanzar duelo con "{selVid?.title||"..."}"
-          </button>
-        </div>
-      )}
-
-      {/* PASO 4 — Duelo activo */}
-      {phase==="active"&&(
+      {/* ── ESTADO B — postulaciones abiertas ── */}
+      {estado==="B" && (
         <>
-          <div className="card" style={{borderColor:"rgba(255,45,120,.25)"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-              <div className="chip chip-live"><div className="dot-live"/>Duelo activo</div>
-              <span style={{fontSize:10,color:"rgba(240,232,255,.35)"}}>{selVid?.title}</span>
-            </div>
-
-            {/* Scoreboard en vivo */}
-            <div style={{display:"flex",gap:8,marginBottom:10}}>
-              {[{p:slot1,pct:bata,col:"#FF2D78"},{p:slot2,pct:memb,col:"#FF9500"}].map(({p,pct,col},i)=>p&&(
-                <div key={i} style={{flex:1,borderRadius:11,padding:"10px",textAlign:"center",
-                  background:`${col}10`,border:`1.5px solid ${col}44`}}>
-                  <div style={{fontSize:20,marginBottom:3}}>{p.avatar}</div>
-                  <div style={{fontSize:10,fontWeight:700,color,marginBottom:4}}>{p.name}</div>
-                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:26,color}}>{pct}%</div>
-                  <div style={{height:6,background:"rgba(240,232,255,.06)",borderRadius:3,marginTop:6}}>
-                    <div style={{height:"100%",width:pct+"%",background:col,borderRadius:3,transition:"width .6s"}}/>
-                  </div>
+          {/* Slots */}
+          <div className="card" style={{marginBottom:12}}>
+            <div className="ctitle">Competidores</div>
+            <div style={{display:"flex",gap:8}}>
+              {[{p:slot1,col:"#FF2D78",n:1},{p:slot2,col:"#FF9500",n:2}].map(({p,col,n})=>(
+                <div key={n} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
+                  background:p?`${col}14`:"rgba(240,232,255,.04)",
+                  border:`1.5px solid ${p?col:"rgba(240,232,255,.1)"}`}}>
+                  {p?(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+                      <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} col={col}/>
+                      <div style={{fontSize:11,fontWeight:700,color:col}}>{p.user_name}</div>
+                      <div style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>Slot {n}</div>
+                    </div>
+                  ):(
+                    <div style={{fontSize:11,color:"rgba(240,232,255,.2)",fontWeight:600,padding:"14px 0"}}>
+                      Slot {n}<br/>vacío
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-
-            <div style={{display:"flex",gap:7}}>
-              <button className="btn btn-p" style={{flex:1}}
-                onClick={()=>finishDuelo(bata>=memb?slot1:slot2)}>
-                🏆 Finalizar — {bata>=memb?slot1?.name:slot2?.name} gana
-              </button>
-              <button className="btn btn-r" style={{padding:"9px 12px"}} onClick={resetAll}>⏹</button>
-            </div>
           </div>
+
+          {/* Postulaciones (realtime) */}
+          <div className="card" style={{marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div className="ctitle" style={{margin:0}}>Postulaciones</div>
+              <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)"}}>{postulaciones.length} en total</div>
+            </div>
+
+            {postulaciones.length===0 && (
+              <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",textAlign:"center",padding:"14px 0"}}>
+                Todavía no se postuló nadie…
+              </div>
+            )}
+
+            {postulaciones.map((p,i)=>{
+              const inSlot1 = slot1?.id===p.id, inSlot2 = slot2?.id===p.id;
+              return (
+                <div key={p.id} className="qrow" style={{animationDelay:`${i*.05}s`}}>
+                  <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} size={34}/>
+                  <div className="qname" style={{flex:1}}>{p.user_name}</div>
+                  <div style={{display:"flex",gap:5}}>
+                    <button className="btn" style={{padding:"5px 9px",fontSize:10,opacity:inSlot2?.4:1,
+                      background:inSlot1?"#FF2D78":"rgba(255,45,120,.1)",
+                      border:"1px solid rgba(255,45,120,.3)",color:inSlot1?"#fff":"#FF2D78"}}
+                      onClick={()=>assignSlot(p,1)} disabled={inSlot2}>→ Slot 1</button>
+                    <button className="btn" style={{padding:"5px 9px",fontSize:10,opacity:inSlot1?.4:1,
+                      background:inSlot2?"#FF9500":"rgba(255,149,0,.1)",
+                      border:"1px solid rgba(255,149,0,.3)",color:inSlot2?"#fff":"#FF9500"}}
+                      onClick={()=>assignSlot(p,2)} disabled={inSlot1}>→ Slot 2</button>
+                    <button className="btn" style={{padding:"5px 8px",fontSize:10,
+                      background:"rgba(255,45,120,.06)",border:"1px solid rgba(255,45,120,.18)",color:"rgba(255,45,120,.7)"}}
+                      onClick={()=>removePostulacion(p)}>✕</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Video */}
+          <div className="card" style={{marginBottom:12}}>
+            <div className="ctitle">Video del duelo</div>
+            <input value={videoInput} onChange={e=>setVideoInput(e.target.value)}
+              placeholder="Pegá URL de YouTube o mp4"
+              style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:10,
+                background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.14)",
+                color:"#F0E8FF",fontSize:12.5,outline:"none"}}/>
+          </div>
+
+          {/* Acciones */}
+          <button className="btn btn-p btn-full" style={{marginBottom:8}} disabled={!canLaunch} onClick={doLaunch}>
+            🚀 Lanzar Duelo
+          </button>
+          <button className="btn btn-g btn-full" disabled={busy} onClick={doCancel}>
+            Cancelar duelo
+          </button>
         </>
       )}
 
-      {/* PASO 5 — Ganador */}
-      {phase==="finished"&&winner&&(
-        <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.25)"}}>
-          <div style={{fontSize:36,marginBottom:8}}>🏆</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,color:"#00F5A0",marginBottom:4}}>
-            {winner.avatar} {winner.name}
+      {/* ── ESTADO C — duelo en curso (voting) ── */}
+      {estado==="C" && (
+        <div className="card" style={{borderColor:"rgba(255,45,120,.25)"}}>
+          <div className="ctitle">Duelo en curso</div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            {[{p:cSlot1,likes:counts.p1,col:"#FF2D78"},{p:cSlot2,likes:counts.p2,col:"#FF9500"}].map(({p,likes,col},i)=>(
+              <div key={i} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
+                background:`${col}10`,border:`1.5px solid ${col}44`}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+                  <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
+                  <div style={{fontSize:11,fontWeight:700,color:col}}>{p?.name||`Slot ${i+1}`}</div>
+                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:col}}>❤️ {likes}</div>
+                </div>
+              </div>
+            ))}
           </div>
-          <div style={{fontSize:11,color:"rgba(240,232,255,.35)",marginBottom:14}}>¡Ganó el Duelo de Talentos!</div>
-          <button className="btn btn-g btn-full" onClick={resetAll}>↻ Nuevo duelo</button>
+          {/* La lógica de FIN + countdown + ganador es task 8. Placeholder deshabilitado. */}
+          <button className="btn btn-p btn-full" disabled title="Disponible en la próxima entrega">
+            🏁 Finalizar Duelo
+          </button>
         </div>
       )}
     </div>
@@ -675,7 +706,7 @@ function EscenarioPanel({sec, type}) {
 // KARAOKE
 // ══════════════════════════════════════════════════════════════════════════
 function KaraokePanel({sec}){
-  const [queue,  setQueue]  = useState(MOCK_KARAOKE_QUEUE);
+  const [queue,  setQueue]  = useState([]);
   const [active, setActive] = useState(null);
 
   const callNext = () => {
@@ -733,7 +764,7 @@ function KaraokePanel({sec}){
         ))}
         {queue.every(q=>q.status==="done")&&(
           <button className="btn btn-g btn-full" style={{marginTop:6}}
-            onClick={()=>setQueue(MOCK_KARAOKE_QUEUE)}>
+            onClick={()=>setQueue([])}>
             ↻ Reiniciar cola
           </button>
         )}
@@ -747,7 +778,7 @@ function KaraokePanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 function ReyPanel({sec}){
   const [phase,  setPhase]  = useState("idle");
-  const [prize,  setPrize]  = useState("Trago gratis 🍺");
+  const [prize,  setPrize]  = useState("");
   const [cd,     setCd]     = useState(10);
   const [bgCol,  setBgCol]  = useState("#000");
   const strobeRef = useRef(null);
@@ -900,9 +931,9 @@ function SumaPanel({sec}){
 // FORMÁ LA PALABRA
 // ══════════════════════════════════════════════════════════════════════════
 function PalabraPanel({sec}){
-  const WORDS = ["DISCO","FIESTA","BAILE","RITMO","NOCHE","MUSICA"];
+  const WORDS = [];
   const [phase, setPhase] = useState("idle");
-  const [word,  setWord]  = useState("DISCO");
+  const [word,  setWord]  = useState("");
   const [cd,    setCd]    = useState(90);
   const cdRef = useRef(null);
 
@@ -978,14 +1009,14 @@ function PalabraPanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 function TriviaPanel({sec}){
   const [phase,    setPhase]    = useState("idle");
-  const [qs,       setQs]       = useState(TRIVIA_QS);
+  const [qs,       setQs]       = useState([]);
   const [curQ,     setCurQ]     = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [coupon,   setCoupon]   = useState("BEER50");
   const [newQ,     setNewQ]     = useState("");
   const [newOpts,  setNewOpts]  = useState(["","","",""]);
   const [newCorr,  setNewCorr]  = useState(0);
-  const bata=54, memb=46;
+  const bata=0, memb=0;
 
   const addQ = () => {
     if(!newQ.trim()||newOpts.some(o=>!o.trim())) return;
@@ -1985,7 +2016,7 @@ function PlacasPanel({sec, controls}){
 // MENÚ DEL BAR
 // ══════════════════════════════════════════════════════════════════════════
 function MenuPanel({sec}){
-  const [menu,    setMenu]    = useState(MOCK_MENU);
+  const [menu,    setMenu]    = useState({});
   const [editing, setEditing] = useState(null);
   const [newCat,  setNewCat]  = useState("");
   const [form,    setForm]    = useState({name:"",description:"",price:"",category:""});
@@ -2083,23 +2114,8 @@ function MenuPanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 // NOVEDADES
 // ══════════════════════════════════════════════════════════════════════════
-function NovedadesPanel({sec}){
-  const [title,setTitle]=useState(""); const [body,setBody]=useState(""); const [emoji,setEmoji]=useState("📣");
-  const [saved,setSaved]=useState(false);
-  const save=()=>{if(!title.trim())return;setSaved(true);setTimeout(()=>setSaved(false),2000);setTitle("");setBody("");};
-  return(
-    <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {saved&&<StatusAlert text="✓ Novedad publicada en la app" color="#00F5A0"/>}
-      <div className="card">
-        <div className="ctitle">Publicar en la sección Bienvenidos</div>
-        <div className="epick">{EMOJIS.map(em=><button key={em} className={emoji===em?"sel":""} onClick={()=>setEmoji(em)}>{em}</button>)}</div>
-        <input className="inp" placeholder="Título *" value={title} onChange={e=>setTitle(e.target.value)}/>
-        <textarea className="inp" rows={3} placeholder="Descripción" value={body} onChange={e=>setBody(e.target.value)}/>
-        <button className="btn btn-p btn-full" disabled={!title.trim()} onClick={save}>📣 Publicar</button>
-      </div>
-    </div>
-  );
-}
+// El panel de Novedades vive en ./NovedadesPanel.jsx: hace CRUD real sobre la
+// tabla `banners` e integra la biblioteca de imagenes (media_assets).
 
 // ══════════════════════════════════════════════════════════════════════════
 // DASHBOARD
@@ -2198,7 +2214,11 @@ function LoginAdmin(){
 }
 
 export default function AdminPanel(){
-  const [sec,      setSec]      = useState("launch");
+  const [sec,      setSec]      = useState(()=>{
+    if(window.location.pathname.startsWith("/admin/designer")) return "designer";
+    const requested=new URLSearchParams(window.location.search).get("designerSection");
+    return SECS.some(item=>item.id===requested&&requested!=="designer")?requested:"launch";
+  });
   const [sbCollapsed, setSbCollapsed] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -2267,13 +2287,18 @@ export default function AdminPanel(){
   const curSec = SECS.find(s=>s.id===sec)||SECS[0];
   const groups = [...new Set(SECS.map(s=>s.group))];
   const goTo   = useCallback(id=>setSec(id),[]);
+  useEffect(()=>{
+    if(new URLSearchParams(window.location.search).get("designerPreview")==="1") return;
+    const nextPath = sec === "designer" ? "/admin/designer" : "/admin";
+    if (window.location.pathname !== nextPath) window.history.replaceState(null,"",nextPath);
+  },[sec]);
 
   const renderPanel = () => {
     switch(sec){
       case "launch":    return <LaunchPanel sec={curSec} active={active} setActive={setActive}
                                  zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
                                  msgCount={msgCount} vidCount={vidCount} goTo={goTo} controls={controls}/>;
-      case "duelo":     return <DueloPanel sec={curSec}/>;
+      case "duelo":     return <DueloPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "ftl":       return <EscenarioPanel sec={curSec} type="ftl"/>;
       case "pt":        return <EscenarioPanel sec={curSec} type="pt"/>;
       case "karaoke":   return <KaraokePanel sec={curSec}/>;
@@ -2298,8 +2323,12 @@ export default function AdminPanel(){
       case "placas":    return <PlacasPanel sec={curSec} controls={controls}/>;
       case "menu":      return <MenuPanel sec={curSec}/>;
       case "novedades": return <NovedadesPanel sec={curSec}/>;
+      case "pantallaDj": return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null}/>;
       case "dashboard": return <DashboardPanel sec={curSec} connectedCount={connectedCount}/>;
       case "playlists": return <PlaylistsPanel/>;
+      case "designer":  return <DesignerView/>;
+      case "designerTv": return <TvDesigner sessionId="default"/>;
+      case "designerGuest": return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Diseñador de Pantalla Invitado — próxima etapa</div>;
       default: return <div style={{padding:20,color:"rgba(240,232,255,.25)",fontSize:12}}>Sección en construcción</div>;
     }
   };
@@ -2407,7 +2436,7 @@ export default function AdminPanel(){
 
         {/* Main */}
         <div className="main">
-          <div className="mhdr" style={{"--sg":curSec.grad}}>
+          {sec!=="designer" && <div className="mhdr" style={{"--sg":curSec.grad}}>
             <div>
               <div className="mhdr-title">{curSec.icon} {curSec.label}</div>
             </div>
@@ -2499,8 +2528,8 @@ export default function AdminPanel(){
                 <span style={{fontSize:11,fontWeight:700,color:"#7A6E8A"}}>AUDIO PANTALLA</span>
               </div>
             </div>
-          </div>
-          <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow}} key={sec}>
+          </div>}
+          <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow,...(sec==="designer"?{padding:0,overflow:"hidden"}:{})}} key={sec}>
             {renderPanel()}
           </div>
         </div>

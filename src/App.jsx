@@ -1,12 +1,16 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 
 import globalCss                from "./constants/styles";
 import { useAuth }              from "./hooks/useAuth";
 import { useGameState }         from "./hooks/realtime/useGameState";
 import { useMessages }          from "./hooks/realtime/useMessages";
 import { useVideoRequests }     from "./hooks/realtime/useVideoRequests";
+import { useBanners }           from "./hooks/realtime/useBanners";
 import { usePresence }          from "./hooks/realtime/usePresence";
 import { AvatarDisplay }        from "./components/AvatarDisplay";
+import { PushPermissionBanner } from "./components/PushPermissionBanner";
+import { NotificationBell }     from "./components/NotificationBell";
+import { DueloTeaserBanner }    from "./components/DueloTeaserBanner";
 
 import { useYouTubePlaylistAdmin } from "./hooks/useYouTubePlaylists";
 import CartaView     from "./views/Carta/CartaView";
@@ -22,7 +26,12 @@ const RESTRICTED_VIEWS = ["games", "escenario", "pantalla"];
 export default function BizarrApp() {
   const { user, regStep, setRegStep, register, login, updateUser, isLoggedIn } = useAuth();
 
-  const [view,     setView]     = useState("novedades");
+  const [view,     setView]     = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("designerView");
+    return ["novedades","menu","pantalla","games","escenario","profile"].includes(requested) ? requested : "novedades";
+  });
+  // Qué juego está abierto adentro de la vista Juegos (ej: 'duelo')
+  const [gameOpen, setGameOpen] = useState(null);
   // Configuración de playlists de YouTube (persiste en localStorage)
   const { config: ytConfig } = useYouTubePlaylistAdmin();
   const [authMode, setAuthMode] = useState("login");
@@ -37,7 +46,21 @@ export default function BizarrApp() {
   const { messages, send: sendMsg } = useMessages(session?.id, "user");
   const { send: sendVideo } = useVideoRequests(session?.id);
 
+  // Novedades publicadas por el staff (cards 1440x600)
+  const { banners, loading: bannersLoading } = useBanners(session?.id);
+
   const isRestricted = !user?.geoOk;
+
+  // Deep-link desde push: /?view=games&game=duelo abre el duelo directo (una sola vez).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === "games" && params.get("game") === "duelo") {
+      setView("games");
+      setGameOpen("duelo");
+    }
+    // Deep-link del QR de Pantalla/Escenario: /?pantallaCode=XXXXXX
+    if (params.get("pantallaCode")) setView("pantalla");
+  }, []);
 
   const goProfile = useCallback(() => {
     if (user?.registered) setRegStep(5);
@@ -45,21 +68,23 @@ export default function BizarrApp() {
   }, [user, setRegStep]);
 
   const NAV = useMemo(() => [
-    { id: "novedades", icon: "📣", label: "Bienvenidos", img: "/botones/boton_noti.png"      },
-    { id: "menu",      icon: "🍹", label: "Menú",        img: "/botones/boton_menu.png"      },
-    { id: "pantalla",  icon: "📺", label: "Pantalla",    img: "/botones/boton_pantalla.png"  },
-    { id: "games",     icon: "🎮", label: "Juegos",      img: "/botones/boton_juegos.png"    },
-    { id: "escenario", icon: "🎤", label: "Escenario",   img: "/botones/boton_escenario.png" },
-    ...(!isLoggedIn ? [{ id: "profile", icon: "👤", label: "Registro", img: "/botones/botones_perfil.png" }] : []),
+    { id: "novedades", icon: "📣", label: "Bienvenidos", image: "/botones/Noti.png"     },
+    { id: "menu",      icon: "🍹", label: "Menú",        image: "/botones/Menu.png"     },
+    { id: "pantalla",  icon: "📺", label: "Pantalla",    image: "/botones/Pantalla.png" },
+    { id: "games",     icon: "🎮", label: "Juegos",      image: "/botones/juegos.png"   },
+    { id: "escenario", icon: "🎤", label: "Escenario",   image: "/botones/Escenario.png" },
+    ...(!isLoggedIn ? [{ id: "profile", icon: "👤", label: "Registro", image: "/botones/Perfil.png" }] : []),
   ], [isLoggedIn]);
 
   const renderContent = () => {
     switch (view) {
       case "menu":       return <CartaView />;
-      case "novedades":  return <NovedadesView banners={[]} />;
+      case "novedades":  return <NovedadesView banners={banners} loading={bannersLoading} />;
       case "games":
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
-                 isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}/>;
+                 activeEscenario={gameState?.active_escenario ?? null}
+                 isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
+                 gameOpen={gameOpen} setGameOpen={setGameOpen}/>;
       case "escenario":
         return <EscenarioView user={user} activeEscenario={gameState?.active_escenario ?? null}
                  isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id} ytConfig={ytConfig}/>;
@@ -102,29 +127,13 @@ export default function BizarrApp() {
       <div className="app-root">
         <div className="phone-shell">
           <header className="app-header">
-            {(() => {
-              const sectionHeaderStyle = {
-                fontFamily: "'Bangers', cursive",
-                fontSize: "2.6rem",
-                letterSpacing: "0.05em",
-                textAlign: "center",
-                padding: "16px 0 8px",
-                lineHeight: 1.1,
-                margin: 0,
-                width: "100%",
-              };
-              const SECTION_TITLES = {
-                menu:      { text: "Carta del Bar",      color: "#FFD600", shadow: "0 0 16px rgba(255,214,0,0.5)" },
-                pantalla:  { text: "Directo a Pantalla", color: "#FFD600", shadow: "0 0 16px rgba(255,214,0,0.5)" },
-                games:     { text: "Juegos",             color: "#00E5FF", shadow: "0 0 16px rgba(0,229,255,0.5)" },
-                escenario: { text: "Escenario",          color: "#FF2D78", shadow: "0 0 16px rgba(255,45,120,0.5)" },
-              };
-              const t = SECTION_TITLES[view];
-              return t
-                ? <h1 style={{ ...sectionHeaderStyle, color: t.color, textShadow: t.shadow }}>{t.text}</h1>
-                : <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
-                    onError={e => { e.target.style.display="none"; }}/>;
-            })()}
+            <div className="app-header-brand">
+              <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
+                onError={e => { e.target.style.display="none"; }}/>
+              <span className="app-header-name">BizarrApp</span>
+            </div>
+            {/* Campana: a la izquierda del avatar cuando hay sesión, si no al borde */}
+            <NotificationBell user={user} offset={isLoggedIn ? 60 : 16}/>
             {isLoggedIn && (
               <button onClick={goProfile} style={{
                 background:  view==="profile" ? "rgba(255,215,0,.12)" : "transparent",
@@ -139,47 +148,41 @@ export default function BizarrApp() {
             )}
           </header>
           <main className="app-content">{renderContent()}</main>
-          <nav className="app-nav" style={{
-            background: "#000000",
-            borderTop: "2px solid #1A001A",
-            backdropFilter: "blur(10px)",
-          }}>
+          <nav className="app-nav">
             {NAV.map(n => {
               const isActive = view === n.id;
               const gated    = isRestricted && RESTRICTED_VIEWS.includes(n.id);
               return (
                 <button key={n.id}
-                  className="nav-btn"
+                  className={`nav-btn${isActive ? " active" : ""}`}
                   aria-label={n.label}
                   aria-current={isActive ? "page" : undefined}
                   onClick={() => n.id==="profile" ? goProfile() : setView(n.id)}
                   style={{
-                    position:  "relative",
-                    opacity:   gated ? 0.4 : (isActive ? 1 : 0.55),
-                    transform: isActive ? "scale(1.1)" : "scale(1)",
-                    transition:"all 200ms ease",
+                    position: "relative",
+                    opacity: gated ? 0.45 : 1,
                   }}>
-                  <img src={n.img} alt={n.label}
-                    style={{ width:"100%", height:"100%", objectFit:"contain", pointerEvents:"none" }}/>
+                  {n.image
+                    ? <img className="nav-image" src={n.image} alt="" aria-hidden="true"/>
+                    : <span className="nav-icon" aria-hidden="true">{n.icon}</span>}
                   {gated && (
                     <span aria-hidden="true" style={{
                       position:"absolute", top:1, right:5, fontSize:11,
                       pointerEvents:"none", filter:"drop-shadow(0 0 2px #000)",
                     }}>🔒</span>
                   )}
-                  {isActive && (
-                    <span aria-hidden="true" style={{
-                      position:"absolute", bottom:-2, left:"50%", transform:"translateX(-50%)",
-                      width:6, height:6, borderRadius:"50%",
-                      background:"#FFD600", boxShadow:"0 0 6px #FFD600",
-                      pointerEvents:"none",
-                    }}/>
-                  )}
                 </button>
               );
             })}
           </nav>
         </div>
+        <PushPermissionBanner user={user} />
+        <DueloTeaserBanner
+          activeEscenario={gameState?.active_escenario ?? null}
+          currentView={view}
+          onGoDuelo={() => { setGameOpen("duelo"); setView("games"); }}
+          sessionId={session?.id}
+        />
       </div>
     </>
   );

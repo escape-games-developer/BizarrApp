@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 600" width="1440" height="600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A0012"/>
+      <stop offset="55%" stop-color="#0D0010"/>
+      <stop offset="100%" stop-color="#2A0018"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FFD600" stop-opacity=".55"/>
+      <stop offset="100%" stop-color="#FFD600" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FF2D95" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#FF2D95" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="600" fill="url(#bg)"/>
+  <ellipse cx="1180" cy="140" rx="420" ry="300" fill="url(#glowA)"/>
+  <ellipse cx="180"  cy="520" rx="420" ry="300" fill="url(#glowB)"/>
+
+  <!-- Rayas diagonales -->
+  <g opacity=".18" stroke="#FFD600" stroke-width="3">
+    <line x1="1010" y1="600" x2="1250" y2="0"/>
+    <line x1="1080" y1="600" x2="1320" y2="0"/>
+    <line x1="1150" y1="600" x2="1390" y2="0"/>
+  </g>
+
+  <!-- Tag -->
+  <rect x="90" y="120" width="196" height="54" rx="27" fill="#FFD600"/>
+  <text x="188" y="157" font-family="'Arial Black', Impact, sans-serif" font-size="27"
+        letter-spacing="3" fill="#12000C" text-anchor="middle">SORTEO</text>
+
+  <!-- Título -->
+  <text x="90" y="300" font-family="Impact, 'Arial Black', sans-serif" font-size="118"
+        letter-spacing="2" fill="#FFD600" filter="url(#soft)" opacity=".65">REY DEL ORTO</text>
+  <text x="90" y="300" font-family="Impact, 'Arial Black', sans-serif" font-size="118"
+        letter-spacing="2" fill="#FFD600">REY DEL ORTO</text>
+
+  <!-- Bajada -->
+  <text x="94" y="374" font-family="Verdana, Geneva, sans-serif" font-size="40" font-weight="bold"
+        fill="#FF2D95">23:30 HS · EL SORTEO MÁS LOCO DEL BAR</text>
+  <text x="94" y="440" font-family="Verdana, Geneva, sans-serif" font-size="33"
+        fill="#C9BBD4">¿Tu pantalla va a quedar en verde?</text>
+
+  <text x="1215" y="415" font-size="230" text-anchor="middle">👑</text>
+</svg>

@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
 import { useRaffle }         from "../../hooks/useRaffle";
 import { useTriviaVoter }    from "../../hooks/realtime/useTriviaVotes";
 import { BlockedView }       from "../../components/UI";
-import { TEAMS, rand }       from "../../constants/theme";
-import { STROBE_COLORS, TRIVIA_QUESTIONS } from "../../constants/data";
+import { TEAMS }             from "../../constants/theme";
+import DueloCard             from "./DueloCard";
+import DueloVistaCompleta    from "./DueloVistaCompleta";
 
 // ─── Standby ──────────────────────────────────────────────────────────────────
 function GameStandby() {
@@ -107,7 +107,11 @@ function DesafioDemente({ user, sessionId, gameState }) {
   const t = user?.team ? TEAMS[user.team] : null;
   const questionIdx = gameState?.trivia_question ?? 0;
   const triviaState = gameState?.trivia_state ?? "idle";
-  const question    = TRIVIA_QUESTIONS[questionIdx];
+  const questionPayload = gameState?.minijuego_payload?.question || null;
+  const question = questionPayload ? {
+    ...questionPayload,
+    options: questionPayload.options || questionPayload.opts || [],
+  } : null;
 
   const { myVote, vote, hasVoted } = useTriviaVoter(
     sessionId, questionIdx, user?.id, user?.team
@@ -225,8 +229,14 @@ function DesafioDemente({ user, sessionId, gameState }) {
 
 // ─── Sumá el Número ────────────────────────────────────────────────────────
 function SumaElNumero({ user, gameState }) {
-  const target  = gameState?.minijuego_payload?.target_number || 28;
-  const [myNum] = useState(() => rand(1, 9));
+  const target = gameState?.minijuego_payload?.target_number;
+  const myNum = gameState?.minijuego_payload?.assigned_number;
+
+  if (!target || !myNum) return (
+    <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+      No hay datos del juego disponibles.
+    </div>
+  );
 
   return (
     <div>
@@ -258,10 +268,17 @@ function SumaElNumero({ user, gameState }) {
 
 // ─── Formá la Palabra ──────────────────────────────────────────────────────
 function FormaLaPalabra({ user, gameState }) {
-  const words   = ["DISCO","FIESTA","BAILE","RITMO","NOCHE"];
-  const word    = gameState?.minijuego_payload?.target_word || words[rand(0, words.length - 1)];
+  const word = gameState?.minijuego_payload?.target_word;
+  const assignedLetter = gameState?.minijuego_payload?.assigned_letter;
+
+  if (!word || !assignedLetter) return (
+    <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+      No hay datos del juego disponibles.
+    </div>
+  );
+
   const letters = word.split("");
-  const [myLetter] = useState(() => letters[rand(0, letters.length - 1)]);
+  const myLetter = assignedLetter;
 
   return (
     <div>
@@ -301,7 +318,7 @@ function FormaLaPalabra({ user, gameState }) {
 }
 
 // ─── JuegosView (router) ──────────────────────────────────────────────────
-export default function JuegosView({ user, activeGame, isRestricted, onGoProfile, sessionId, gameState }) {
+export default function JuegosView({ user, activeGame, activeEscenario, isRestricted, onGoProfile, sessionId, gameState, gameOpen, setGameOpen }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -313,13 +330,34 @@ export default function JuegosView({ user, activeGame, isRestricted, onGoProfile
     );
   }
 
-  if (!activeGame) return <GameStandby />;
-
-  switch (activeGame) {
-    case "rey del orto": return <ReyDelOrto user={user} gameState={gameState} />;
-    case "trivia":       return <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} />;
-    case "suma":         return <SumaElNumero user={user} gameState={gameState} />;
-    case "palabra":      return <FormaLaPalabra user={user} gameState={gameState} />;
-    default:             return <GameStandby />;
+  // Navegación interna: si el usuario abrió el duelo, toma la pantalla completa.
+  if (gameOpen === "duelo") {
+    return (
+      <DueloVistaCompleta
+        sessionId={sessionId} user={user}
+        activeEscenario={activeEscenario} onBack={() => setGameOpen?.(null)}
+      />
+    );
   }
+
+  const dueloCard = activeEscenario === "duelo"
+    ? <DueloCard activeEscenario={activeEscenario} onOpen={() => setGameOpen?.("duelo")} />
+    : null;
+
+  // Contenido del juego activo (o standby si no hay ninguno).
+  let gameContent;
+  switch (activeGame) {
+    case "rey del orto": gameContent = <ReyDelOrto user={user} gameState={gameState} />; break;
+    case "trivia":       gameContent = <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} />; break;
+    case "suma":         gameContent = <SumaElNumero user={user} gameState={gameState} />; break;
+    case "palabra":      gameContent = <FormaLaPalabra user={user} gameState={gameState} />; break;
+    default:             gameContent = <GameStandby />;
+  }
+
+  // La card del duelo depende del estado realtime: no se muestra si el admin
+  // no activó active_escenario="duelo".
+  if (!activeGame) return <div>{dueloCard}{gameContent}</div>;
+  return activeEscenario === "duelo"
+    ? <div>{dueloCard}{gameContent}</div>
+    : gameContent;
 }

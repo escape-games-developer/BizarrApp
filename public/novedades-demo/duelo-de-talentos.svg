@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 600" width="1440" height="600">
+  <defs>
+    <linearGradient id="bg5" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#26002E"/>
+      <stop offset="50%" stop-color="#0B0010"/>
+      <stop offset="100%" stop-color="#320014"/>
+    </linearGradient>
+    <linearGradient id="wedge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#9B2FFF" stop-opacity=".38"/>
+      <stop offset="100%" stop-color="#9B2FFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="wedge2" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0%" stop-color="#FF2D95" stop-opacity=".38"/>
+      <stop offset="100%" stop-color="#FF2D95" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="vsGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9B2FFF"/>
+      <stop offset="100%" stop-color="#FF2D95"/>
+    </linearGradient>
+    <filter id="s5" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="13"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="600" fill="url(#bg5)"/>
+
+  <!-- Cuñas diagonales enfrentadas -->
+  <polygon points="0,0 700,0 620,600 0,600" fill="url(#wedge)"/>
+  <polygon points="740,0 1440,0 1440,600 820,600" fill="url(#wedge2)"/>
+
+  <text x="330" y="360" font-size="185" text-anchor="middle">🎭</text>
+  <text x="1130" y="360" font-size="185" text-anchor="middle">🎸</text>
+
+  <!-- VS central -->
+  <circle cx="720" cy="300" r="86" fill="#0B0010" stroke="url(#vsGrad)" stroke-width="6"/>
+  <text x="720" y="336" font-family="Impact, 'Arial Black', sans-serif" font-size="84"
+        fill="url(#vsGrad)" text-anchor="middle">VS</text>
+
+  <!-- Título abajo -->
+  <text x="720" y="500" font-family="Impact, 'Arial Black', sans-serif" font-size="82"
+        letter-spacing="2" fill="#FF2D95" text-anchor="middle" filter="url(#s5)" opacity=".65">DUELO DE TALENTOS</text>
+  <text x="720" y="500" font-family="Impact, 'Arial Black', sans-serif" font-size="82"
+        letter-spacing="2" fill="#FFFFFF" text-anchor="middle">DUELO DE TALENTOS</text>
+
+  <!-- Tag arriba -->
+  <rect x="596" y="70" width="248" height="50" rx="25" fill="url(#vsGrad)"/>
+  <text x="720" y="105" font-family="'Arial Black', Impact, sans-serif" font-size="25"
+        letter-spacing="3" fill="#12000C" text-anchor="middle">EN ESCENARIO</text>
+</svg>

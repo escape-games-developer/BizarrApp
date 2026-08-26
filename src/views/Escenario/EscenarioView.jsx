@@ -3,7 +3,6 @@ import { supabase }                        from "../../lib/supabase";
 import { BlockedView, VideoRow }           from "../../components/UI";
 import { useYouTubePlaylists }             from "../../hooks/useYouTubePlaylists";
 import { useEscenarioQueue }               from "../../hooks/realtime/useEscenarioQueue";
-import { VIDEOS_FTL, VIDEOS_PT, VIDEOS_KARAOKE } from "../../constants/data";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
 function EscenarioStandby() {
@@ -84,9 +83,15 @@ function DueloView({ user, sessionId, ytConfig, gameState }) {
   const votesB = gameState?.duelo_votes_b || 0;
   const total  = votesA + votesB || 1;
 
+  if (!gameState?.duelo_slot1?.name || !gameState?.duelo_slot2?.name) return (
+    <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+      No hay participantes todavía.
+    </div>
+  );
+
   const options = [
-    { id: "a", label: gameState?.duelo_slot1?.name || "Participante A", color: "#EF4444", bg: "rgba(239,68,68,.1)", border: "rgba(239,68,68,.3)", votes: votesA },
-    { id: "b", label: gameState?.duelo_slot2?.name || "Participante B", color: "#3B82F6", bg: "rgba(59,130,246,.1)",  border: "rgba(59,130,246,.3)", votes: votesB },
+    { id: "a", label: gameState.duelo_slot1.name, color: "#EF4444", bg: "rgba(239,68,68,.1)", border: "rgba(239,68,68,.3)", votes: votesA },
+    { id: "b", label: gameState.duelo_slot2.name, color: "#3B82F6", bg: "rgba(59,130,246,.1)",  border: "rgba(59,130,246,.3)", votes: votesB },
   ];
 
   const handleVote = async (optionId) => {
@@ -173,7 +178,8 @@ function FollowTheLeaderView({ user, sessionId, ytConfig }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,215,0,.45)", marginBottom: 8 }}>
         Elegí tu canción
       </div>
-      {(playlists.ftl?.length ? playlists.ftl : VIDEOS_FTL).map((v) => (
+      {!playlists.ftl?.length && <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)"}}>No hay canciones disponibles.</div>}
+      {(playlists.ftl || []).map((v) => (
         <VideoRow key={v.id} video={v} selected={selVideo?.id === v.id} onSelect={setSelVideo} color="#EC4899" />
       ))}
       <button className="btn-primary" style={{ background: "linear-gradient(135deg,#EC4899,#8B5CF6)", marginTop: 6 }}
@@ -240,7 +246,8 @@ function KaraokeView({ user, sessionId, ytConfig }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,215,0,.45)", marginBottom: 8 }}>
         Elegí tu canción
       </div>
-      {(playlists.karaoke?.length ? playlists.karaoke : VIDEOS_KARAOKE).map((v) => (
+      {!playlists.karaoke?.length && <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)"}}>No hay canciones disponibles.</div>}
+      {(playlists.karaoke || []).map((v) => (
         <VideoRow key={v.id} video={v} selected={selVideo?.id === v.id} onSelect={setSelVideo} color="#A855F7" />
       ))}
       <button className="btn-primary" style={{ background: "linear-gradient(135deg,#A855F7,#EC4899)", marginTop: 6 }}

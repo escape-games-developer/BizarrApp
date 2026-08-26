@@ -285,6 +285,133 @@ export function useAdminControls(sessionId) {
              active_escenario: null }),
   [update]);
 
+  // ── Duelo v2 — postulaciones + applause + push ────────────────────────────
+  // Flujo nuevo (task DueloPanel): convocatoria por push → postulaciones
+  // realtime en duelo_postulaciones → admin elige 2 slots → applause_session
+  // game_type='duelo'. Coexiste con las funciones viejas de arriba, que usa el
+  // DueloView legacy en EscenarioView (limpieza en task 9). No adaptamos las
+  // viejas para no romper esa vista.
+
+  // send-push tiene verify_jwt=true → mandamos el JWT del admin explícito para
+  // que la function autentique como admin_users (no como anónimo).
+  const pushToSession = useCallback(async (body) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return supabase.functions.invoke("send-push", {
+      body,
+      headers: session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : undefined,
+    });
+  }, []);
+
+  const openPostulacionesDuelo = useCallback(async () => {
+    if (!sessionId) return { error: "Sin sesión activa" };
+    // 1. Limpia postulaciones anteriores de la sesión
+    await supabase.from("duelo_postulaciones").delete().eq("session_id", sessionId);
+    // 2. Borra applause_sessions anteriores de tipo duelo de esta sesión
+    await supabase.from("applause_sessions").delete()
+      .eq("session_id", sessionId).eq("game_type", "duelo");
+    // 3. active_escenario='duelo' + limpia video/slots + state idle
+    await update({
+      active_escenario: "duelo",
+      duelo_video: null,
+      duelo_slot1: null,
+      duelo_slot2: null,
+      duelo_state: "idle",
+    });
+    // 4. Push nativo a todos los conectados
+    await pushToSession({
+      session_id: sessionId,
+      title: "🎤 ¡Empezó el Duelo!",
+      body:  "Postulate para participar",
+      url:   "/?view=games&game=duelo",
+      tag:   "duelo-open",
+    });
+  }, [sessionId, update, pushToSession]);
+
+  const setPostulacionStatus = useCallback((id, status) =>
+    supabase.from("duelo_postulaciones").update({ status }).eq("id", id),
+  []);
+
+  const deletePostulacion = useCallback((id) =>
+    supabase.from("duelo_postulaciones").delete().eq("id", id),
+  []);
+
+  // NOTA: no inicializamos applause_counts. La RPC applause_add hace INSERT ON CONFLICT
+  // cuando llega el primer tap, y las policies actuales no permiten INSERT directo.
+  const launchDuelo = useCallback(async ({ p1, p2, videoInput }) => {
+    if (!sessionId) return { error: "Sin sesión activa" };
+    // 1. Parsear videoInput → YouTube (yt_id) o URL directa
+    const ytMatch = String(videoInput).match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    const dueloVideo = ytMatch
+      ? { source: "youtube", yt_id: ytMatch[1], video_url: null, title: null }
+      : { source: "url", yt_id: null, video_url: videoInput, title: null };
+
+    // 2. Crear applause_session (sin timer: cierra por acción manual del admin)
+    const { data: round, error: e1 } = await supabase
+      .from("applause_sessions")
+      .insert({
+        session_id: sessionId,
+        game_type:  "duelo",
+        status:     "voting",
+        p1_user_id: p1.user_id, p1_name: p1.user_name,
+        p1_avatar:  JSON.stringify({
+          avatar_id: p1.avatar_id, avatar_emoji: p1.avatar_emoji, photo_url: p1.photo_url,
+        }),
+        p2_user_id: p2.user_id, p2_name: p2.user_name,
+        p2_avatar:  JSON.stringify({
+          avatar_id: p2.avatar_id, avatar_emoji: p2.avatar_emoji, photo_url: p2.photo_url,
+        }),
+        voting_ends_at: null,
+      })
+      .select()
+      .single();
+    if (e1) throw e1;
+
+    // 3. Postulaciones no seleccionadas → 'rejected' (las 2 en slot quedan 'selected')
+    await supabase.from("duelo_postulaciones")
+      .update({ status: "rejected" })
+      .eq("session_id", sessionId)
+      .eq("status", "waiting");
+
+    // 4. Guardar video + slots en game_state
+    await update({
+      duelo_video: dueloVideo,
+      duelo_slot1: {
+        user_id: p1.user_id, name: p1.user_name,
+        avatar_id: p1.avatar_id, avatar_emoji: p1.avatar_emoji, photo_url: p1.photo_url,
+      },
+      duelo_slot2: {
+        user_id: p2.user_id, name: p2.user_name,
+        avatar_id: p2.avatar_id, avatar_emoji: p2.avatar_emoji, photo_url: p2.photo_url,
+      },
+      duelo_state: "voting",
+    });
+
+    // 5. Push a los conectados
+    await pushToSession({
+      session_id: sessionId,
+      title: "🎤 ¡Empezó el Duelo!",
+      body:  `${p1.user_name} vs ${p2.user_name}. Elegí a tu favorito`,
+      url:   "/?view=games&game=duelo",
+      tag:   "duelo-launch",
+    });
+
+    return round;
+  }, [sessionId, update, pushToSession]);
+
+  const cerrarDuelo = useCallback(() =>
+    update({
+      active_escenario: null,
+      duelo_video: null,
+      duelo_slot1: null,
+      duelo_slot2: null,
+      duelo_state: "idle",
+    }),
+  [update]);
+
   // ── FTL / PT / Karaoke ───────────────────────────────────────────────────
   const openEscenarioInvitation = useCallback(async (type) => {
     await dismissActiveVideo();
@@ -322,6 +449,8 @@ export function useAdminControls(sessionId) {
     activateEscenario, deactivateEscenario,
     startDuelo, revealDuelo,
     openDueloInvitation, selectDueloParticipant, launchDueloVideo, closeDuelo,
+    openPostulacionesDuelo, setPostulacionStatus, deletePostulacion,
+    launchDuelo, cerrarDuelo,
     openEscenarioInvitation, launchEscenario,
     launchMinijuego,
     toggleZocalo, sendPlaca, clearPlaca,

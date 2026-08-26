@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 600" width="1440" height="600">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14002A"/>
+      <stop offset="50%" stop-color="#0A0014"/>
+      <stop offset="100%" stop-color="#2A0020"/>
+    </linearGradient>
+    <radialGradient id="glowE" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#9B2FFF" stop-opacity=".6"/>
+      <stop offset="100%" stop-color="#9B2FFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowF" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#FF2D95" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#FF2D95" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="txt3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FF2D95"/>
+      <stop offset="100%" stop-color="#9B2FFF"/>
+    </linearGradient>
+    <filter id="soft3" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="600" fill="url(#bg3)"/>
+  <ellipse cx="1150" cy="300" rx="430" ry="330" fill="url(#glowE)"/>
+  <ellipse cx="120"  cy="90"  rx="380" ry="280" fill="url(#glowF)"/>
+
+  <!-- Ecualizador -->
+  <g fill="#FF2D95" opacity=".3">
+    <rect x="94"  y="470" width="17" height="60"  rx="8"/>
+    <rect x="124" y="440" width="17" height="90"  rx="8"/>
+    <rect x="154" y="486" width="17" height="44"  rx="8"/>
+    <rect x="184" y="420" width="17" height="110" rx="8"/>
+    <rect x="214" y="458" width="17" height="72"  rx="8"/>
+    <rect x="244" y="496" width="17" height="34"  rx="8"/>
+    <rect x="274" y="446" width="17" height="84"  rx="8"/>
+  </g>
+
+  <!-- Tag -->
+  <rect x="90" y="96" width="278" height="54" rx="27" fill="url(#txt3)"/>
+  <text x="229" y="133" font-family="'Arial Black', Impact, sans-serif" font-size="27"
+        letter-spacing="3" fill="#12000C" text-anchor="middle">ESTA NOCHE</text>
+
+  <!-- Título -->
+  <text x="90" y="266" font-family="Impact, 'Arial Black', sans-serif" font-size="120"
+        letter-spacing="2" fill="#FF2D95" filter="url(#soft3)" opacity=".6">NOCHE DE</text>
+  <text x="90" y="266" font-family="Impact, 'Arial Black', sans-serif" font-size="120"
+        letter-spacing="2" fill="#FFFFFF">NOCHE DE</text>
+  <text x="90" y="384" font-family="Impact, 'Arial Black', sans-serif" font-size="120"
+        letter-spacing="2" fill="#9B2FFF" filter="url(#soft3)" opacity=".7">KARAOKE</text>
+  <text x="90" y="384" font-family="Impact, 'Arial Black', sans-serif" font-size="120"
+        letter-spacing="2" fill="url(#txt3)">KARAOKE</text>
+
+  <!-- Bajada -->
+  <text x="94" y="442" font-family="Verdana, Geneva, sans-serif" font-size="33"
+        fill="#D4C4E0">Anotate desde Escenario y subí a cantar</text>
+
+  <text x="1195" y="420" font-size="250" text-anchor="middle">🎤</text>
+</svg>

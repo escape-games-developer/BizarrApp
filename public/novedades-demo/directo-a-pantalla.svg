@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 600" width="1440" height="600">
+  <defs>
+    <linearGradient id="bg6" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#002622"/>
+      <stop offset="50%" stop-color="#000F12"/>
+      <stop offset="100%" stop-color="#001A2E"/>
+    </linearGradient>
+    <radialGradient id="gG" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#00F5A0" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#00F5A0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gC" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#00E5FF" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#00E5FF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="s6" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="11"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="600" fill="url(#bg6)"/>
+  <ellipse cx="300"  cy="480" rx="420" ry="300" fill="url(#gG)"/>
+  <ellipse cx="1150" cy="110" rx="420" ry="300" fill="url(#gC)"/>
+
+  <!-- Layout espejado: gráfico a la izquierda, texto a la derecha -->
+  <g transform="translate(120,150)">
+    <rect x="0" y="0" width="330" height="220" rx="22" fill="#04121A"
+          stroke="#00E5FF" stroke-opacity=".6" stroke-width="5"/>
+    <rect x="26" y="26" width="278" height="140" rx="10" fill="#00E5FF" fill-opacity=".1"/>
+    <text x="165" y="122" font-size="76" text-anchor="middle">💬</text>
+    <rect x="112" y="190" width="106" height="12" rx="6" fill="#00E5FF" fill-opacity=".45"/>
+    <rect x="140" y="220" width="50" height="26" rx="6" fill="#00E5FF" fill-opacity=".3"/>
+  </g>
+
+  <!-- Tag -->
+  <rect x="560" y="132" width="300" height="52" rx="26" fill="#00F5A0"/>
+  <text x="710" y="168" font-family="'Arial Black', Impact, sans-serif" font-size="25"
+        letter-spacing="3" fill="#00140D" text-anchor="middle">PANTALLA GIGANTE</text>
+
+  <!-- Título -->
+  <text x="560" y="300" font-family="Impact, 'Arial Black', sans-serif" font-size="94"
+        fill="#00E5FF" filter="url(#s6)" opacity=".6">MANDÁ TU</text>
+  <text x="560" y="300" font-family="Impact, 'Arial Black', sans-serif" font-size="94"
+        fill="#FFFFFF">MANDÁ TU</text>
+  <text x="560" y="394" font-family="Impact, 'Arial Black', sans-serif" font-size="94"
+        fill="#00F5A0" filter="url(#s6)" opacity=".6">MENSAJE</text>
+  <text x="560" y="394" font-family="Impact, 'Arial Black', sans-serif" font-size="94"
+        fill="#00F5A0">MENSAJE</text>
+
+  <text x="564" y="462" font-family="Verdana, Geneva, sans-serif" font-size="31"
+        fill="#A8C6CC">Lo proyectamos en la pantalla del bar</text>
+</svg>

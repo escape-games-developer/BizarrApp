@@ -338,6 +338,43 @@ CREATE POLICY "video_requests: admin gestiona todos"
 
 
 -- ============================================================================
+-- TABLA: media_assets
+-- Biblioteca de imágenes administrable. Los archivos viven en el bucket
+-- público `bizarren-media`; acá se guarda la metadata que consume el modal
+-- de biblioteca del admin.
+-- ============================================================================
+CREATE TABLE media_assets (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         text        NOT NULL,
+  file_url     text        NOT NULL,          -- URL pública del archivo original
+  storage_path text        NOT NULL UNIQUE,   -- path dentro del bucket bizarren-media
+  thumb_url    text,                          -- miniatura webp ~320px
+  thumb_path   text,
+  category     text,                          -- "personajes", "logos", …
+  mime_type    text,
+  width        integer,
+  height       integer,
+  size_bytes   integer,
+  created_by   uuid        REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at   timestamptz DEFAULT now()
+);
+
+CREATE INDEX media_assets_category_idx   ON media_assets (category);
+CREATE INDEX media_assets_created_at_idx ON media_assets (created_at DESC);
+
+ALTER TABLE media_assets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "media_assets: todos leen"
+  ON media_assets FOR SELECT
+  USING (true);
+
+CREATE POLICY "media_assets: admin gestiona"
+  ON media_assets FOR ALL
+  USING      (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()))
+  WITH CHECK (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()));
+
+
+-- ============================================================================
 -- TABLA: banners
 -- Novedades y promos del admin.
 -- ============================================================================
@@ -348,6 +385,14 @@ CREATE TABLE banners (
   title      text        NOT NULL,
   body       text,
   tag        text        DEFAULT 'NOVEDAD',
+  image_url  text,       -- pieza gráfica 1440x600 (si es NULL, la card usa layout de texto)
+  image_alt  text,
+  -- Imagen elegida de la biblioteca. NULL = la card usa el emoji/icono anterior.
+  image_asset_id uuid    REFERENCES media_assets(id) ON DELETE SET NULL,
+  image_position text    DEFAULT 'right' CHECK (image_position IS NULL OR image_position IN ('left','right','background')),
+  image_scale    integer DEFAULT 100 CHECK (image_scale IS NULL OR image_scale BETWEEN 50 AND 180),
+  image_x        integer DEFAULT 0   CHECK (image_x IS NULL OR image_x BETWEEN -100 AND 100),
+  image_y        integer DEFAULT 0   CHECK (image_y IS NULL OR image_y BETWEEN -100 AND 100),
   color      text        DEFAULT '#FFD700',
   bg         text        DEFAULT 'rgba(255,215,0,.07)',
   border     text        DEFAULT 'rgba(255,215,0,.18)',
