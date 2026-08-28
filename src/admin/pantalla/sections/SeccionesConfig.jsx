@@ -1,4 +1,5 @@
 import SeccionCodigo from "./SeccionCodigo";
+import SeccionContenido from "./SeccionContenido";
 
 /**
  * Columna de configuración del editor: el orden en que el DJ arma una noche.
@@ -11,6 +12,7 @@ export default function SeccionesConfig(shared) {
   return (
     <>
       <SeccionCodigo {...shared} />
+      <SeccionContenido {...shared} />
     </>
   );
 }
