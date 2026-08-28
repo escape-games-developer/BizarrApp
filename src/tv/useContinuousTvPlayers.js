@@ -24,6 +24,8 @@ export const TV_PLAYER_IDS = ["pantalla-tv-player-a", "pantalla-tv-player-b"];
 const WATCH_MS        = 400;
 const REPORT_MS       = 4000;
 const LOAD_TIMEOUT_MS = 12000;   // sólo detecta "este player no arrancó nunca"
+const ADVANCE_RETRY_MS = 3000;   // espera antes de reintentar un avance rechazado
+const FADE_STEP_MS    = 50;      // ~20 muestras por segundo en cada rampa
 const CONFIRM_TICKS   = 2;       // muestras seguidas antes de creerle al reloj
 const MAX_SKIPS_IN_A_ROW = 5;    // corta el loop si nada se puede reproducir
 
@@ -106,6 +108,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
   const watchTicksRef = useRef({ itemId: null, hits: 0 });
   const controllerRef = useRef(null);
   const timersRef     = useRef(new Set());
+  // Rampa de volumen viva por player: durante el crossfade hay dos a la vez.
+  const fadesRef      = useRef([null, null]);
+  // Ultimo fallo del RPC de avance por item: evita reintentar 2 veces por segundo.
+  const advanceFailRef = useRef(new Map());
 
   latestCurrentRef.current = current;
 
@@ -119,6 +125,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
     if (!unlocked || !eventId) return;
     let cancelled = false;
     const effectTimers = timersRef.current;
+    const effectFails  = advanceFailRef.current;
 
     // ── Diagnóstico ─────────────────────────────────────────────────────────
     const snapshot = (reason, itemId, playerIndex) => {
@@ -171,20 +178,37 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       slot.timeout = null;
     };
 
-    const fadeVolume = (player, from, to, duration, done) => {
+    const cancelFade = (index) => {
+      const running = fadesRef.current[index];
+      if (!running) return;
+      clearInterval(running);
+      timersRef.current.delete(running);
+      fadesRef.current[index] = null;
+    };
+
+    /**
+     * Rampa de volumen por player. Un paso cada FADE_STEP_MS (≈20 muestras por
+     * segundo) para que se sienta progresiva: con 5 pasos fijos, un fade largo
+     * sonaba escalonado.
+     *
+     * Se guarda por índice y se cancela la anterior: durante el crossfade hay
+     * dos rampas vivas a la vez y no pueden pisarse entre sí.
+     */
+    const fadeVolume = (index, player, from, to, duration, done) => {
+      cancelFade(index);
       if (!player) { done?.(); return; }
-      const steps = 5;
+      const steps = Math.max(1, Math.round(duration / FADE_STEP_MS));
       let step = 0;
       try { player.setVolume(from); } catch { /* player todavía no listo */ }
       const interval = setInterval(() => {
         step += 1;
         try { player.setVolume(Math.round(from + ((to - from) * step) / steps)); } catch { /* noop */ }
         if (step >= steps) {
-          clearInterval(interval);
-          timersRef.current.delete(interval);
+          cancelFade(index);
           done?.();
         }
-      }, duration / steps);
+      }, FADE_STEP_MS);
+      fadesRef.current[index] = interval;
       timersRef.current.add(interval);
     };
 
@@ -209,28 +233,67 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       if (itemId !== latestCurrentRef.current?.id) { logBlocked(reason, itemId, playerIndex, "not-current-item", extra); return null; }
       if (!ownsCurrent(playerIndex, itemId))       { logBlocked(reason, itemId, playerIndex, "player-does-not-own-current", extra); return null; }
 
+      // Un intento que falló recién no se repite a la velocidad del reloj (cada
+      // 400 ms): se espera el cooldown y lo reintenta el tick siguiente, o ENDED.
+      const lastFail = advanceFailRef.current.get(itemId) ?? 0;
+      if (Date.now() - lastFail < ADVANCE_RETRY_MS) {
+        logBlocked(reason, itemId, playerIndex, "advance-retry-cooldown", extra); return null;
+      }
+
       advancedRef.current.add(itemId);
       logAdvance(reason, itemId, playerIndex, extra);
       try {
         await tvSongEnded(eventId, token, itemId, SERVER_REASON[reason] || "advance");
       } catch (error) {
         // El guard server-side rechaza los avances viejos: no es un fallo nuestro.
-        debug("avance rechazado por el servidor", reason, itemId, error.message);
+        //
+        // Pero la marca de idempotencia se pone ANTES del await, y si no se
+        // revierte el item queda quemado: ni el reloj ni ENDED pueden volver a
+        // pedir el avance, y la canción se muere ahí, muda y sin lluvia. Se
+        // revierte y se anota el fallo para no reintentar en bucle.
+        advancedRef.current.delete(itemId);
+        advanceFailRef.current.set(itemId, Date.now());
+        console.error("[TV] el servidor rechazó el avance", { itemId, reason, message: error.message });
         return null;
       }
+      advanceFailRef.current.delete(itemId);
       return itemId;
     };
 
     // ── Transiciones ────────────────────────────────────────────────────────
-    /** Lluvia + fade out del player activo. No decide nada por sí sola. */
+    /**
+     * Lluvia + rampa de bajada del player activo. No decide nada por sí sola.
+     *
+     * La bajada dura TODA la ventana de transición y el saliente NO se pausa
+     * acá: antes bajaba en 1 s y se pausaba, pero el swap recién ocurre a los
+     * TV_TRANSITION_MS, así que quedaban ~5 s de silencio bajo la lluvia. El
+     * saliente ahora sigue sonando hasta que el entrante está audible; lo pausa
+     * `finishSwap`, recién cuando ya hay con qué reemplazarlo.
+     */
     const runOutro = (sourceItem) => {
       setRainPhase("entering");
       later(() => setRainPhase("static"), 450);
-      const activePlayer = playersRef.current[activeIndexRef.current];
+      const index = activeIndexRef.current;
       const volume = sourceItem?.youtube_volume ?? 100;
-      fadeVolume(activePlayer, volume, 0, 1000, () => {
-        try { activePlayer?.pauseVideo(); } catch { /* noop */ }
-      });
+      debug(`Crossfade out — player ${index === 0 ? "A" : "B"} ${volume} → 0`);
+      fadeVolume(index, playersRef.current[index], volume, 0, TV_TRANSITION_MS);
+    };
+
+    /**
+     * La transición no prosperó (el servidor rechazó el avance). Se devuelve el
+     * saliente a su volumen y se lo asegura sonando: sin esto quedaba pausado y
+     * mudo con la lluvia ya apagada, que es una pantalla congelada en silencio.
+     */
+    const undoOutro = (sourceItem) => {
+      const index  = activeIndexRef.current;
+      const player = playersRef.current[index];
+      const volume = sourceItem?.youtube_volume ?? 100;
+      cancelFade(index);
+      try {
+        player?.setVolume(volume);
+        if (safeState(player) !== YT_STATE.PLAYING) player?.playVideo();
+      } catch { /* noop */ }
+      debug(`Crossfade abortado — player ${index === 0 ? "A" : "B"} vuelve a ${volume}`);
     };
 
     /**
@@ -254,6 +317,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       if (!ok && transitionRef.current === transition && !transition.targetId) {
         // No se pudo avanzar: se deshace la transición y sigue mandando el realtime.
         transitionRef.current = null;
+        undoOutro(sourceItem);
         setRainPhase("idle");
         setPhase(displayedItemRef.current ? "PLAYING" : "WAITING_NEXT");
       }
@@ -278,17 +342,29 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       if (!transition || transition.targetIndex !== index) return;
       if (!slot.itemId || transition.targetId !== slot.itemId) return;
 
-      const item    = slot.item;
-      const elapsed = Date.now() - transition.startedAt;
+      const item      = slot.item;
+      const elapsed   = Date.now() - transition.startedAt;
+      const remaining = Math.max(0, TV_TRANSITION_MS - elapsed);
+      const volume    = item.youtube_volume ?? 100;
+
+      // El entrante sube YA, en paralelo con la bajada del saliente: eso es lo
+      // que hace que sea un crossfade y no dos fades con un hueco en el medio.
+      // Antes esta rampa esperaba a que terminara la ventana entera.
+      debug(`Crossfade in — player ${index === 0 ? "A" : "B"} 0 → ${volume} en ${Math.max(800, remaining)}ms`);
+      fadeVolume(index, playersRef.current[index], 0, volume, Math.max(800, remaining));
+
       later(() => {
         if (transitionRef.current !== transition) return;
+        const previousIndex = activeIndexRef.current;
         activeIndexRef.current   = index;
         displayedItemRef.current = item;
         slotsRef.current[index].role     = "current";
         slotsRef.current[1 - index].role = "idle";
         setVisiblePlayer(index);
         setRainPhase("leaving");
-        fadeVolume(playersRef.current[index], 0, item.youtube_volume ?? 100, 1000);
+        // El saliente ya llegó a 0 con su propia rampa: recién ahora se pausa.
+        cancelFade(previousIndex);
+        try { playersRef.current[previousIndex]?.pauseVideo(); } catch { /* noop */ }
         later(() => setRainPhase("idle"), 700);
         transitionRef.current = null;
         skipStreakRef.current = 0;
@@ -296,7 +372,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
         setPlayerError(null);
         setPhase("PLAYING");
         debug(`Switching ${index === 0 ? "B → A" : "A → B"}`, item.id);
-      }, Math.max(0, TV_TRANSITION_MS - elapsed));
+      }, remaining);
     };
 
     // ── Carga de video ──────────────────────────────────────────────────────
@@ -572,6 +648,8 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       playersRef.current = [null, null];
       readyRef.current   = [false, false];
       slotsRef.current   = [emptySlot(), emptySlot()];
+      fadesRef.current   = [null, null];
+      effectFails.clear();
       transitionRef.current    = null;
       displayedItemRef.current = null;
       phaseRef.current = "IDLE";
