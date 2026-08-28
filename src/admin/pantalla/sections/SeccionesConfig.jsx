@@ -7,6 +7,8 @@ import SeccionKick from "./SeccionKick";
 import SeccionPoderes from "./SeccionPoderes";
 import SeccionTvLink from "./SeccionTvLink";
 import SeccionInvitados from "./SeccionInvitados";
+import SeccionIngreso from "./SeccionIngreso";
+import SeccionLimpieza from "./SeccionLimpieza";
 import SeccionReset from "./SeccionReset";
 
 /**
@@ -28,6 +30,8 @@ export default function SeccionesConfig(shared) {
       <SeccionPoderes {...shared} />
       <SeccionTvLink {...shared} />
       <SeccionInvitados {...shared} />
+      <SeccionIngreso {...shared} />
+      <SeccionLimpieza {...shared} />
 
       {/* Zona roja: siempre al fondo de la columna. */}
       <SeccionReset {...shared} />
