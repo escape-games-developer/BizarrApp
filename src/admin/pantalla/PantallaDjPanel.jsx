@@ -4,43 +4,27 @@ import { usePantallaAdmin, usePantallaStats } from "../../hooks/realtime/usePant
 import { listEvents, createEvent } from "../../services/pantallaDj";
 import { mensajeAmigable } from "../../components/pantalla/pantallaUi";
 import pantallaCss from "./pantallaStyles";
-import EventoHeader from "./EventoHeader";
-import EventoTab from "./EventoTab";
-import PlaylistTab from "./PlaylistTab";
-import ReglasTab from "./ReglasTab";
-import DjConsoleTab from "./DjConsoleTab";
-import InvitadosTab from "./InvitadosTab";
-import HistorialTab from "./HistorialTab";
 import PantallaEditor from "./PantallaEditor";
+import PantallaConsola from "./PantallaConsola";
 import SeccionesConfig from "./sections/SeccionesConfig";
 
 /**
  * Admin › Escenario › Pantalla / Escenario.
  *
- * Shell del módulo: selector de evento, cabecera común y pestañas. Los datos
- * pesados (evento + playlist, participantes + votos + historial) se cargan acá
- * una sola vez y bajan por props, así ninguna pestaña duplica suscripciones.
+ * Shell del módulo: selector de evento y carga de datos. Los datos pesados
+ * (evento + playlist, participantes + votos + historial) se cargan acá una sola
+ * vez y bajan por props, así ninguna vista duplica suscripciones.
+ *
+ * El sidebar entra por dos puertas al mismo módulo: «Editor» abre la
+ * configuración del evento y «En vivo» la cabina del DJ. Son dos disposiciones
+ * de las mismas secciones, no dos módulos.
  */
 
 const LS_KEY = "bizarrapp_pantalla_event";
 
-const TABS = [
-  { id: "dj",            label: "🎧 Consola DJ"    },
-  { id: "evento",        label: "🎬 Evento"        },
-  { id: "playlist",      label: "🎵 Playlist"      },
-  { id: "reglas",        label: "⚙️ Reglas"        },
-  { id: "participantes", label: "👥 Participantes" },
-  { id: "historial",     label: "🕘 Historial"     },
-];
-
-// El sidebar entra por dos puertas distintas al mismo módulo: «Editor» abre la
-// configuración del evento y «En vivo» la cabina del DJ.
-const TAB_INICIAL = { editor: "evento", live: "dj" };
-
 export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = null }) {
   const [events,  setEvents]  = useState([]);
   const [eventId, setEventId] = useState(() => localStorage.getItem(LS_KEY) || null);
-  const [tab,     setTab]     = useState(() => TAB_INICIAL[modo] || "dj");
   const [error,   setError]   = useState(null);
   const [busy,    setBusy]    = useState(false);
 
@@ -63,17 +47,11 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
         if (prev && list.some((e) => e.id === prev)) return prev;
         return enVivo?.id || list[0]?.id || null;
       });
-      // Con un evento en vivo lo primero es la cabina; si no, hay que
-      // configurarlo, así que arranca en Evento.
-      if (!enVivo) setTab((t) => (t === "dj" ? "evento" : t));
     } catch (err) { fallar(err); }
   }, [fallar]);
 
   useEffect(() => { refreshEvents(); }, [refreshEvents]);
   useEffect(() => { if (eventId) localStorage.setItem(LS_KEY, eventId); }, [eventId]);
-  // El panel no se desmonta al saltar de Editor a En vivo desde el sidebar:
-  // es el mismo componente con otra prop, así que la pestaña se reajusta acá.
-  useEffect(() => { setTab(TAB_INICIAL[modo] || "dj"); }, [modo]);
 
   const nuevoEvento = async () => {
     const nombre = window.prompt("Nombre del evento:", "Pantalla Bizarren");
@@ -83,7 +61,6 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
       const id = await createEvent(nombre, sessionId ?? null);
       await refreshEvents();
       setEventId(id);
-      setTab("playlist");
     } catch (err) { fallar(err); }
     finally { setBusy(false); }
   };
@@ -92,7 +69,7 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
     event: ev.event, items: ev.items, candidates: ev.candidates, current: ev.current,
     participants: admin.participants, votes: admin.votes, history: admin.history,
     stats, refresh: ev.refresh, refreshAdmin: admin.refresh,
-    refreshEvents, setEventId, setTab, onError: fallar, goTo,
+    refreshEvents, setEventId, onError: fallar, goTo,
   };
 
   return (
@@ -155,33 +132,8 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
         <PantallaEditor shared={shared} secciones={<SeccionesConfig {...shared} />} />
       )}
 
-      {ev.event && modo !== "editor" && (
-        <>
-          <EventoHeader
-            event={ev.event}
-            items={ev.items}
-            activos={stats.activos}
-            onIrConsola={tab !== "dj" ? () => setTab("dj") : null}
-            onError={fallar}
-          />
-
-          <div className="pdj-tabs">
-            {TABS.map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`pdj-tab${tab === t.id ? " pdj-tab-on" : ""}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {tab === "dj"            && <DjConsoleTab {...shared} />}
-          {tab === "evento"        && <EventoTab    {...shared} />}
-          {tab === "playlist"      && <PlaylistTab  {...shared} />}
-          {tab === "reglas"        && <ReglasTab    {...shared} />}
-          {tab === "participantes" && <InvitadosTab {...shared} />}
-          {tab === "historial"     && <HistorialTab {...shared} />}
-        </>
-      )}
+      {/* En vivo: la cabina del DJ, misma arquitectura de secciones. */}
+      {ev.event && modo !== "editor" && <PantallaConsola shared={shared} />}
     </div>
   );
 }
