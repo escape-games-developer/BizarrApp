@@ -8,11 +8,12 @@ import PanelSection from "../PanelSection";
  * sidebar bajo «Diseñadores de Pantalla». Acá no se duplica ni se reimplementa:
  * el botón sólo lleva a esa sección.
  *
- * Dos cosas siguen pendientes y se dicen en pantalla en vez de esconderlas:
- *  - el diseñador de la pantalla del invitado todavía no existe como componente;
- *  - el diseñador de TV guarda en el localStorage del navegador, no en
- *    `pantalla_events.tv_canvas_config`. La columna existe, pero nada la escribe
- *    todavía, así que el diseño no viaja a la TV ni a otra máquina.
+ * El diseñador de TV ahora guarda en `pantalla_events.tv_canvas_config`, así que
+ * el diseño viaja con el evento y ya no depende del navegador donde se hizo.
+ * Sigue escribiendo además una copia en localStorage porque la vista `/tv` de
+ * hoy lee de ahí; migrar esa lectura es un cambio del lado de la TV.
+ *
+ * El diseñador de la pantalla del invitado todavía no existe como componente.
  */
 export default function SeccionDisenadores({ event, goTo }) {
   const tvGuardado    = !!event.tv_canvas_config;
@@ -23,10 +24,10 @@ export default function SeccionDisenadores({ event, goTo }) {
       <div className="pdj-sec-aviso">
         <span style={{ flexShrink: 0 }}>🕓</span>
         <span>
-          El diseñador de TV guarda el diseño en este navegador, no en la base. Las columnas
-          <code style={{ margin: "0 3px" }}>tv_canvas_config</code> y
-          <code style={{ margin: "0 3px" }}>guest_canvas_config</code> ya existen pero todavía
-          nadie las escribe: el diseño no viaja a la TV ni a otra computadora.
+          El diseño ya se guarda en <code>tv_canvas_config</code> y viaja con el evento. La
+          vista <code>/tv</code> todavía lo lee de la copia local del navegador: hasta que se
+          migre esa lectura, abrí el diseñador en la misma máquina del proyector o guardá una
+          vez desde ahí.
         </span>
       </div>
 

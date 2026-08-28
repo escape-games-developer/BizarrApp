@@ -13,14 +13,24 @@ function load(base, sessionId, fallback) {
   }
 }
 
-export function loadTvConfig(sessionId) {
-  const loaded = load(KEY_TV, sessionId, DEFAULT_TV_CONFIG);
+/**
+ * Completa los campos que una config vieja puede no traer.
+ *
+ * Se exporta porque ahora el diseño también puede venir de
+ * `pantalla_events.tv_canvas_config`, y esa hay que normalizarla igual que la
+ * que sale de localStorage.
+ */
+export function normalizeTvConfig(loaded) {
   const normalizeBlocks = blocks => Object.fromEntries(Object.entries(blocks || {}).map(([id, block]) => [id, {
     ...block,
     border: { enabled: false, ...block.border },
     content: { text: "", textPosition: "bottom", textSize: 16, textColor: "#ffffff", bold: true, ...block.content },
   }]));
   return { ...loaded, blocks: normalizeBlocks(loaded.blocks), customBlocks: normalizeBlocks(loaded.customBlocks) };
+}
+
+export function loadTvConfig(sessionId) {
+  return normalizeTvConfig(load(KEY_TV, sessionId, DEFAULT_TV_CONFIG));
 }
 function save(base, sessionId, config) {
   try {

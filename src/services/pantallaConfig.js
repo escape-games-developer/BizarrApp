@@ -228,6 +228,34 @@ export async function savePhysicalPrizeCode(eventId, code) {
   return true;
 }
 
+// ── Diseño de las pantallas (canvas) ─────────────────────────────────────────
+//
+// `tv_canvas_config` y `guest_canvas_config` son jsonb en `pantalla_events`.
+// Guardar el diseño acá y no en localStorage es lo que hace que viaje: la
+// máquina del proyector y la del DJ dejan de tener cada una el suyo.
+
+const COLUMNA_CANVAS = { tv: "tv_canvas_config", guest: "guest_canvas_config" };
+
+export async function fetchCanvasConfig(eventId, cual) {
+  const columna = COLUMNA_CANVAS[cual];
+  if (!eventId || !columna) return null;
+  const { data, error } = await supabase.from("pantalla_events")
+    .select(columna).eq("id", eventId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.[columna] ?? null;
+}
+
+export async function saveCanvasConfig(eventId, cual, config) {
+  const columna = COLUMNA_CANVAS[cual];
+  if (!columna) throw new Error("canvas desconocido");
+  const { data, error } = await supabase.from("pantalla_events")
+    .update({ [columna]: config, updated_at: ahora() })
+    .eq("id", eventId).select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error(CERO_FILAS);
+  return true;
+}
+
 // ── Base de contactos (4.4) ──────────────────────────────────────────────────
 export const fetchContacts = (eventId) =>
   leer("pantalla_contacts", eventId, "created_at");
