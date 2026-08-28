@@ -8,6 +8,7 @@ import SeccionPoderes from "./SeccionPoderes";
 import SeccionTvLink from "./SeccionTvLink";
 import SeccionInvitados from "./SeccionInvitados";
 import SeccionIngreso from "./SeccionIngreso";
+import SeccionContactos from "./SeccionContactos";
 import SeccionLimpieza from "./SeccionLimpieza";
 import SeccionEmojis from "./SeccionEmojis";
 import SeccionRegalosVip from "./SeccionRegalosVip";
@@ -43,6 +44,7 @@ export default function SeccionesConfig(shared) {
       <SeccionTvLink {...shared} />
       <SeccionInvitados {...shared} />
       <SeccionIngreso {...shared} />
+      <SeccionContactos {...shared} />
       <SeccionLimpieza {...shared} />
       <SeccionEmojis {...shared} />
       <SeccionRegalosVip {...shared} />
