@@ -246,6 +246,27 @@ export async function setVotePower(eventId, role, voteType, patch) {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Guarda varias celdas de la matriz de poderes de una sola vez.
+ * Misma verificación de filas que `saveEventFields`: cero filas sin error es RLS.
+ */
+export async function saveVotePowers(eventId, rows) {
+  if (!rows.length) return 0;
+  const ahora = new Date().toISOString();
+  const { data, error } = await supabase.from("pantalla_vote_powers")
+    .upsert(
+      rows.map((r) => ({
+        event_id: eventId, role: r.role, vote_type: r.vote_type,
+        enabled: r.enabled, value: r.value, updated_at: ahora,
+      })),
+      { onConflict: "event_id,role,vote_type" },
+    )
+    .select("role");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("rls_sin_filas");
+  return data.length;
+}
+
 // ── TV (sin sesión, autorizada por token) ───────────────────────────────────
 
 export const resolveTv = (code, token) =>
