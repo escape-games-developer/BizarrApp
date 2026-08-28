@@ -16,6 +16,8 @@ import SeccionVisual from "./SeccionVisual";
 import SeccionDisenadores from "./SeccionDisenadores";
 import SeccionTandas from "./SeccionTandas";
 import SeccionTransicion from "./SeccionTransicion";
+import SeccionRecompensas from "./SeccionRecompensas";
+import SeccionCartelesTv from "./SeccionCartelesTv";
 import SeccionReset from "./SeccionReset";
 
 /**
@@ -46,6 +48,8 @@ export default function SeccionesConfig(shared) {
       <SeccionDisenadores {...shared} />
       <SeccionTandas {...shared} />
       <SeccionTransicion {...shared} />
+      <SeccionRecompensas {...shared} />
+      <SeccionCartelesTv {...shared} />
 
       {/* Zona roja: siempre al fondo de la columna. */}
       <SeccionReset {...shared} />
