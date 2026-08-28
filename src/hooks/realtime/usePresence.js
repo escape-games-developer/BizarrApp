@@ -18,14 +18,20 @@ const INACTIVE_THRESHOLD = 120;    // 2 minutos en segundos
  * Al montar: hace check-in (INSERT en connected_users)
  * Cada 30s:  actualiza last_seen (heartbeat)
  * Al desmontar: no borra la fila (el admin puede ver historial de la noche)
+ *
+ * `isGuest` entra en la guarda del check-in: el invitado no tiene `geoOk`
+ * (nunca se lo persistimos a propósito) y sin esto quedaba fuera de
+ * connected_users — invisible en el contador del admin y afuera del sorteo.
+ * No afecta al kick: el umbral lo calcula `pantalla__active_count` sobre
+ * `pantalla_participants`, donde el invitado ya entra por su propia vía.
  */
-export function usePresence(sessionId, user) {
+export function usePresence(sessionId, user, isGuest = false) {
   const [isCheckedIn,   setIsCheckedIn]   = useState(false);
   const [connectedCount, setConnectedCount] = useState(0);
   const heartbeatRef = useRef(null);
 
   const checkIn = useCallback(async () => {
-    if (!sessionId || !user?.id || !user?.geoOk) return;
+    if (!sessionId || !user?.id || (!user?.geoOk && !isGuest)) return;
 
     const { error } = await supabase
       .from("connected_users")
@@ -45,7 +51,7 @@ export function usePresence(sessionId, user) {
 
     if (!error) setIsCheckedIn(true);
     else console.error("[usePresence] Check-in error:", error);
-  }, [sessionId, user]);
+  }, [sessionId, user, isGuest]);
 
   const heartbeat = useCallback(async () => {
     if (!sessionId || !user?.id) return;

@@ -145,7 +145,7 @@ function TemaCard({
 }
 
 // ─── Vista ───────────────────────────────────────────────────────────────────
-export default function DjVotingTab({ user, isRestricted = false, onGoProfile }) {
+export default function DjVotingTab({ user, isRestricted = false, isGuest = false, onGoProfile }) {
   const { event, candidates, current, loading } = usePantallaEvent({ discoverLive: true });
   const cli = usePantallaClient(event, user);
   const [flash, setFlash] = useState(null);
@@ -191,13 +191,19 @@ export default function DjVotingTab({ user, isRestricted = false, onGoProfile })
   const up    = cli.powerOf("up");
   const down  = cli.powerOf("down");
   const super_ = cli.powerOf("super_up");
-  const puedeVotar = !isRestricted && Boolean(user?.registered) && !event.voting_disabled;
+  // El invitado vota: su sesión anónima tiene un auth.uid() propio, que es lo
+  // que la votación necesita para contar un voto por persona. `registered`
+  // sigue en false y así queda — no le escribimos nada a la base para esto.
+  const puedeVotar = !isRestricted && (Boolean(user?.registered) || isGuest)
+                     && !event.voting_disabled;
 
-  const aviso = !user?.registered
-    ? { txt: "Registrate para votar. La votación usa tu cuenta, así cada persona vota una sola vez.", cta: "👤 Registrarme" }
-    : isRestricted
-      ? { txt: "Verificá tu ubicación en el bar para poder votar.", cta: "📍 Verificar ubicación" }
-      : null;
+  const aviso = isGuest
+    ? null
+    : !user?.registered
+      ? { txt: "Registrate para votar. La votación usa tu cuenta, así cada persona vota una sola vez.", cta: "👤 Registrarme" }
+      : isRestricted
+        ? { txt: "Verificá tu ubicación en el bar para poder votar.", cta: "📍 Verificar ubicación" }
+        : null;
 
   return (
     <>

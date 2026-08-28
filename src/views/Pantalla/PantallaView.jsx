@@ -122,7 +122,7 @@ function VideosTab({ videos, loading, error, onSendVideo, user }) {
   );
 }
 
-export default function PantallaView({ user, messages, onSend, isRestricted, onGoProfile, ytConfig, onSendVideo }) {
+export default function PantallaView({ user, messages, onSend, isRestricted, isGuest = false, onGoProfile, ytConfig, onSendVideo }) {
   // El QR del evento apunta a /?pantallaCode=XXXXXX: abre directo la votación.
   const [tab, setTab] = useState(() =>
     new URLSearchParams(window.location.search).get("pantallaCode") ? "dj" : "mensajes");
@@ -162,7 +162,7 @@ export default function PantallaView({ user, messages, onSend, isRestricted, onG
       {tab==="mensajes"&&(isRestricted ? bloqueado : <MensajesTab user={user} messages={messages} onSend={onSend}/>)}
       {tab==="videos"&&(isRestricted ? bloqueado : <VideosTab videos={playlists.videos||[]} loading={loading} error={errors.videos} onSendVideo={onSendVideo} user={user}/>)}
       {/* Votación musical en vivo (módulo Pantalla/Escenario) */}
-      {tab==="dj"&&<DjVotingTab user={user} isRestricted={isRestricted} onGoProfile={onGoProfile}/>}
+      {tab==="dj"&&<DjVotingTab user={user} isRestricted={isRestricted} isGuest={isGuest} onGoProfile={onGoProfile}/>}
     </div>
   );
 }

@@ -57,7 +57,7 @@ export default function BizarrApp() {
   const { session, gameState, loading: stateLoading } = useGameState();
 
   // Presencia: check-in del usuario en la sesión activa
-  usePresence(session?.id, user);
+  usePresence(session?.id, user, isGuest);
 
   // Mensajes del usuario
   const { messages, send: sendMsg } = useMessages(session?.id, "user");
@@ -128,7 +128,7 @@ export default function BizarrApp() {
         return <PantallaView user={user}
                  messages={messages.filter(m => m.user_id === user?.id)}
                  onSend={text => sendMsg(text, user)}
-                 isRestricted={isRestricted} onGoProfile={goProfile} ytConfig={ytConfig}
+                 isRestricted={isRestricted} isGuest={isGuest} onGoProfile={goProfile} ytConfig={ytConfig}
                  onSendVideo={(video) => sendVideo({ ytId: video.ytId, title: video.title, artist: video.artist, user })}/>;
       case "profile":
         if (!user?.registered) {
