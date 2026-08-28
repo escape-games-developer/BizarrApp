@@ -154,6 +154,38 @@ export const updatePhysicalPrize = (id, patch) =>
 export const deletePhysicalPrize = (id) =>
   borrar("pantalla_physical_prizes", supabase.from("pantalla_physical_prizes").delete().eq("id", id));
 
+// ── Código de canje del premio físico ────────────────────────────────────────
+//
+// Vive en `pantalla_event_secrets`, que NO tiene policy de lectura pública: es
+// la misma tabla del token de la TV. Por eso el código no puede salir por REST
+// hacia un invitado ni aparecer en ninguna respuesta que él pueda pedir.
+//
+// Las dos funciones usan `supabase` (cliente con sesión). Nunca `supabaseAnon`:
+// sin sesión, `pantalla_can_manage` es falso y no devolverían nada.
+
+export async function fetchPhysicalPrizeCode(eventId) {
+  const { data, error } = await supabase.from("pantalla_event_secrets")
+    .select("physical_prize_code").eq("event_id", eventId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.physical_prize_code ?? null;
+}
+
+/**
+ * La fila de secretos puede no existir todavía (la crea `pantalla_get_tv_link`).
+ * El upsert sólo manda `event_id` y el código: en un conflicto, PostgREST
+ * actualiza nada más que esas columnas, así que `tv_access_token` queda intacto
+ * y nadie pierde el acceso de la TV por guardar un código de canje.
+ */
+export async function savePhysicalPrizeCode(eventId, code) {
+  const { data, error } = await supabase.from("pantalla_event_secrets")
+    .upsert({ event_id: eventId, physical_prize_code: code || null },
+            { onConflict: "event_id" })
+    .select("event_id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error(CERO_FILAS);
+  return true;
+}
+
 // ── Base de contactos (4.4) ──────────────────────────────────────────────────
 export const fetchContacts = (eventId) =>
   leer("pantalla_contacts", eventId, "created_at");
