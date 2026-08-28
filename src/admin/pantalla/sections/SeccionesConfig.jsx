@@ -5,6 +5,7 @@ import SeccionReglas from "./SeccionReglas";
 import SeccionKick from "./SeccionKick";
 import SeccionPoderes from "./SeccionPoderes";
 import SeccionTvLink from "./SeccionTvLink";
+import SeccionInvitados from "./SeccionInvitados";
 
 /**
  * Columna de configuración del editor: el orden en que el DJ arma una noche.
@@ -23,6 +24,7 @@ export default function SeccionesConfig(shared) {
       <SeccionKick {...shared} />
       <SeccionPoderes {...shared} />
       <SeccionTvLink {...shared} />
+      <SeccionInvitados {...shared} />
     </>
   );
 }
