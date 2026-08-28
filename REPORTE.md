@@ -95,3 +95,33 @@ Excepción: con el sidebar **colapsado** (60px) no hay lugar para labels, así q
 
 _(se completa a medida que avanza el bucle)_
 
+
+---
+
+## Cambio de premisa a mitad de camino — FASE 4
+
+**El respaldo de base de la FASE 4 apareció mientras corría el bucle.**
+
+Al arrancar (FASE 0) `pantalla_events` tenía **29 columnas** y las únicas tablas del módulo
+eran `pantalla_events`, `_playlist_items`, `_votes`, `_kick_votes`, `_participants`,
+`_play_history`, `_reactions`, `_vote_powers` y `_event_secrets`.
+
+Al terminar la FASE 3, la misma consulta devolvía `pantalla_events` con **74 columnas** y
+**12 tablas nuevas**: `pantalla_achievements`, `_ad_clips`, `_contacts`, `_emoji_packs`,
+`_gifs`, `_granted_rewards`, `_physical_prizes`, `_playlist_presets`, `_prizes`,
+`_short_links`, `_teams`, `_vip_gifts`. Todas con RLS habilitada y policy
+`pantalla_can_manage(event_id)` para escritura de admin.
+
+La condición que define la FASE 4 en la consigna — *«SIN respaldo en la base todavía»* — dejó
+de cumplirse. La consigna también dice, en la FASE 3: *«Verificá cada nombre de columna contra
+la base antes de escribir el update; no confíes en este documento como fuente única»*.
+
+**Decisión tomada:** implementar las secciones de FASE 4 **funcionando de verdad** contra el
+schema que existe, verificando cada nombre de columna y cada CHECK contra la base. Se deja en
+`status="pendiente"` y deshabilitado únicamente lo que sigue sin respaldo real:
+
+- lo que necesita **subida de archivos** a Storage (logo, imagen de fondo, MP3 de tandas),
+- lo que necesita un **job de servidor** que no existe (limpieza automática de invitados),
+- el **Diseñador de Pantalla del Invitado**, que no existe como componente.
+
+Cada sección de FASE 4 dice en el reporte final contra qué columna/tabla escribe.
