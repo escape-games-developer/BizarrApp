@@ -234,6 +234,43 @@ export async function updateItem(itemId, patch) {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Reordena la playlist: recibe la lista de ids en el orden nuevo y sube sólo
+ * las filas cuya posición cambió. Va de a tandas para no abrir 400 requests
+ * en paralelo con una playlist grande.
+ */
+export async function reorderItems(idsEnOrden, posicionActual) {
+  const cambios = [];
+  idsEnOrden.forEach((id, i) => {
+    if (posicionActual.get(id) !== i + 1) cambios.push({ id, position: i + 1 });
+  });
+  for (let i = 0; i < cambios.length; i += 25) {
+    await Promise.all(cambios.slice(i, i + 25).map(({ id, position }) =>
+      supabase.from("pantalla_playlist_items").update({ position }).eq("id", id)
+        .then(({ error }) => { if (error) throw new Error(error.message); })));
+  }
+  return cambios.length;
+}
+
+/** Borra varios temas de una. Devuelve cuántos se fueron de verdad. */
+export async function deleteItems(ids) {
+  if (!ids.length) return 0;
+  const { data, error } = await supabase.from("pantalla_playlist_items")
+    .delete().in("id", ids).select("id");
+  if (error) throw new Error(error.message);
+  return data?.length || 0;
+}
+
+/** Habilita o deshabilita varios temas de una. */
+export async function setItemsEnabled(ids, enabled) {
+  if (!ids.length) return 0;
+  const { data, error } = await supabase.from("pantalla_playlist_items")
+    .update({ enabled, updated_at: new Date().toISOString() }).in("id", ids).select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("rls_sin_filas");
+  return data.length;
+}
+
 export async function deleteItem(itemId) {
   const { error } = await supabase.from("pantalla_playlist_items").delete().eq("id", itemId);
   if (error) throw new Error(error.message);

@@ -281,6 +281,44 @@ const pantallaCss = `
   .pdj-guardar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px;}
   .pdj-guardar-msg{font-size:10.5px;font-weight:700;line-height:1.4;}
 
+  /* ── Playlist del editor ────────────────────────────────────────────── */
+  .pdj-plbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+  .pdj-plsel{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:8px 11px;
+    border-radius:11px;margin-bottom:10px;font-size:11px;
+    background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.24);color:#00E5FF;}
+
+  .pdj-fila{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:12px;
+    margin-bottom:5px;background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.07);
+    transition:border-color .14s,background .14s;}
+  .pdj-fila:hover{border-color:rgba(155,47,255,.28);}
+  .pdj-fila-sonando{border-color:rgba(255,45,120,.45);background:rgba(255,45,120,.07);}
+  .pdj-fila-off{opacity:.45;}
+  .pdj-fila-sel{border-color:rgba(0,229,255,.45);background:rgba(0,229,255,.07);}
+  .pdj-fila-drag{opacity:.35;}
+  .pdj-fila-drop{border-top:2px solid #FFD600;}
+  .pdj-fila-asa{cursor:grab;font-size:13px;color:rgba(240,232,255,.25);flex-shrink:0;
+    padding:0 1px;user-select:none;}
+  .pdj-fila-asa:active{cursor:grabbing;}
+  .pdj-fila-pos{width:38px;flex-shrink:0;padding:3px 2px;border-radius:7px;text-align:center;
+    font-family:'Syne',sans-serif;font-weight:800;font-size:11px;color:#FFD600;
+    background:rgba(255,214,0,.08);border:1px solid rgba(255,214,0,.16);outline:none;}
+  .pdj-fila-pos:focus{border-color:rgba(255,214,0,.5);}
+  .pdj-fila-cover{width:34px;height:34px;border-radius:8px;object-fit:cover;flex-shrink:0;}
+  .pdj-fila-info{flex:1;min-width:0;}
+  .pdj-fila-tit{font-size:12px;font-weight:700;color:#F0E8FF;line-height:1.25;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pdj-fila-art{font-size:10px;color:rgba(240,232,255,.38);margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pdj-fila-acts{display:flex;gap:2px;flex-shrink:0;align-items:center;}
+  .pdj-fila-det{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;
+    padding:9px 11px 11px 44px;margin:-4px 0 6px;border-radius:0 0 12px 12px;
+    background:rgba(155,47,255,.05);border:1px solid rgba(155,47,255,.16);border-top:none;}
+  .pdj-fila-det label{font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+    color:rgba(240,232,255,.35);display:block;margin-bottom:3px;}
+  .pdj-fila-det input{width:100%;padding:5px 7px;border-radius:8px;font-size:11px;
+    background:rgba(240,232,255,.06);color:#F0E8FF;border:1px solid rgba(240,232,255,.12);outline:none;}
+  .pdj-fila-det input:focus{border-color:rgba(155,47,255,.5);}
+
   /* ── Pestañas del módulo ────────────────────────────────────────────── */
   .pdj-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;}
   .pdj-tab{flex:1 1 auto;padding:9px 12px;border-radius:11px;cursor:pointer;white-space:nowrap;

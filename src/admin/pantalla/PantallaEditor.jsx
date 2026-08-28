@@ -1,4 +1,4 @@
-import PlaylistTab from "./PlaylistTab";
+import PlaylistPanel from "./playlist/PlaylistPanel";
 import EventNameEditor from "./EventNameEditor";
 import { P, ESTADO_EVENTO } from "../../components/pantalla/pantallaUi";
 
@@ -38,7 +38,7 @@ export default function PantallaEditor({ shared, secciones }) {
           </div>
         </div>
 
-        <PlaylistTab {...shared} />
+        <PlaylistPanel {...shared} />
       </div>
 
       {/* ── Columna lateral: configuración ───────────────────────────── */}
