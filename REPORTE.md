@@ -98,37 +98,14 @@ _(se completa a medida que avanza el bucle)_
 
 ---
 
-## Cambio de premisa a mitad de camino — FASE 4
+## Segunda pasada — Schema v2 (28/08)
 
-**El respaldo de base de la FASE 4 apareció mientras corría el bucle.**
+La primera pasada corrió mientras se aplicaban las migraciones: el schema creció de 29 a 74
+columnas en `pantalla_events` y aparecieron 12 tablas nuevas en el medio del bucle. La
+segunda pasada trabaja ya sobre el contrato **Pantalla / DJ — Schema v2** y cierra lo que
+faltaba: forma real de `levels`, código de canje en `pantalla_event_secrets`, contactos y
+filtro como secciones propias, cola de tandas reordenable, persistencia del diseñador en
+`tv_canvas_config` y sorteos manuales sobre `pantalla_granted_rewards`.
 
-Al arrancar (FASE 0) `pantalla_events` tenía **29 columnas** y las únicas tablas del módulo
-eran `pantalla_events`, `_playlist_items`, `_votes`, `_kick_votes`, `_participants`,
-`_play_history`, `_reactions`, `_vote_powers` y `_event_secrets`.
-
-Al terminar la FASE 3, la misma consulta devolvía `pantalla_events` con **74 columnas** y
-**12 tablas nuevas**: `pantalla_achievements`, `_ad_clips`, `_contacts`, `_emoji_packs`,
-`_gifs`, `_granted_rewards`, `_physical_prizes`, `_playlist_presets`, `_prizes`,
-`_short_links`, `_teams`, `_vip_gifts`. Todas con RLS habilitada y policy
-`pantalla_can_manage(event_id)` para escritura de admin.
-
-La condición que define la FASE 4 en la consigna — *«SIN respaldo en la base todavía»* — dejó
-de cumplirse. La consigna también dice, en la FASE 3: *«Verificá cada nombre de columna contra
-la base antes de escribir el update; no confíes en este documento como fuente única»*.
-
-**Decisión tomada:** implementar las secciones de FASE 4 **funcionando de verdad** contra el
-schema que existe, verificando cada nombre de columna y cada CHECK contra la base. Se deja en
-`status="pendiente"` y deshabilitado únicamente lo que sigue sin respaldo real:
-
-- lo que necesita **subida de archivos** a Storage (logo, imagen de fondo, MP3 de tandas),
-- lo que necesita un **job de servidor** que no existe (limpieza automática de invitados),
-- el **Diseñador de Pantalla del Invitado**, que no existe como componente.
-
-Cada sección de FASE 4 dice en el reporte final contra qué columna/tabla escribe.
-
----
-
-## Resultado
-
-El detalle ítem por ítem, los archivos tocados, el estado real del schema y los hallazgos
-sin tocar están en **[REPORTE_FINAL.md](REPORTE_FINAL.md)**.
+El detalle ítem por ítem, los archivos, la lógica de servidor pendiente y los hallazgos sin
+tocar están en **[REPORTE_FINAL.md](REPORTE_FINAL.md)**.
