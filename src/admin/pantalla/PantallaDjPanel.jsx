@@ -31,10 +31,14 @@ const TABS = [
   { id: "historial",     label: "🕘 Historial"     },
 ];
 
-export default function PantallaDjPanel({ sec, sessionId }) {
+// El sidebar entra por dos puertas distintas al mismo módulo: «Editor» abre la
+// configuración del evento y «En vivo» la cabina del DJ.
+const TAB_INICIAL = { editor: "evento", live: "dj" };
+
+export default function PantallaDjPanel({ sec, sessionId, modo = "live" }) {
   const [events,  setEvents]  = useState([]);
   const [eventId, setEventId] = useState(() => localStorage.getItem(LS_KEY) || null);
-  const [tab,     setTab]     = useState("dj");
+  const [tab,     setTab]     = useState(() => TAB_INICIAL[modo] || "dj");
   const [error,   setError]   = useState(null);
   const [busy,    setBusy]    = useState(false);
 
@@ -65,6 +69,9 @@ export default function PantallaDjPanel({ sec, sessionId }) {
 
   useEffect(() => { refreshEvents(); }, [refreshEvents]);
   useEffect(() => { if (eventId) localStorage.setItem(LS_KEY, eventId); }, [eventId]);
+  // El panel no se desmonta al saltar de Editor a En vivo desde el sidebar:
+  // es el mismo componente con otra prop, así que la pestaña se reajusta acá.
+  useEffect(() => { setTab(TAB_INICIAL[modo] || "dj"); }, [modo]);
 
   const nuevoEvento = async () => {
     const nombre = window.prompt("Nombre del evento:", "Pantalla Bizarren");
