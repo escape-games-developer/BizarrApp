@@ -37,7 +37,7 @@ const TABS = [
 // configuración del evento y «En vivo» la cabina del DJ.
 const TAB_INICIAL = { editor: "evento", live: "dj" };
 
-export default function PantallaDjPanel({ sec, sessionId, modo = "live" }) {
+export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = null }) {
   const [events,  setEvents]  = useState([]);
   const [eventId, setEventId] = useState(() => localStorage.getItem(LS_KEY) || null);
   const [tab,     setTab]     = useState(() => TAB_INICIAL[modo] || "dj");
@@ -92,7 +92,7 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live" }) {
     event: ev.event, items: ev.items, candidates: ev.candidates, current: ev.current,
     participants: admin.participants, votes: admin.votes, history: admin.history,
     stats, refresh: ev.refresh, refreshAdmin: admin.refresh,
-    refreshEvents, setEventId, setTab, onError: fallar,
+    refreshEvents, setEventId, setTab, onError: fallar, goTo,
   };
 
   return (

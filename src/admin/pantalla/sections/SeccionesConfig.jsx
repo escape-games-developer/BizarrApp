@@ -13,6 +13,7 @@ import SeccionEmojis from "./SeccionEmojis";
 import SeccionRegalosVip from "./SeccionRegalosVip";
 import SeccionEquipos from "./SeccionEquipos";
 import SeccionVisual from "./SeccionVisual";
+import SeccionDisenadores from "./SeccionDisenadores";
 import SeccionReset from "./SeccionReset";
 
 /**
@@ -40,6 +41,7 @@ export default function SeccionesConfig(shared) {
       <SeccionRegalosVip {...shared} />
       <SeccionEquipos {...shared} />
       <SeccionVisual {...shared} />
+      <SeccionDisenadores {...shared} />
 
       {/* Zona roja: siempre al fondo de la columna. */}
       <SeccionReset {...shared} />
