@@ -19,6 +19,7 @@ import SeccionTransicion from "./SeccionTransicion";
 import SeccionRecompensas from "./SeccionRecompensas";
 import SeccionCartelesTv from "./SeccionCartelesTv";
 import SeccionPresets from "./SeccionPresets";
+import SeccionLinkCorto from "./SeccionLinkCorto";
 import SeccionReset from "./SeccionReset";
 
 /**
@@ -52,6 +53,7 @@ export default function SeccionesConfig(shared) {
       <SeccionRecompensas {...shared} />
       <SeccionCartelesTv {...shared} />
       <SeccionPresets {...shared} />
+      <SeccionLinkCorto {...shared} />
 
       {/* Zona roja: siempre al fondo de la columna. */}
       <SeccionReset {...shared} />
