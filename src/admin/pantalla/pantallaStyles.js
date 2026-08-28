@@ -245,6 +245,42 @@ const pantallaCss = `
   .pdj-mini-a{background:rgba(255,214,0,.12);border-color:rgba(255,214,0,.32);color:#FFD600;}
   .pdj-mini-r{background:rgba(255,45,120,.1);border-color:rgba(255,45,120,.28);color:#FCA5A5;}
 
+  /* ── Shell del editor: playlist a la izquierda, configuración a la derecha ── */
+  .pdj-shell{display:flex;gap:14px;align-items:flex-start;}
+  .pdj-shell-main{flex:1 1 0;min-width:0;}
+  .pdj-shell-side{flex:0 0 380px;width:380px;min-width:0;max-height:calc(100vh - 210px);
+    overflow-y:auto;padding-left:14px;border-left:1px solid rgba(240,232,255,.09);}
+  .pdj-shell-side::-webkit-scrollbar{width:5px;}
+  .pdj-shell-side::-webkit-scrollbar-track{background:transparent;}
+  .pdj-shell-side::-webkit-scrollbar-thumb{background:rgba(155,47,255,.3);border-radius:3px;}
+  .pdj-shell-side-tit{font-size:9px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;
+    color:rgba(240,232,255,.3);margin:0 0 9px 2px;}
+  @media (max-width:1100px){
+    .pdj-shell{flex-direction:column;}
+    .pdj-shell-side{flex:1 1 auto;width:100%;max-height:none;overflow:visible;padding-left:0;
+      border-left:none;border-top:1px solid rgba(240,232,255,.09);padding-top:14px;}
+  }
+
+  /* ── Sección plegable de configuración ──────────────────────────────── */
+  .pdj-sec{border:1px solid rgba(240,232,255,.09);border-radius:14px;margin-bottom:8px;
+    background:rgba(240,232,255,.03);overflow:hidden;}
+  .pdj-sec-abierta{border-color:rgba(155,47,255,.3);background:rgba(155,47,255,.045);}
+  .pdj-sec-cab{display:flex;align-items:center;gap:8px;width:100%;padding:11px 13px;cursor:pointer;
+    background:none;border:none;text-align:left;font-family:'Syne',sans-serif;font-weight:800;
+    font-size:12px;color:#F0E8FF;transition:background .14s;}
+  .pdj-sec-cab:hover{background:rgba(155,47,255,.1);}
+  .pdj-sec-cab h5{margin:0;flex:1;min-width:0;font:inherit;overflow:hidden;text-overflow:ellipsis;}
+  .pdj-sec-flecha{font-size:9px;opacity:.5;flex-shrink:0;transition:transform .16s;}
+  .pdj-sec-abierta .pdj-sec-flecha{transform:rotate(90deg);}
+  .pdj-sec-cuerpo{padding:3px 13px 13px;}
+  .pdj-sec-aviso{display:flex;gap:7px;align-items:flex-start;padding:8px 10px;border-radius:10px;
+    margin-bottom:11px;font-size:10.5px;line-height:1.5;
+    background:rgba(255,214,0,.08);border:1px solid rgba(255,214,0,.24);color:rgba(255,214,0,.8);}
+
+  /* ── Guardado por sección ───────────────────────────────────────────── */
+  .pdj-guardar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px;}
+  .pdj-guardar-msg{font-size:10.5px;font-weight:700;line-height:1.4;}
+
   /* ── Pestañas del módulo ────────────────────────────────────────────── */
   .pdj-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;}
   .pdj-tab{flex:1 1 auto;padding:9px 12px;border-radius:11px;cursor:pointer;white-space:nowrap;

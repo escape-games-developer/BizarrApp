@@ -87,6 +87,8 @@ const ERRORES = {
   "invalid tv access":             "El acceso de la TV no es válido.",
   "forced song not available":     "Ese tema no está disponible para lanzar.",
   "participant not found":         "Ese participante ya no está en el evento.",
+  // La RLS filtró el UPDATE: Supabase no da error, devuelve cero filas.
+  rls_sin_filas:                   "No se guardó: la base rechazó el cambio. Revisá que tu usuario tenga permisos sobre este evento.",
 };
 
 export function mensajeAmigable(error) {

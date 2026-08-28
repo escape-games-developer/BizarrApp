@@ -11,6 +11,8 @@ import ReglasTab from "./ReglasTab";
 import DjConsoleTab from "./DjConsoleTab";
 import InvitadosTab from "./InvitadosTab";
 import HistorialTab from "./HistorialTab";
+import PantallaEditor from "./PantallaEditor";
+import SeccionesConfig from "./sections/SeccionesConfig";
 
 /**
  * Admin › Escenario › Pantalla / Escenario.
@@ -148,7 +150,12 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live" }) {
         </div>
       )}
 
-      {ev.event && (
+      {/* Editor: dos columnas, playlist + configuración plegable. */}
+      {ev.event && modo === "editor" && (
+        <PantallaEditor shared={shared} secciones={<SeccionesConfig {...shared} />} />
+      )}
+
+      {ev.event && modo !== "editor" && (
         <>
           <EventoHeader
             event={ev.event}

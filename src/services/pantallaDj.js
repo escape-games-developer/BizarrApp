@@ -199,6 +199,36 @@ export async function updateEvent(eventId, patch) {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Guardado de configuración del evento con verificación de filas.
+ *
+ * Supabase no devuelve error cuando la RLS filtra el UPDATE: devuelve 0 filas
+ * y `error === null`. Para el panel eso no es un guardado exitoso, así que se
+ * pide `select()` y se convierte en error explícito.
+ */
+export async function saveEventFields(eventId, patch) {
+  const { data, error } = await supabase
+    .from("pantalla_events")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", eventId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("rls_sin_filas");
+  return data[0];
+}
+
+/** Misma verificación de filas, sobre un tema de la playlist. */
+export async function saveItemFields(itemId, patch) {
+  const { data, error } = await supabase
+    .from("pantalla_playlist_items")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", itemId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("rls_sin_filas");
+  return data[0];
+}
+
 export async function updateItem(itemId, patch) {
   const { error } = await supabase.from("pantalla_playlist_items").update(patch).eq("id", itemId);
   if (error) throw new Error(error.message);
