@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { saveEventFields } from "../../../services/pantallaDj";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
-import { BotonGuardar, CampoSelect, useGuardado } from "../panelControls";
+import { BotonGuardar, CampoSelect, CampoSwitch, useGuardado } from "../panelControls";
 
 /**
  * Qué reproduce la TV: el video de YouTube o sólo el audio de un MP3 propio.
@@ -19,10 +19,12 @@ const MODOS = [
 
 export default function SeccionContenido({ event, items, refresh }) {
   const [modo, setModo] = useState(event.content_mode);
+  const [subs, setSubs] = useState(!!event.youtube_captions_enabled);
   useEffect(() => { setModo(event.content_mode); }, [event.content_mode]);
+  useEffect(() => { setSubs(!!event.youtube_captions_enabled); }, [event.youtube_captions_enabled]);
 
-  const { estado, mensaje, guardar } = useGuardado(async (valor) => {
-    await saveEventFields(event.id, { content_mode: valor });
+  const { estado, mensaje, guardar } = useGuardado(async () => {
+    await saveEventFields(event.id, { content_mode: modo, youtube_captions_enabled: subs });
     await refresh();
   });
 
@@ -41,8 +43,16 @@ export default function SeccionContenido({ event, items, refresh }) {
         </div>
       )}
 
+      <CampoSwitch label="Subtítulos automáticos de YouTube en la TV" checked={subs}
+        disabled={modo !== "video"} onChange={setSubs} />
+      <div className="pdj-campo-hint" style={{ marginTop: 4 }}>
+        Pide la pista de subtítulos automáticos al reproductor. Sólo aplica en modo video, y
+        depende de que el video la tenga: YouTube no la genera para todos.
+      </div>
+
       <BotonGuardar estado={estado} mensaje={mensaje}
-        disabled={modo === event.content_mode} onClick={() => guardar(modo)} />
+        disabled={modo === event.content_mode && subs === !!event.youtube_captions_enabled}
+        onClick={guardar} />
     </PanelSection>
   );
 }

@@ -12,7 +12,9 @@ import {
  * umbral el servidor saltea la canción solo: el panel sólo fija las reglas.
  */
 
-const CAMPOS = ["kick_enabled", "kick_button_text", "kick_threshold_pct", "kick_activity_minutes"];
+const CAMPOS = [
+  "kick_enabled", "kick_button_text", "kick_threshold_pct", "kick_activity_minutes", "kick_tv_text",
+];
 
 export default function SeccionKick({ event, refresh }) {
   const [b, set] = useBorrador(
@@ -21,8 +23,12 @@ export default function SeccionKick({ event, refresh }) {
       kick_button_text:      event.kick_button_text || "",
       kick_threshold_pct:    event.kick_threshold_pct,
       kick_activity_minutes: event.kick_activity_minutes,
+      kick_tv_text:          event.kick_tv_text || "",
     },
-    [event.id, event.kick_enabled, event.kick_button_text, event.kick_threshold_pct, event.kick_activity_minutes],
+    [
+      event.id, event.kick_enabled, event.kick_button_text, event.kick_threshold_pct,
+      event.kick_activity_minutes, event.kick_tv_text,
+    ],
   );
 
   const { estado, mensaje, guardar } = useGuardado(async () => {
@@ -31,6 +37,7 @@ export default function SeccionKick({ event, refresh }) {
       kick_button_text:      b.kick_button_text.trim() || "Voltear este tema",
       kick_threshold_pct:    b.kick_threshold_pct,
       kick_activity_minutes: b.kick_activity_minutes,
+      kick_tv_text:          b.kick_tv_text.trim() || null,
     });
     await refresh();
   });
@@ -56,6 +63,11 @@ export default function SeccionKick({ event, refresh }) {
         <CampoNumero label="Ventana de actividad (minutos)" min={1} max={480} disabled={off}
           value={b.kick_activity_minutes} onChange={(v) => set("kick_activity_minutes", v)}
           hint="Alguien cuenta como activo si su último heartbeat entra en esta ventana." />
+
+        <CampoTexto label="Texto del cartel en la TV" value={b.kick_tv_text} disabled={off}
+          maxLength={120} placeholder="El pueblo quitó este tema de forma democrática"
+          onChange={(v) => set("kick_tv_text", v)}
+          hint="Lo que aparece en la pantalla grande cuando el público voltea una canción." />
       </div>
 
       <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado} onClick={guardar} />
