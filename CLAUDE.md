@@ -22,6 +22,8 @@ BizarrApp is a real-time interactive event platform for Bizarren Miusik Bar (Bue
 | `/` | `WebApp` | Customer mobile app for bar patrons |
 | `/admin` | `AdminPanel` | Staff control dashboard |
 | `/pantalla` | `PantallaGigante` | Large projection screen display |
+| `/tv` | `PantallaTV` | Motor de reproducción del módulo Pantalla/Escenario (YouTube IFrame API) |
+| `/auth/callback` | `AuthCallbackView` | Destino de los mails de Supabase Auth (confirmar cuenta / recuperar contraseña) |
 
 Each is essentially an independent React sub-app with its own realtime subscriptions and state.
 
@@ -43,6 +45,21 @@ Each is essentially an independent React sub-app with its own realtime subscript
 - 5-step registration in `ProfileView` → Supabase Auth user + `profiles` table row
 - Session stored in localStorage, restored via `useAuth.js` on page load
 - `geoOk` boolean from `useGeoGate.js` gates access to Juegos, Escenario, and Pantalla modules
+
+**Mails de Auth (confirmación y recuperación)** — ver `supabase/AUTH_SETUP.md`:
+- `signUp()` manda el perfil en `options.data`; el trigger `handle_new_user`
+  (migración `20260827120000`) crea la fila de `profiles` del lado del server.
+  Es lo que hace que el perfil sobreviva a la confirmación por email — sin
+  sesión, el INSERT del cliente cae por RLS.
+- Los dos mails vuelven a `/auth/callback?next=novedades|reset`.
+  `AuthCallbackView` canjea la sesión (soporta los tres formatos de Supabase:
+  hash implícito, `?code=` PKCE y `?token_hash=`) y después:
+  - `next=novedades` → hidrata el perfil y redirige a `/?view=novedades&confirmed=1`
+    (la app arranca en el menú **Noti**)
+  - `next=reset` → formulario de contraseña nueva → `/?view=novedades&passwordChanged=1`
+- `ChangePasswordCard` (paso 5 del perfil) cambia la contraseña con sesión
+  activa, reautenticando con la actual.
+- `?view=` es el parámetro público de deep-link de la WebApp (push, QR, mails).
 
 **Geofencing:**
 - `useGeoGate.js` uses Haversine distance against bar coordinates `-34.6090°, -58.3785°`
@@ -72,7 +89,10 @@ Six views accessible from the bottom nav:
 ```
 src/
 ├── App.jsx                          # Route: /, /admin, /pantalla
-├── lib/supabase.js                  # Singleton client (20 events/sec throttle)
+├── lib/
+│   ├── supabase.js                  # Singleton client (20 events/sec throttle)
+│   ├── authRedirect.js              # URLs de retorno de los mails de Auth
+│   └── authCallback.js              # Lectura y canje del link del mail
 ├── constants/
 │   ├── theme.js                     # Colors, team definitions, bar geo-coordinates, avatar presets
 │   ├── data.js                      # Menu items, trivia questions, video playlists, raffle names
@@ -90,9 +110,17 @@ src/
 │       ├── useEscenarioQueue.js     # Stage experience queue
 │       └── useTriviaVotes.js        # Team trivia voting
 ├── components/                      # Shared UI primitives
+│   └── media/                       # Biblioteca de imágenes (modal, uploader, encuadre)
+├── tv/                              # /tv — motor de reproducción (Pantalla/Escenario)
+├── services/
+│   └── mediaAssets.js               # CRUD de media_assets + bucket bizarren-media
+│   └── pantallaDj.js                # RPCs del módulo Pantalla/Escenario
 ├── views/                           # The 6 WebApp modules (one dir each)
+│   └── Auth/                        # Callback del mail, olvidé mi contraseña, cambio de contraseña
 ├── admin/
-│   └── BizarrApp AdminPanel Festival.tsx
+│   ├── BizarrApp AdminPanel Festival.tsx
+│   └── NovedadesPanel.jsx           # CRUD de banners + imagen de biblioteca
+│   └── pantalla/                    # Admin + consola DJ de Pantalla/Escenario
 └── bigscreen/
     └── BizarrApp PantallaGigante Festival.tsx
 ```
