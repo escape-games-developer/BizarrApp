@@ -27,12 +27,16 @@ ALTER TABLE pantalla_play_history
 
 
 -- ── La TV avisa que terminó la canción ──────────────────────────────────────
--- Firma nueva (suma `_reason`): se borra la anterior para no dejar dos
--- sobrecargas y que PostgREST no tenga que desambiguar.
-DROP FUNCTION IF EXISTS public.pantalla_tv_song_ended(uuid, text, uuid);
-
+-- La firma nueva suma `_reason`. La vieja de 3 args NO se borra: queda como
+-- wrapper que delega con el reason por defecto, asi el frontend que ya esta en
+-- produccion sigue andando entre el apply de esta migracion y el deploy del
+-- codigo nuevo. La limpieza va en una migracion posterior.
+--
+-- `_reason` NO lleva DEFAULT a proposito: con un default, una llamada de 3
+-- argumentos tendria dos candidatas y la resolucion quedaria en manos de
+-- Postgres. Sin default, cada aridad resuelve a exactamente una funcion.
 CREATE OR REPLACE FUNCTION public.pantalla_tv_song_ended(
-  _event_id uuid, _token text, _item_id uuid, _reason text DEFAULT 'advance'
+  _event_id uuid, _token text, _item_id uuid, _reason text
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE v_current uuid; v_status text; v_reason text;
 BEGIN
@@ -66,6 +70,22 @@ END $fn$;
 COMMENT ON FUNCTION public.pantalla_tv_song_ended(uuid, text, uuid, text) IS
   'Fin de canción reportado por la TV. `_item_id` viaja como expected_current_id: '
   'un aviso de una canción que ya no es la actual es un no-op, nunca un avance.';
+
+
+-- Compatibilidad: la firma vieja de 3 args ahora delega en la de 4. Gana los
+-- mismos guards (item obligatorio, lock de la fila, no-op ante aviso atrasado)
+-- sin que el cliente viejo tenga que cambiar nada.
+CREATE OR REPLACE FUNCTION public.pantalla_tv_song_ended(
+  _event_id uuid, _token text, _item_id uuid
+) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  RETURN public.pantalla_tv_song_ended(_event_id, _token, _item_id, 'advance');
+END $fn$;
+
+COMMENT ON FUNCTION public.pantalla_tv_song_ended(uuid, text, uuid) IS
+  'DEPRECADA - compatibilidad con el frontend anterior al motor de TV continuo. '
+  'Delega en la firma de 4 args con reason = advance. Borrar cuando no queden '
+  'clientes viejos en produccion.';
 
 
 -- ── Kick colectivo ──────────────────────────────────────────────────────────
