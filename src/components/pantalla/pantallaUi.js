@@ -65,6 +65,8 @@ export const MOTIVO_HISTORIAL = {
   kick:    { label: "Sacada por el público", icono: "👎", color: P.fucsia },
   manual:  { label: "Salteada por el DJ",    icono: "🎛", color: P.cyan },
   skip:    { label: "Salteada",              icono: "⤼", color: P.naranja },
+  // La TV no pudo reproducir el video: no es un final normal.
+  "error-skip": { label: "Video no reproducible", icono: "⚠", color: P.naranja },
 };
 
 /**

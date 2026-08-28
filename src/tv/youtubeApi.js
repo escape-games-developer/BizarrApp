@@ -40,11 +40,33 @@ export function loadYouTubeApi() {
   return promesa;
 }
 
+/** Estados de YT.PlayerState, por valor: la API puede no estar cargada todavía. */
+export const YT_STATE = {
+  UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5,
+};
+
 /** Segundos transcurridos, tolerante a un player todavía no inicializado. */
 export function safeTime(player) {
-  try { return player?.getCurrentTime?.() ?? 0; } catch { return 0; }
+  try {
+    const value = player?.getCurrentTime?.();
+    return Number.isFinite(value) ? value : 0;
+  } catch { return 0; }
 }
 
 export function safeDuration(player) {
-  try { return player?.getDuration?.() ?? 0; } catch { return 0; }
+  try {
+    const value = player?.getDuration?.();
+    return Number.isFinite(value) ? value : 0;
+  } catch { return 0; }
+}
+
+/**
+ * Estado real del player. Devuelve UNSTARTED cuando todavía no responde, para
+ * que quien decida avanzar nunca confunda "no sé" con "terminó".
+ */
+export function safeState(player) {
+  try {
+    const value = player?.getPlayerState?.();
+    return Number.isFinite(value) ? value : YT_STATE.UNSTARTED;
+  } catch { return YT_STATE.UNSTARTED; }
 }

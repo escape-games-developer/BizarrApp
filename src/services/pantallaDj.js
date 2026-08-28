@@ -227,5 +227,13 @@ export const tvReport = (eventId, token, currentTime, duration) =>
     _current_time: currentTime ?? null, _duration: duration ?? null,
   }, supabaseAnon);
 
-export const tvSongEnded = (eventId, token, itemId) =>
-  rpc("pantalla_tv_song_ended", { _event_id: eventId, _token: token, _item_id: itemId }, supabaseAnon);
+/**
+ * Fin de la canción actual según la TV. `_item_id` no es informativo: viaja
+ * como `_expected_current_id` al guard del servidor, así que un aviso atrasado
+ * de la canción anterior no puede avanzar la que ya está sonando.
+ * `_reason` distingue el final normal del salto por video no reproducible.
+ */
+export const tvSongEnded = (eventId, token, itemId, reason = "advance") =>
+  rpc("pantalla_tv_song_ended", {
+    _event_id: eventId, _token: token, _item_id: itemId, _reason: reason,
+  }, supabaseAnon);
