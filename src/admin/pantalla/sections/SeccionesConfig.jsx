@@ -1,3 +1,4 @@
+import SeccionCiclo from "./SeccionCiclo";
 import SeccionCodigo from "./SeccionCodigo";
 import SeccionContenido from "./SeccionContenido";
 import SeccionVotacion from "./SeccionVotacion";
@@ -18,6 +19,7 @@ import SeccionReset from "./SeccionReset";
 export default function SeccionesConfig(shared) {
   return (
     <>
+      <SeccionCiclo {...shared} />
       <SeccionCodigo {...shared} />
       <SeccionContenido {...shared} />
       <SeccionVotacion {...shared} />
