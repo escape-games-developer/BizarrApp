@@ -113,6 +113,22 @@ export const updateAdClip = (id, patch) =>
 export const deleteAdClip = (id) =>
   borrar("pantalla_ad_clips", supabase.from("pantalla_ad_clips").delete().eq("id", id));
 
+/**
+ * Reordena la cola de tandas: recibe los ids en el orden nuevo y sube sólo las
+ * filas cuya posición cambió. Misma mecánica que `reorderItems` de la playlist,
+ * pero sobre `pantalla_ad_clips`; la cola nunca es larga, así que va de una.
+ */
+export async function reorderAdClips(idsEnOrden, posicionActual) {
+  const cambios = [];
+  idsEnOrden.forEach((id, i) => {
+    if (posicionActual.get(id) !== i) cambios.push({ id, position: i });
+  });
+  await Promise.all(cambios.map(({ id, position }) =>
+    supabase.from("pantalla_ad_clips").update({ position }).eq("id", id)
+      .then(({ error }) => { if (error) throw new Error(error.message); })));
+  return cambios.length;
+}
+
 // ── Logros (4.12) ────────────────────────────────────────────────────────────
 // PK (event_id, achievement_key). `levels` es jsonb: [{ label, threshold }].
 export const fetchAchievements = (eventId) => leer("pantalla_achievements", eventId);

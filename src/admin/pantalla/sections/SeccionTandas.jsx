@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { saveEventFields, extractYtId, ytThumb } from "../../../services/pantallaDj";
 import {
-  fetchAdClips, createAdClip, updateAdClip, deleteAdClip,
+  fetchAdClips, createAdClip, updateAdClip, deleteAdClip, reorderAdClips,
 } from "../../../services/pantallaConfig";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
@@ -23,6 +23,8 @@ export default function SeccionTandas({ event, refresh, onError }) {
   const [link,    setLink]    = useState("");
   const [titulo,  setTitulo]  = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [arrastrando, setArrastrando] = useState(null);
+  const [encima,      setEncima]      = useState(null);
 
   const [b, set] = useBorrador(
     { ads_enabled: !!event.ads_enabled, ads_every_n_songs: event.ads_every_n_songs },
@@ -52,6 +54,27 @@ export default function SeccionTandas({ event, refresh, onError }) {
     try { await fn(); await cargar(); }
     catch (err) { onError?.(err); }
     finally { setOcupado(false); }
+  };
+
+  // Reordenar la cola: se arma el orden nuevo en memoria y se suben sólo las
+  // filas que cambiaron de posición.
+  const moverA = (id, destino) => {
+    const desde = clips.findIndex((c) => c.id === id);
+    if (desde < 0) return;
+    const tope = Math.min(Math.max(0, destino), clips.length - 1);
+    if (tope === desde) return;
+    const ids = clips.map((c) => c.id);
+    ids.splice(desde, 1);
+    ids.splice(tope, 0, id);
+    const posiciones = new Map(clips.map((c, i) => [c.id, c.position ?? i]));
+    correr(() => reorderAdClips(ids, posiciones));
+  };
+
+  const soltarEn = (idDestino) => {
+    const origen = arrastrando;
+    setArrastrando(null); setEncima(null);
+    if (!origen || origen === idDestino) return;
+    moverA(origen, clips.findIndex((c) => c.id === idDestino));
   };
 
   const ytId = extractYtId(link);
@@ -96,14 +119,26 @@ export default function SeccionTandas({ event, refresh, onError }) {
         )}
 
         {clips.map((c, i) => (
-          <div key={c.id} style={{
-            display: "flex", alignItems: "center", gap: 7, marginBottom: 5,
-            padding: "6px 8px", borderRadius: 10, opacity: c.enabled ? 1 : .5,
-            background: "rgba(240,232,255,.035)", border: "1px solid rgba(240,232,255,.08)",
-          }}>
+          <div key={c.id}
+            draggable={!ocupado && !off}
+            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setArrastrando(c.id); }}
+            onDragOver={(e) => { e.preventDefault(); setEncima((p) => (p === c.id ? p : c.id)); }}
+            onDragEnd={() => { setArrastrando(null); setEncima(null); }}
+            onDrop={(e) => { e.preventDefault(); soltarEn(c.id); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 7, marginBottom: 5,
+              padding: "6px 8px", borderRadius: 10,
+              opacity: arrastrando === c.id ? .35 : c.enabled ? 1 : .5,
+              background: "rgba(240,232,255,.035)",
+              border: "1px solid rgba(240,232,255,.08)",
+              borderTop: encima === c.id && arrastrando && arrastrando !== c.id
+                ? "2px solid #FFD600" : "1px solid rgba(240,232,255,.08)",
+            }}>
+            <span className="pdj-fila-asa" title="Arrastrar para reordenar la cola"
+              aria-hidden="true">⠿</span>
             <span style={{
               fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 10,
-              color: P.amarillo, width: 16, flexShrink: 0,
+              color: P.amarillo, width: 14, flexShrink: 0,
             }}>{i + 1}</span>
             {c.youtube_id && (
               <img src={ytThumb(c.youtube_id)} alt="" loading="lazy" style={{
@@ -120,6 +155,12 @@ export default function SeccionTandas({ event, refresh, onError }) {
                 {c.times_played > 0 && ` · ${c.times_played}× emitida`}
               </div>
             </div>
+            <button type="button" className="pdj-ico" disabled={ocupado || off || i === 0}
+              title="Subir en la cola" aria-label="Subir en la cola"
+              onClick={() => moverA(c.id, i - 1)}>▲</button>
+            <button type="button" className="pdj-ico" disabled={ocupado || off || i === clips.length - 1}
+              title="Bajar en la cola" aria-label="Bajar en la cola"
+              onClick={() => moverA(c.id, i + 1)}>▼</button>
             <button type="button" className={`pdj-ico${c.enabled ? " pdj-ico-on" : ""}`}
               disabled={ocupado} title={c.enabled ? "Desactivar" : "Activar"}
               aria-label="Activar o desactivar el clip"
@@ -155,6 +196,12 @@ export default function SeccionTandas({ event, refresh, onError }) {
             </div>
           )}
         </div>
+
+        {clips.length > 1 && (
+          <div className="pdj-campo-hint" style={{ marginTop: 6 }}>
+            Arrastrá por el asa para cambiar el orden de rotación, o usá las flechas.
+          </div>
+        )}
 
         <div className="pdj-campo-hint" style={{ marginTop: 8 }}>
           Subir MP3 propios todavía no está disponible: falta el bucket de audio en Storage.
