@@ -46,7 +46,14 @@ export default function SeccionCartelesTv({ event, refresh, onError }) {
       content_filter_words: (event.content_filter_words || []).join(", "),
       textos: { ...(event.tv_texts || {}) },
     },
-    [event.id, ...CAMPOS.map((c) => event[c]), event.content_filter_words, event.tv_texts],
+    // Las dos últimas van serializadas a propósito: son un array y un jsonb, y
+    // como dependencias por identidad se romperían en cada UPDATE del evento —
+    // la TV reporta su tiempo cada pocos segundos y el borrador se borraría
+    // solo mientras alguien está escribiendo.
+    [
+      event.id, ...CAMPOS.map((c) => event[c]),
+      JSON.stringify(event.content_filter_words), JSON.stringify(event.tv_texts),
+    ],
   );
 
   const cargar = useCallback(async () => {
