@@ -1,5 +1,6 @@
 import SeccionCodigo from "./SeccionCodigo";
 import SeccionContenido from "./SeccionContenido";
+import SeccionVotacion from "./SeccionVotacion";
 
 /**
  * Columna de configuración del editor: el orden en que el DJ arma una noche.
@@ -13,6 +14,7 @@ export default function SeccionesConfig(shared) {
     <>
       <SeccionCodigo {...shared} />
       <SeccionContenido {...shared} />
+      <SeccionVotacion {...shared} />
     </>
   );
 }
