@@ -3,7 +3,7 @@ import { saveEventFields } from "../../../services/pantallaDj";
 import { fetchGifs, createGif, deleteGif } from "../../../services/pantallaConfig";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
-import { BotonGuardar, Campo, CampoNumero, CampoSwitch, useBorrador, useGuardado } from "../panelControls";
+import { BotonGuardar, CampoNumero, useBorrador, useGuardado } from "../panelControls";
 
 /**
  * Cómo se ven las recompensas en la pantalla grande.
@@ -30,10 +30,7 @@ const CARTELES = [
 const CAMPOS = [
   "screen_message_duration_seconds", "gif_screen_duration_seconds",
   "giant_reaction_count", "giant_reaction_scale",
-  "content_filter_enabled",
 ];
-
-const aLista = (txt) => String(txt || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 export default function SeccionCartelesTv({ event, refresh, onError }) {
   const [gifs,    setGifs]    = useState([]);
@@ -43,17 +40,12 @@ export default function SeccionCartelesTv({ event, refresh, onError }) {
   const [b, set] = useBorrador(
     {
       ...Object.fromEntries(CAMPOS.map((c) => [c, event[c]])),
-      content_filter_words: (event.content_filter_words || []).join(", "),
       textos: { ...(event.tv_texts || {}) },
     },
-    // Las dos últimas van serializadas a propósito: son un array y un jsonb, y
-    // como dependencias por identidad se romperían en cada UPDATE del evento —
-    // la TV reporta su tiempo cada pocos segundos y el borrador se borraría
-    // solo mientras alguien está escribiendo.
-    [
-      event.id, ...CAMPOS.map((c) => event[c]),
-      JSON.stringify(event.content_filter_words), JSON.stringify(event.tv_texts),
-    ],
+    // `tv_texts` va serializado a propósito: es un jsonb, y como dependencia por
+    // identidad se rompería en cada UPDATE del evento — la TV reporta su tiempo
+    // cada pocos segundos y el borrador se borraría mientras alguien escribe.
+    [event.id, ...CAMPOS.map((c) => event[c]), JSON.stringify(event.tv_texts)],
   );
 
   const cargar = useCallback(async () => {
@@ -69,15 +61,12 @@ export default function SeccionCartelesTv({ event, refresh, onError }) {
       gif_screen_duration_seconds:     b.gif_screen_duration_seconds,
       giant_reaction_count:            b.giant_reaction_count,
       giant_reaction_scale:            b.giant_reaction_scale,
-      content_filter_enabled:          !!b.content_filter_enabled,
-      content_filter_words:            aLista(b.content_filter_words),
       tv_texts:                        b.textos,
     });
     await refresh();
   });
 
   const cambiado = CAMPOS.some((c) => String(b[c] ?? "") !== String(event[c] ?? ""))
-    || aLista(b.content_filter_words).join("|") !== (event.content_filter_words || []).join("|")
     || JSON.stringify(b.textos) !== JSON.stringify(event.tv_texts || {});
 
   const correr = async (fn) => {
@@ -135,22 +124,6 @@ export default function SeccionCartelesTv({ event, refresh, onError }) {
         <CampoNumero label="Multiplicador de tamaño" min={1} max={10}
           value={b.giant_reaction_scale} onChange={(v) => set("giant_reaction_scale", v)}
           hint="1 es el tamaño normal de una reacción; 10 tapa media pantalla." />
-      </div>
-
-      {/* ── Filtro de contenido ────────────────────────────────────── */}
-      <div style={{
-        marginTop: 12, paddingTop: 11, borderTop: "1px solid rgba(240,232,255,.08)",
-      }}>
-        <CampoSwitch label="Filtro de contenido" checked={!!b.content_filter_enabled}
-          onChange={(v) => set("content_filter_enabled", v)} />
-        <div style={{ marginTop: 9, opacity: b.content_filter_enabled ? 1 : .5 }}>
-          <Campo label="Palabras bloqueadas"
-            hint="Separadas por coma. Un mensaje que contenga alguna no llega a la pantalla.">
-            <textarea className="pdj-input" value={b.content_filter_words}
-              disabled={!b.content_filter_enabled} style={{ minHeight: 58, fontSize: 11 }}
-              onChange={(e) => set("content_filter_words", e.target.value)} />
-          </Campo>
-        </div>
       </div>
 
       <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado} onClick={guardar} />

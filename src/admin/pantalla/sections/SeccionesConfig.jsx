@@ -20,6 +20,7 @@ import SeccionTransicion from "./SeccionTransicion";
 import SeccionRecompensas from "./SeccionRecompensas";
 import SeccionCodigoCanje from "./SeccionCodigoCanje";
 import SeccionCartelesTv from "./SeccionCartelesTv";
+import SeccionFiltro from "./SeccionFiltro";
 import SeccionPresets from "./SeccionPresets";
 import SeccionLinkCorto from "./SeccionLinkCorto";
 import SeccionReset from "./SeccionReset";
@@ -56,6 +57,7 @@ export default function SeccionesConfig(shared) {
       <SeccionRecompensas {...shared} />
       <SeccionCodigoCanje {...shared} />
       <SeccionCartelesTv {...shared} />
+      <SeccionFiltro {...shared} />
       <SeccionPresets {...shared} />
       <SeccionLinkCorto {...shared} />
 
