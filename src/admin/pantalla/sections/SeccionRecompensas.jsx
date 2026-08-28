@@ -47,14 +47,36 @@ const PREMIOS = {
 
 const NIVELES = 3;
 
-/** `levels` es jsonb: [{label, threshold}]. Se normaliza a tres niveles fijos. */
+/**
+ * `levels` es jsonb con la forma del contrato:
+ *   [{ threshold: 15, prize_key: "extra_super_vote" }, …]
+ * y `repeat_last: true` en el último nivel cuando ese premio se vuelve a dar
+ * cada vez que se alcanza el umbral otra vez.
+ *
+ * En la UI son tres filas fijas; se guardan sólo las que tienen umbral y premio,
+ * y el `repeat_last` viaja pegado a la última que quedó.
+ */
 const aNiveles = (levels) => {
   const l = Array.isArray(levels) ? levels : [];
-  return Array.from({ length: NIVELES }, (_, i) => Number(l[i]?.threshold) || 0);
+  return Array.from({ length: NIVELES }, (_, i) => ({
+    threshold: Number(l[i]?.threshold) || 0,
+    prize_key: l[i]?.prize_key || "",
+  }));
 };
-const deNiveles = (umbrales) => umbrales
-  .map((t, i) => ({ label: `Nivel ${i + 1}`, threshold: Number(t) || 0 }))
-  .filter((n) => n.threshold > 0);
+
+const repiteUltimo = (levels) => {
+  const l = Array.isArray(levels) ? levels : [];
+  return !!l[l.length - 1]?.repeat_last;
+};
+
+const deNiveles = (niveles, repetir) => {
+  const validos = niveles
+    .filter((n) => n.threshold > 0 && n.prize_key)
+    .map((n) => ({ threshold: Number(n.threshold), prize_key: n.prize_key }))
+    .sort((a, b) => a.threshold - b.threshold);
+  if (repetir && validos.length) validos[validos.length - 1].repeat_last = true;
+  return validos;
+};
 
 export default function SeccionRecompensas({ event, refresh, onError }) {
   const [logrosBase, setLogrosBase] = useState({});
@@ -85,7 +107,8 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
           enabled:     f ? !!f.enabled : false,
           title:       f?.title ?? l.titulo,
           description: f?.description ?? l.desc,
-          umbrales:    aNiveles(f?.levels),
+          niveles:     aNiveles(f?.levels),
+          repetir:     repiteUltimo(f?.levels),
         }];
       }));
       const mapaP = Object.fromEntries(CLAVES_PREMIO.map((k) => {
@@ -122,7 +145,7 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
         enabled:     logros[l.key].enabled,
         title:       logros[l.key].title,
         description: logros[l.key].description,
-        levels:      deNiveles(logros[l.key].umbrales),
+        levels:      deNiveles(logros[l.key].niveles, logros[l.key].repetir),
       })));
     }
     if (premiosCambiados.length) {
@@ -189,24 +212,51 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
                     placeholder="Descripción" aria-label={`Descripción de ${l.titulo}`}
                     onChange={(e) => setLogro(l.key, { description: e.target.value })}
                     style={{ padding: "5px 7px", fontSize: 11, marginBottom: 6 }} />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
-                    {v.umbrales.map((u, i) => (
-                      <div key={i}>
-                        <label htmlFor={`${l.key}-n${i}`} style={{
-                          fontSize: 8.5, fontWeight: 700, letterSpacing: .3, textTransform: "uppercase",
-                          color: P.tenue2, display: "block", marginBottom: 2,
-                        }}>Nivel {i + 1}</label>
-                        <input id={`${l.key}-n${i}`} className="pdj-input" type="number" min={0}
-                          value={u} disabled={off} placeholder="0"
-                          onChange={(e) => setLogro(l.key, {
-                            umbrales: v.umbrales.map((x, j) => (j === i ? Number(e.target.value) || 0 : x)),
-                          })}
-                          style={{ padding: "5px 6px", fontSize: 10.5 }} />
-                      </div>
-                    ))}
-                  </div>
+                  {v.niveles.map((n, i) => (
+                    <div key={i} style={{
+                      display: "grid", gridTemplateColumns: "34px 58px minmax(0,1fr)",
+                      gap: 5, alignItems: "center", marginBottom: 4,
+                    }}>
+                      <span style={{
+                        fontSize: 8.5, fontWeight: 800, letterSpacing: .3,
+                        textTransform: "uppercase", color: P.tenue2,
+                      }}>N{i + 1}</span>
+                      <input className="pdj-input" type="number" min={0} value={n.threshold}
+                        disabled={off} placeholder="0"
+                        aria-label={`Umbral del nivel ${i + 1} de ${l.titulo}`}
+                        onChange={(e) => setLogro(l.key, {
+                          niveles: v.niveles.map((x, j) =>
+                            (j === i ? { ...x, threshold: Number(e.target.value) || 0 } : x)),
+                        })}
+                        style={{ padding: "5px 6px", fontSize: 10.5 }} />
+                      <select className="pdj-input" value={n.prize_key} disabled={off}
+                        aria-label={`Premio del nivel ${i + 1} de ${l.titulo}`}
+                        onChange={(e) => setLogro(l.key, {
+                          niveles: v.niveles.map((x, j) =>
+                            (j === i ? { ...x, prize_key: e.target.value } : x)),
+                        })}
+                        style={{ padding: "5px 6px", fontSize: 10.5, minWidth: 0 }}>
+                        <option value="">Sin premio</option>
+                        {CLAVES_PREMIO.map((k) => (
+                          <option key={k} value={k}>{PREMIOS[k].ico} {PREMIOS[k].label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+
+                  <label style={{
+                    display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+                    fontSize: 10, color: "rgba(240,232,255,.55)", marginTop: 5,
+                  }}>
+                    <input type="checkbox" checked={!!v.repetir} disabled={off}
+                      onChange={(e) => setLogro(l.key, { repetir: e.target.checked })}
+                      style={{ accentColor: "#9B2FFF", cursor: "pointer", flexShrink: 0 }} />
+                    Repetir el último nivel cada vez que se vuelve a alcanzar
+                  </label>
+
                   <div className="pdj-campo-hint">
-                    Umbral de cada nivel. En 0 el nivel no se usa.
+                    Un nivel se guarda sólo si tiene umbral y premio. Se ordenan por umbral
+                    al guardar, así que no importa en qué fila los cargues.
                   </div>
                 </div>
               )}
