@@ -9,6 +9,7 @@ import SeccionTvLink from "./SeccionTvLink";
 import SeccionInvitados from "./SeccionInvitados";
 import SeccionIngreso from "./SeccionIngreso";
 import SeccionLimpieza from "./SeccionLimpieza";
+import SeccionEmojis from "./SeccionEmojis";
 import SeccionReset from "./SeccionReset";
 
 /**
@@ -32,6 +33,7 @@ export default function SeccionesConfig(shared) {
       <SeccionInvitados {...shared} />
       <SeccionIngreso {...shared} />
       <SeccionLimpieza {...shared} />
+      <SeccionEmojis {...shared} />
 
       {/* Zona roja: siempre al fondo de la columna. */}
       <SeccionReset {...shared} />
