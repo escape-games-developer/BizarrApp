@@ -6,11 +6,15 @@ import PantallaGigante from "./bigscreen/BizarrApp PantallaGigante Festival";
 import DesignerView    from "./views/Designer/DesignerView";
 import ClientHomePreview from "./views/Designer/preview/ClientHomePreview";
 import PantallaTV      from "./tv/PantallaTV";
+import AuthCallbackView from "./views/Auth/AuthCallbackView";
 
 const path = window.location.pathname;
 
 let Component;
-if      (path.startsWith("/designer-preview/client/home")) Component = ClientHomePreview;
+// /auth/callback es la URL que reciben los mails de Supabase (confirmar cuenta
+// y recuperar contraseña). Va primero: no debe caer en ninguna otra vista.
+if      (path.startsWith("/auth/callback")) Component = AuthCallbackView;
+else if (path.startsWith("/designer-preview/client/home")) Component = ClientHomePreview;
 else if (path.startsWith("/admin"))    Component = AdminPanel;
 // /tv es el motor de reproducción del módulo Pantalla/Escenario. Va antes que
 // /pantalla porque es otra pantalla física: la gigante de siempre no se toca.

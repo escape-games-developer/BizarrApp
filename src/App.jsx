@@ -19,22 +19,38 @@ import JuegosView    from "./views/Juegos/JuegosView";
 import EscenarioView from "./views/Escenario/EscenarioView";
 import PantallaView  from "./views/Pantalla/PantallaView";
 import ProfileView, { LoginView } from "./views/Perfil/ProfileView";
+import ForgotPasswordView from "./views/Auth/ForgotPasswordView";
 
 const LOGO_URL         = "/logo.png";
 const RESTRICTED_VIEWS = ["games", "escenario", "pantalla"];
+const VIEWS            = ["novedades", "menu", "pantalla", "games", "escenario", "profile"];
 
 export default function BizarrApp() {
   const { user, regStep, setRegStep, register, login, updateUser, isLoggedIn } = useAuth();
 
   const [view,     setView]     = useState(() => {
-    const requested = new URLSearchParams(window.location.search).get("designerView");
-    return ["novedades","menu","pantalla","games","escenario","profile"].includes(requested) ? requested : "novedades";
+    const params    = new URLSearchParams(window.location.search);
+    // `view` es el parámetro público (lo usan el push, el QR y la vuelta del
+    // mail de confirmación); `designerView` queda para el modo diseñador.
+    const requested = params.get("view") || params.get("designerView");
+    return VIEWS.includes(requested) ? requested : "novedades";
+  });
+
+  // Cartel de vuelta del mail: /auth/callback nos manda con ?confirmed=1 o
+  // ?passwordChanged=1 después de validar el link.
+  const [authNotice, setAuthNotice] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("confirmed"))       return "confirmed";
+    if (params.get("passwordChanged")) return "passwordChanged";
+    return null;
   });
   // Qué juego está abierto adentro de la vista Juegos (ej: 'duelo')
   const [gameOpen, setGameOpen] = useState(null);
   // Configuración de playlists de YouTube (persiste en localStorage)
   const { config: ytConfig } = useYouTubePlaylistAdmin();
-  const [authMode, setAuthMode] = useState("login");
+  // "login" | "register" | "forgot"
+  const [authMode,    setAuthMode]    = useState("login");
+  const [forgotEmail, setForgotEmail] = useState("");
 
   // Estado global del juego — sincronizado via Supabase Realtime
   const { session, gameState, loading: stateLoading } = useGameState();
@@ -60,7 +76,23 @@ export default function BizarrApp() {
     }
     // Deep-link del QR de Pantalla/Escenario: /?pantallaCode=XXXXXX
     if (params.get("pantallaCode")) setView("pantalla");
+
+    // Los avisos de la vuelta del mail son de una sola vez: los sacamos de la
+    // URL para que un refresh o un "compartir link" no los repita.
+    if (params.has("confirmed") || params.has("passwordChanged")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("confirmed");
+      url.searchParams.delete("passwordChanged");
+      window.history.replaceState({}, document.title, url.pathname + url.search);
+    }
   }, []);
+
+  // El cartel de confirmación se va solo: es una felicitación, no una alerta.
+  useEffect(() => {
+    if (!authNotice) return;
+    const t = setTimeout(() => setAuthNotice(null), 9000);
+    return () => clearTimeout(t);
+  }, [authNotice]);
 
   const goProfile = useCallback(() => {
     if (user?.registered) setRegStep(5);
@@ -95,11 +127,16 @@ export default function BizarrApp() {
                  isRestricted={isRestricted} onGoProfile={goProfile} ytConfig={ytConfig}
                  onSendVideo={(video) => sendVideo({ ytId: video.ytId, title: video.title, artist: video.artist, user })}/>;
       case "profile":
-        if (!user?.registered)
+        if (!user?.registered) {
+          if (authMode === "forgot")
+            return <ForgotPasswordView initialEmail={forgotEmail}
+                     onBack={() => setAuthMode("login")}/>;
           return authMode === "login"
-            ? <LoginView onLogin={login} onGoRegister={() => setAuthMode("register")}/>
+            ? <LoginView onLogin={login} onGoRegister={() => setAuthMode("register")}
+                onGoForgot={(email) => { setForgotEmail(email || ""); setAuthMode("forgot"); }}/>
             : <ProfileView user={user} onSave={updateUser} onRegister={register}
                 regStep={regStep} setRegStep={setRegStep}/>;
+        }
         return <ProfileView user={user} onSave={updateUser} onRegister={register}
                  regStep={regStep} setRegStep={setRegStep}/>;
       default: return <CartaView />;
@@ -147,7 +184,31 @@ export default function BizarrApp() {
               </button>
             )}
           </header>
-          <main className="app-content">{renderContent()}</main>
+          <main className="app-content">
+            {authNotice && (
+              <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
+                marginBottom:14,background:"rgba(34,197,94,.1)",
+                border:"1px solid rgba(34,197,94,.3)",borderRadius:12 }}>
+                <span style={{ fontSize:20,flexShrink:0 }}>
+                  {authNotice === "confirmed" ? "🎉" : "🔑"}
+                </span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12.5,fontWeight:700,color:"#86EFAC",marginBottom:2 }}>
+                    {authNotice === "confirmed" ? "¡Cuenta confirmada!" : "Contraseña actualizada"}
+                  </div>
+                  <div style={{ fontSize:11.5,color:"rgba(245,230,192,.55)",lineHeight:1.5 }}>
+                    {authNotice === "confirmed"
+                      ? `¡Bienvenido/a a BizarrApp${user?.name ? `, ${user.name}` : ""}! Ya podés jugar, votar y mandar mensajes a la pantalla.`
+                      : "Listo, ya podés entrar con tu contraseña nueva."}
+                  </div>
+                </div>
+                <button onClick={() => setAuthNotice(null)} aria-label="Cerrar aviso"
+                  style={{ background:"none",border:"none",color:"rgba(245,230,192,.35)",
+                    fontSize:16,cursor:"pointer",padding:0,lineHeight:1 }}>×</button>
+              </div>
+            )}
+            {renderContent()}
+          </main>
           <nav className="app-nav">
             {NAV.map(n => {
               const isActive = view === n.id;

@@ -4,24 +4,45 @@ import { StepBar }         from "../../components/UI";
 import { PRESET_AVATARS, TEAMS, GEO_RADIUS } from "../../constants/theme";
 import { useGeoGate }      from "../../hooks/useGeoGate";
 import { useAuth }         from "../../hooks/useAuth";
+import ChangePasswordCard  from "../Auth/ChangePasswordCard";
 
 const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!"];
 
 // ─── Login ────────────────────────────────────────────────────────────────────
-export function LoginView({ onLogin, onGoRegister }) {
+export function LoginView({ onLogin, onGoRegister, onGoForgot }) {
   const [email,   setEmail]   = useState("");
   const [pass,    setPass]    = useState("");
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [resent,  setResent]  = useState(false);
 
-  const handleLogin = useCallback(() => {
-    setError(""); setLoading(true);
-    setTimeout(() => {
-      const result = onLogin(email, pass);
-      if (!result.ok) { setError(result.error); }
+  const { resendConfirmation } = useAuth();
+
+  // onLogin es async: hay que esperar el resultado. Leerlo de la promesa sin
+  // await deja `result.ok === undefined` y el error nunca se muestra.
+  const handleLogin = useCallback(async () => {
+    setError(""); setNeedsConfirm(false); setResent(false); setLoading(true);
+    try {
+      const result = await onLogin(email, pass);
+      if (!result?.ok) {
+        setError(result?.error || "No se pudo iniciar sesión.");
+        setNeedsConfirm(!!result?.needsConfirmation);
+      }
+    } catch (e) {
+      setError(e?.message || "No se pudo iniciar sesión.");
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   }, [email, pass, onLogin]);
+
+  // Cuenta creada pero sin confirmar: el mail se pierde seguido en Spam, así
+  // que le damos el reenvío acá mismo en vez de mandarlo a registrarse de nuevo.
+  const handleResend = useCallback(async () => {
+    const result = await resendConfirmation(email);
+    if (result?.ok) { setResent(true); setError(""); }
+    else setError(result?.error || "No pudimos reenviar el mail.");
+  }, [email, resendConfirmation]);
 
   return (
     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",
@@ -40,16 +61,31 @@ export function LoginView({ onLogin, onGoRegister }) {
       <input className="input-field" type="password" placeholder="Contraseña"
         value={pass}  onChange={(e)=>{ setPass(e.target.value); setError(""); }}/>
       {error && (
-        <div style={{ fontSize:11,color:"#FCA5A5",marginBottom:8,textAlign:"center" }}>
+        <div style={{ fontSize:11,color:"#FCA5A5",marginBottom:8,textAlign:"center",lineHeight:1.5 }}>
           {error}
+        </div>
+      )}
+      {needsConfirm && !resent && (
+        <button onClick={handleResend} style={{ background:"none",border:"none",
+          color:"#FFD700",fontSize:11.5,cursor:"pointer",marginBottom:10,textDecoration:"underline" }}>
+          📨 Reenviarme el mail de confirmación
+        </button>
+      )}
+      {resent && (
+        <div style={{ fontSize:11,color:"#86EFAC",marginBottom:10,textAlign:"center" }}>
+          ✅ Te reenviamos el mail. Revisá tu casilla (y Spam).
         </div>
       )}
       <button className="btn-primary" style={{ marginTop:4, opacity:(!email||!pass||loading)?.4:1 }}
         disabled={!email||!pass||loading} onClick={handleLogin}>
         {loading ? "Verificando..." : "Entrar"}
       </button>
+      <button onClick={() => onGoForgot?.(email)} style={{ background:"none",border:"none",
+        color:"rgba(255,215,0,.55)",fontSize:12,cursor:"pointer",marginTop:16,textDecoration:"underline" }}>
+        Olvidé mi contraseña
+      </button>
       <button onClick={onGoRegister} style={{ background:"none",border:"none",
-        color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",marginTop:16,textDecoration:"underline" }}>
+        color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",marginTop:10,textDecoration:"underline" }}>
         ¿Primera vez? Registrate acá
       </button>
     </div>
@@ -73,9 +109,14 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
   const [passConf,  setPassConf]  = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [editing,   setEditing]   = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [saveError, setSaveError] = useState("");
+  // Cuenta creada pero esperando que el cliente toque el link del mail.
+  const [pendingEmail, setPendingEmail] = useState(null);
+  const [resent,       setResent]       = useState(false);
   const fileRef = useRef();
 
-  const { logout } = useAuth();
+  const { logout, resendConfirmation } = useAuth();
 
   // Geo
   const { geoState, distMeters, loading: geoLoading, retry: requestGeo } = useGeoGate();
@@ -100,21 +141,86 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
   const canStep1 = name.trim().length > 0 && (selAv || (avatarSrc==="photo"&&photoUrl));
   const canStep4 = email.includes("@") && pass.length >= 6 && pass === passConf && phone.replace(/\D/g,"").length >= 8;
 
-  const handleSave = useCallback(() => {
-    const profile = {
-      name: name.trim(),
-      ...(avatarSrc==="photo"&&photoUrl
-        ? { photoUrl, avatarId:null, avatarEmoji:null }
-        : { avatarId:selAv, avatarEmoji:selAvData?.emoji||null, photoUrl:null }),
-      team, email:email.toLowerCase().trim(),
-      phone:phone.replace(/\D/g,""), geoOk, registered:true,
-    };
-    const result = onRegister(profile, pass);
-    if (result.ok) { setEmailSent(true); setEditing(false); setStep(5); }
-  }, [name,avatarSrc,photoUrl,selAv,selAvData,team,email,phone,geoOk,pass,onRegister,setStep]);
+  // onRegister es async. Antes se leía `result.ok` directo de la promesa
+  // (siempre undefined), así que ni se confirmaba el alta ni se mostraba el
+  // error: el cliente tocaba "Crear mi cuenta" y no pasaba nada.
+  const handleSave = useCallback(async () => {
+    if (saving) return;               // evita doble alta por doble tap
+    setSaveError(""); setSaving(true);
+    try {
+      const profile = {
+        name: name.trim(),
+        ...(avatarSrc==="photo"&&photoUrl
+          ? { photoUrl, avatarId:null, avatarEmoji:null }
+          : { avatarId:selAv, avatarEmoji:selAvData?.emoji||null, photoUrl:null }),
+        team, email:email.toLowerCase().trim(),
+        phone:phone.replace(/\D/g,""), geoOk, registered:true,
+      };
+      const result = await onRegister(profile, pass);
+      // El proyecto exige confirmar el email: la cuenta ya existe, pero recién
+      // queda activa cuando toca el link. No lo mandamos al paso 5 fingiendo
+      // que terminó — lo dejamos en la pantalla de "revisá tu mail".
+      if (result?.pendingConfirmation) {
+        setPendingEmail(result.email || profile.email);
+        setEditing(false);
+      }
+      else if (result?.ok) { setEmailSent(true); setEditing(false); setStep(5); }
+      else                 { setSaveError(result?.error || "No se pudo crear la cuenta. Probá de nuevo."); }
+    } catch (e) {
+      setSaveError(e?.message || "No se pudo crear la cuenta. Probá de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }, [saving,name,avatarSrc,photoUrl,selAv,selAvData,team,email,phone,geoOk,pass,onRegister,setStep]);
 
-  // Ya registrado → saltar a paso 5
-  if (user?.registered && !editing && step === 1) { setStep(5); return null; }
+  // Ya registrado → saltar a paso 5. En efecto, no durante el render:
+  // llamar a setStep mientras se renderiza dispara un warning de React y,
+  // con el return null, deja la vista en blanco por un frame.
+  useEffect(() => {
+    if (user?.registered && !editing && step === 1) setStep(5);
+  }, [user?.registered, editing, step, setStep]);
+
+  // ── Esperando la confirmación del mail ──────────────────────────────────────
+  // La cuenta ya está creada en Supabase Auth y el perfil viajó en la metadata.
+  // Falta que el cliente toque el link: ese link vuelve a /auth/callback y de
+  // ahí entra a la app por el menú Noti.
+  if (pendingEmail) return (
+    <div style={{ display:"flex",flexDirection:"column",alignItems:"center",
+      justifyContent:"center",minHeight:"62vh",padding:"0 4px",textAlign:"center" }}>
+      <div style={{ fontSize:48,marginBottom:14 }}>📬</div>
+      <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:21,
+        color:"#FFD700",marginBottom:10 }}>
+        Confirmá tu cuenta
+      </div>
+      <div style={{ fontSize:12.5,color:"rgba(245,230,192,.55)",lineHeight:1.7,
+        maxWidth:290,marginBottom:10 }}>
+        Te mandamos un mail a <strong style={{ color:"rgba(245,230,192,.85)" }}>{pendingEmail}</strong>.
+        Tocá el botón del mail y volvés directo a BizarrApp, listo para jugar.
+      </div>
+      <div style={{ fontSize:11,color:"rgba(245,230,192,.3)",lineHeight:1.6,
+        maxWidth:280,marginBottom:20 }}>
+        Si no lo ves, mirá en Spam o Promociones. El link vence en 24 horas.
+      </div>
+
+      {resent
+        ? <div style={{ fontSize:11.5,color:"#86EFAC",marginBottom:14 }}>
+            ✅ Mail reenviado.
+          </div>
+        : <button className="btn-ghost" style={{ width:"100%",marginBottom:10 }}
+            onClick={async () => {
+              const r = await resendConfirmation(pendingEmail);
+              if (r?.ok) setResent(true);
+            }}>
+            📨 Reenviarme el mail
+          </button>}
+
+      <button onClick={() => { setPendingEmail(null); setStep(4); }} style={{ background:"none",
+        border:"none",color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",
+        textDecoration:"underline" }}>
+        ← Me equivoqué de email
+      </button>
+    </div>
+  );
 
   return (
     <div>
@@ -377,10 +483,30 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               </div>
             )}
           </div>
+          {!canStep4 && (
+            <div style={{ padding:"9px 12px",marginBottom:10,borderRadius:10,
+              background:"rgba(255,215,0,.05)",border:"1px solid rgba(255,215,0,.12)",
+              fontSize:11,color:"rgba(245,230,192,.5)",lineHeight:1.6 }}>
+              Falta completar: {[
+                !email.includes("@")                    && "un email válido",
+                phone.replace(/\D/g,"").length < 8      && "el teléfono (mín. 8 dígitos)",
+                pass.length < 6                         && "la contraseña (mín. 6 caracteres)",
+                pass.length >= 6 && pass !== passConf   && "repetir la misma contraseña",
+              ].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {saveError && (
+            <div style={{ display:"flex",gap:8,alignItems:"flex-start",padding:"10px 12px",marginBottom:10,
+              background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",borderRadius:10 }}>
+              <span style={{ fontSize:15,flexShrink:0 }}>⚠️</span>
+              <span style={{ fontSize:11,color:"#FCA5A5",lineHeight:1.5 }}>{saveError}</span>
+            </div>
+          )}
           <div style={{ display:"flex",gap:8 }}>
-            <button className="btn-ghost" style={{ flex:"0 0 auto" }} onClick={()=>setStep(3)}>← Volver</button>
-            <button className="btn-primary" style={{ flex:1 }} disabled={!canStep4} onClick={handleSave}>
-              ✓ Crear mi cuenta
+            <button className="btn-ghost" style={{ flex:"0 0 auto" }} onClick={()=>setStep(3)} disabled={saving}>← Volver</button>
+            <button className="btn-primary" style={{ flex:1, opacity:(!canStep4||saving)?.4:1 }}
+              disabled={!canStep4||saving} onClick={handleSave}>
+              {saving ? "Creando cuenta..." : "✓ Crear mi cuenta"}
             </button>
           </div>
         </>
@@ -450,6 +576,9 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               📍 Para activar los juegos verificá tu ubicación. Editá el perfil y habilitá la ubicación cuando estés en el bar.
             </div>
           )}
+          {/* Solo tiene sentido con cuenta de Auth detrás: quien eligió
+              "ahora no, solo la carta" no tiene contraseña que cambiar. */}
+          {user.registered && user.email && <ChangePasswordCard/>}
           <button className="btn-primary" onClick={()=>{ setEditing(true); setStep(1); }}>✏️ Editar perfil</button>
           <button
             onClick={logout}
