@@ -26,7 +26,8 @@ const RESTRICTED_VIEWS = ["games", "escenario", "pantalla"];
 const VIEWS            = ["novedades", "menu", "pantalla", "games", "escenario", "profile"];
 
 export default function BizarrApp() {
-  const { user, regStep, setRegStep, register, login, updateUser, isLoggedIn } = useAuth();
+  const { user, regStep, setRegStep, register, login, loginAsGuest,
+          updateUser, isLoggedIn, isGuest } = useAuth();
 
   const [view,     setView]     = useState(() => {
     const params    = new URLSearchParams(window.location.search);
@@ -65,7 +66,10 @@ export default function BizarrApp() {
   // Novedades publicadas por el staff (cards 1440x600)
   const { banners, loading: bannersLoading } = useBanners(session?.id);
 
-  const isRestricted = !user?.geoOk;
+  // El gate real de Juegos/Escenario/Pantalla es el `geo_ok` guardado en el
+  // perfil, no `useGeoGate` — ese hook solo corre dentro del wizard de registro.
+  // Por eso el invitado se destraba acá y no allá.
+  const isRestricted = !user?.geoOk && !isGuest;
 
   // Deep-link desde push: /?view=games&game=duelo abre el duelo directo (una sola vez).
   useEffect(() => {
@@ -133,6 +137,7 @@ export default function BizarrApp() {
                      onBack={() => setAuthMode("login")}/>;
           return authMode === "login"
             ? <LoginView onLogin={login} onGoRegister={() => setAuthMode("register")}
+                onGuestLogin={loginAsGuest}
                 onGoForgot={(email) => { setForgotEmail(email || ""); setAuthMode("forgot"); }}/>
             : <ProfileView user={user} onSave={updateUser} onRegister={register}
                 regStep={regStep} setRegStep={setRegStep}/>;
@@ -184,6 +189,17 @@ export default function BizarrApp() {
               </button>
             )}
           </header>
+          {/* Va fuera de <main> para que no scrollee con el contenido, y en
+              ámbar para que no se confunda con el aviso verde de "cuenta
+              confirmada" que aparece justo abajo. Sin botón de cerrar. */}
+          {isGuest && (
+            <div style={{ display:"flex",alignItems:"center",gap:8,padding:"7px 14px",
+              background:"rgba(245,158,11,.15)",borderBottom:"1px solid rgba(245,158,11,.35)",
+              color:"#FCD34D",fontSize:11.5,fontWeight:700,flexShrink:0,letterSpacing:.2 }}>
+              <span style={{ fontSize:13 }}>⚠</span>
+              <span>Modo invitado — datos de prueba</span>
+            </div>
+          )}
           <main className="app-content">
             {authNotice && (
               <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",

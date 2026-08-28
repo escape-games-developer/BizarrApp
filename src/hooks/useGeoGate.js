@@ -25,8 +25,13 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
  *   "denied"      → permiso rechazado → solo carta
  *   "unavailable" → GPS no disponible → solo carta
  *   "error"       → timeout u otro error → solo carta
+ *
+ * `isGuest` llega por parámetro y no de un `useAuth()` interno a propósito:
+ * cada `useAuth()` monta su propio `restoreSession` y su propio listener de
+ * `onAuthStateChange` — no hay contexto compartido —, así que llamarlo acá
+ * duplicaría la suscripción de auth. Lo pasa el que ya tiene la sesión.
  */
-export function useGeoGate() {
+export function useGeoGate(isGuest = false) {
   const [geoState,   setGeoState]   = useState("idle");
   const [distMeters, setDistMeters] = useState(null);
   const [loading,    setLoading]    = useState(false);
@@ -60,13 +65,18 @@ export function useGeoGate() {
   }, []);
 
   useEffect(() => {
+    if (isGuest) return;
     if (geoState === "ok" || geoState === "checking" || geoState === "denied" || geoState === "unavailable") return;
     const id = setInterval(check, 10_000);
     return () => clearInterval(id);
-  }, [geoState, check]);
+  }, [isGuest, geoState, check]);
 
-  if (import.meta.env.VITE_SKIP_GEO === "true") {
-    return { geoState: "ok", distMeters: 0, loading: false, retry: () => {} };
+  // Sesión anónima: el gate se abre sin pedir ubicación. El modo invitado es el
+  // único interruptor — no se combina con VITE_SKIP_GEO, que sigue siendo el
+  // escape hatch de desarrollo, independiente de esto.
+  if (isGuest || import.meta.env.VITE_SKIP_GEO === "true") {
+    return { geoState: "ok", distMeters: 0, isRestricted: false,
+             isChecking: false, loading: false, retry: () => {} };
   }
 
   const isRestricted = geoState !== "ok";

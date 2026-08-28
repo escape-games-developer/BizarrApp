@@ -9,15 +9,20 @@ import ChangePasswordCard  from "../Auth/ChangePasswordCard";
 const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!"];
 
 // ─── Login ────────────────────────────────────────────────────────────────────
-export function LoginView({ onLogin, onGoRegister, onGoForgot }) {
+export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
   const [email,   setEmail]   = useState("");
   const [pass,    setPass]    = useState("");
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [resent,  setResent]  = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
 
   const { resendConfirmation } = useAuth();
+
+  // Acceso de invitado: se renderiza solo si la variable está definida en el
+  // build. Es de build time, así que Vite elimina el bloque cuando no aplica.
+  const guestEnabled = import.meta.env.VITE_GUEST_LOGIN === "true";
 
   // onLogin es async: hay que esperar el resultado. Leerlo de la promesa sin
   // await deja `result.ok === undefined` y el error nunca se muestra.
@@ -43,6 +48,18 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot }) {
     if (result?.ok) { setResent(true); setError(""); }
     else setError(result?.error || "No pudimos reenviar el mail.");
   }, [email, resendConfirmation]);
+
+  const handleGuest = useCallback(async () => {
+    setError(""); setNeedsConfirm(false); setResent(false); setGuestLoading(true);
+    try {
+      const result = await onGuestLogin?.();
+      if (!result?.ok) setError(result?.error || "No se pudo entrar como invitado.");
+    } catch (e) {
+      setError(e?.message || "No se pudo entrar como invitado.");
+    } finally {
+      setGuestLoading(false);
+    }
+  }, [onGuestLogin]);
 
   return (
     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",
@@ -88,6 +105,22 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot }) {
         color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",marginTop:10,textDecoration:"underline" }}>
         ¿Primera vez? Registrate acá
       </button>
+      {guestEnabled && (
+        <>
+          {/* Separado del alta a propósito: que no se lea como un paso del registro. */}
+          <div style={{ height:1,width:"70%",background:"rgba(245,230,192,.12)",margin:"18px 0 14px" }}/>
+          <button onClick={handleGuest} disabled={guestLoading}
+            style={{ background:"none",border:"1px solid rgba(245,230,192,.25)",
+              color:"rgba(245,230,192,.6)",fontSize:12,borderRadius:10,
+              padding:"9px 18px",cursor:"pointer",opacity:guestLoading?.4:1,
+              WebkitTapHighlightColor:"transparent" }}>
+            {guestLoading ? "Entrando..." : "Entrar como invitado"}
+          </button>
+          <div style={{ fontSize:10,color:"rgba(245,230,192,.3)",marginTop:6,textAlign:"center" }}>
+            Datos de prueba — no se guarda nada
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -116,15 +149,19 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
   const [resent,       setResent]       = useState(false);
   const fileRef = useRef();
 
-  const { logout, resendConfirmation } = useAuth();
+  const { logout, resendConfirmation, isGuest } = useAuth();
 
-  // Geo
-  const { geoState, distMeters, loading: geoLoading, retry: requestGeo } = useGeoGate();
+  // Geo — el invitado abre el gate sin pedir ubicación.
+  const { geoState, distMeters, loading: geoLoading, retry: requestGeo } = useGeoGate(isGuest);
   const geoOk = geoState === "ok";
 
   useEffect(() => {
+    // Para el invitado el "ok" es de mentira: no persistimos `geo_ok` o quedaría
+    // un permiso falso guardado que sobrevive a apagar VITE_GUEST_LOGIN. Al
+    // invitado lo destraba `isGuest` en App.jsx, no este campo.
+    if (isGuest) return;
     if (geoState === "ok" && !user?.geoOk) onSave({ geoOk: true });
-  }, [geoState]);
+  }, [geoState, isGuest]);
 
   const selAvData   = PRESET_AVATARS.find((a) => a.id === selAv);
   const previewUser = avatarSrc==="photo"&&photoUrl

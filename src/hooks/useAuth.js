@@ -107,6 +107,30 @@ export function persistSession(profile) {
 }
 
 /**
+ * Perfil mínimo de invitado, para cuando el trigger `handle_new_user` no dejó
+ * fila en `profiles`. Es un fallback, no el camino normal: el trigger corre en
+ * la misma transacción que el alta del usuario, así que para cuando
+ * `signInAnonymously()` responde la fila ya está.
+ *
+ * `registered` queda en false porque es la verdad: el invitado no tiene cuenta.
+ * Quien decide que igual puede entrar es `isLoggedIn`, no este campo.
+ */
+export function guestProfile(userId) {
+  return {
+    id:         userId,
+    email:      null,
+    name:       "Invitado",
+    team:       null,
+    phone:      null,
+    avatarId:   null,
+    avatarEmoji:null,
+    photoUrl:   null,
+    geoOk:      false,
+    registered: false,
+  };
+}
+
+/**
  * Trae la fila de `profiles` del usuario logueado y, si quedó un perfil
  * pendiente en este dispositivo (registro con confirmación de email), completa
  * lo que el trigger no pudo traer — típicamente la foto.
@@ -171,6 +195,10 @@ export function useAuth() {
   });
   const [regStep, setRegStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  // Sesión anónima (acceso de invitado). Se deriva de `session.user.is_anonymous`
+  // y no del perfil: el invitado nunca llega a `registered = true`, así que el
+  // perfil no puede distinguirlo de una cuenta a medio confirmar.
+  const [isGuest, setIsGuest] = useState(false);
 
   // ── Restaurar sesión al recargar ────────────────────────────────────────────
   useEffect(() => {
@@ -181,14 +209,28 @@ export function useAuth() {
         localStorage.removeItem(SESSION_KEY);
         setUser(null);
         setRegStep(1);
+        setIsGuest(false);
         return;
       }
+
+      const guest = !!session.user.is_anonymous;
+      setIsGuest(guest);
 
       const profile = await hydrateProfile(session.user);
 
       if (profile) {
         setUser(profile);
-        setRegStep(profile.registered ? 5 : 1);
+        // El invitado va derecho al paso 5: su perfil queda en `registered =
+        // false` para siempre (no tiene mail que confirmar) y sin esto la
+        // recarga lo devolvería al wizard de registro.
+        setRegStep(guest || profile.registered ? 5 : 1);
+      } else if (guest) {
+        // El trigger no dejó fila. No lo deslogueamos: para un invitado el
+        // perfil es descartable, alcanza con lo que tenemos en memoria.
+        const fallback = guestProfile(session.user.id);
+        persistSession(fallback);
+        setUser(fallback);
+        setRegStep(5);
       } else {
         // Sesión válida pero sin perfil ni datos para reconstruirlo.
         // No tiramos error: limpiamos sesión y tratamos al user como deslogueado.
@@ -208,6 +250,7 @@ export function useAuth() {
           localStorage.removeItem(SESSION_KEY);
           setUser(null);
           setRegStep(1);
+          setIsGuest(false);
         }
       }
     );
@@ -408,6 +451,50 @@ export function useAuth() {
     }
   }, []);
 
+  // ── Acceso de invitado (provisorio) ─────────────────────────────────────────
+  /**
+   * Sesión anónima para probar juegos y secciones sin registro ni GPS.
+   *
+   * Detrás de VITE_GUEST_LOGIN, que es de build time: si la variable no está
+   * definida en el entorno, el botón no se renderiza y esta función tampoco
+   * hace nada. El chequeo va duplicado acá a propósito — la UI puede cambiar,
+   * pero el bypass no debería poder dispararse desde ningún otro lado.
+   *
+   * El perfil se manda en `options.data` y lo crea el trigger `handle_new_user`
+   * del lado del server, igual que en el signUp normal: no insertamos en
+   * `profiles` a mano. Requiere "Anonymous sign-ins" habilitado en el proyecto
+   * de Supabase (ver supabase/AUTH_SETUP.md); si no lo está, devuelve 422.
+   */
+  const loginAsGuest = useCallback(async () => {
+    if (import.meta.env.VITE_GUEST_LOGIN !== "true")
+      return { ok: false, error: "El acceso de invitado no está habilitado." };
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously({
+        options: { data: { name: "Invitado", team: null } },
+      });
+
+      if (error) {
+        // El caso más probable en un proyecto recién configurado.
+        if (/anonymous.*(disabled|not enabled)|422/i.test(error.message))
+          return { ok: false, error: "El modo invitado no está habilitado en el servidor." };
+        return { ok: false, error: authErrorMessage(error) };
+      }
+
+      setIsGuest(true);
+      const profile = (await hydrateProfile(data.user)) ?? guestProfile(data.user.id);
+      persistSession(profile);
+      setUser(profile);
+      setRegStep(5);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // ── Actualizar perfil ───────────────────────────────────────────────────────
   const updateUser = useCallback(async (updates) => {
     setUser((prev) => {
@@ -441,6 +528,7 @@ export function useAuth() {
     clearPendingProfile();
     setUser(null);
     setRegStep(1);
+    setIsGuest(false);
   }, []);
 
   return {
@@ -449,6 +537,7 @@ export function useAuth() {
     setRegStep,
     register,
     login,
+    loginAsGuest,
     updateUser,
     logout,
     resendConfirmation,
@@ -456,6 +545,9 @@ export function useAuth() {
     updatePassword,
     changePassword,
     loading,
-    isLoggedIn: !!user?.registered,
+    isGuest,
+    // El invitado entra sin `registered`: su perfil nunca llega a true porque no
+    // tiene mail que confirmar. Sin este OR quedaría rebotando al login.
+    isLoggedIn: !!user?.registered || isGuest,
   };
 }

@@ -202,3 +202,65 @@ bar y un remitente tipo `hola@bizarren.app`. Después subí los límites en
 
 Perfil (paso 5) → tarjeta "🔑 Contraseña" → contraseña actual + nueva + repetir.
 Pide la actual a propósito: el celular suele quedar abierto sobre la mesa.
+
+---
+
+## Acceso de invitado (provisorio)
+
+Sesión anónima para probar juegos y secciones sin registrarse ni estar
+físicamente en el bar. Está apagado salvo que se defina `VITE_GUEST_LOGIN=true`
+en el build.
+
+**Es un bypass real del gate de geo y del de registro.** Definir la variable
+sólo en local y en entornos de Preview. Si queda en `true` en el entorno de
+producción de Vercel, cualquiera entra sin estar en el bar y sin cuenta.
+
+### Habilitarlo
+
+1. **En Supabase** — Authentication → Sign In / Providers → **Anonymous
+   sign-ins** → activar. Sin esto el botón aparece pero `signInAnonymously()`
+   devuelve 422 y la app muestra "El modo invitado no está habilitado en el
+   servidor".
+2. **En el build** — `VITE_GUEST_LOGIN=true` en `.env` (o en las variables de
+   entorno del Preview de Vercel).
+
+### Cómo funciona
+
+1. En el login aparece el botón secundario **"Entrar como invitado"**, separado
+   del alta por una línea. Sólo se renderiza si la variable está en `"true"`;
+   `loginAsGuest()` repite el chequeo, así que el bypass no se puede disparar
+   desde otro lado aunque cambie la UI.
+2. `supabase.auth.signInAnonymously()` con
+   `options.data = { name: 'Invitado', team: null }`. El perfil lo crea el
+   trigger `handle_new_user` del lado del servidor, igual que en el signUp
+   normal — el cliente **no** inserta en `profiles`.
+3. Mientras dure la sesión, la app muestra un cartel fijo
+   **"⚠ Modo invitado — datos de prueba"** entre el header y el contenido. No
+   scrollea y no se puede cerrar, a propósito.
+
+### Detalles que no son obvios
+
+- **`registered` se queda en `false` para siempre.** El invitado no tiene mail
+  que confirmar, así que el trigger `on_auth_user_confirmed` nunca dispara.
+  Quien lo deja entrar es `isLoggedIn = !!user.registered || isGuest`, no el
+  campo. Sin ese OR el invitado rebota al login en loop.
+- **El gate de geo NO es `useGeoGate`.** Juegos, Escenario y Pantalla leen
+  `isRestricted`, que en `App.jsx` sale de `user.geoOk` — el campo guardado en
+  el perfil. `useGeoGate` sólo corre dentro del wizard de registro. Por eso al
+  invitado lo destraba `!user?.geoOk && !isGuest` en `App.jsx`; abrir el hook
+  solo no alcanzaba.
+- **No le persistimos `geo_ok = true`.** Sería un permiso falso guardado en la
+  base que sobrevive a apagar la variable. `ProfileView` saltea ese `onSave`
+  cuando la sesión es anónima.
+- **`VITE_SKIP_GEO` sigue siendo otra cosa.** Es el escape hatch de desarrollo
+  y abre el gate para todos los usuarios; el modo invitado no lo usa ni lo
+  necesita. Son dos interruptores independientes.
+- **RLS no se tocó.** El usuario anónimo recibe un JWT con rol `authenticated`
+  y un `auth.uid()` normal, así que las policies existentes de `profiles` lo
+  cubren tal cual.
+
+### Pendiente si esto deja de ser provisorio
+
+Los usuarios anónimos se acumulan en `auth.users` y no se limpian solos.
+Conviene una tarea de borrado periódico (`is_anonymous = true` y
+`created_at < now() - interval '1 day'`) antes de dejarlo prendido mucho tiempo.
