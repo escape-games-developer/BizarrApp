@@ -125,3 +125,10 @@ schema que existe, verificando cada nombre de columna y cada CHECK contra la bas
 - el **Diseñador de Pantalla del Invitado**, que no existe como componente.
 
 Cada sección de FASE 4 dice en el reporte final contra qué columna/tabla escribe.
+
+---
+
+## Resultado
+
+El detalle ítem por ítem, los archivos tocados, el estado real del schema y los hallazgos
+sin tocar están en **[REPORTE_FINAL.md](REPORTE_FINAL.md)**.
