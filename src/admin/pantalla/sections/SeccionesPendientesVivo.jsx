@@ -10,11 +10,11 @@ import PanelSection from "../PanelSection";
  * Supabase** — no hay handler, los inputs están `disabled` y los QR de rol son
  * decorativos.
  *
- * A diferencia de la FASE 4, acá lo que falta no son columnas: es el motor.
- * Los efectos los tiene que dibujar la TV, los súper votos por equipo los tiene
- * que aplicar `pantalla_cast_super_vote`, y los QR de rol necesitan que
- * `pantalla_join_event` acepte un rol — hoy no recibe ninguno. Nada de eso se
- * toca desde el panel.
+ * Lo que falta acá no son columnas: es lógica de servidor. Los efectos los tiene
+ * que difundir un canal de broadcast que no existe, los súper votos por equipo
+ * necesitan el motor de puntaje de equipos, y los QR de rol necesitan un token
+ * firmado que `pantalla_join_event` sepa leer — hoy no recibe ningún rol. Nada
+ * de eso se resuelve desde el panel.
  */
 
 const ROLES_QR = [
@@ -23,7 +23,7 @@ const ROLES_QR = [
   { id: "staff",    ico: "🛠", label: "Staff" },
 ];
 
-export default function SeccionesPendientesVivo({ event, participants }) {
+export default function SeccionesPendientesVivo({ event }) {
   return (
     <>
       {/* ── Efectos de TV ───────────────────────────────────────────── */}
@@ -40,38 +40,8 @@ export default function SeccionesPendientesVivo({ event, participants }) {
           ))}
         </div>
         <div className="pdj-campo-hint">
-          Falta que la vista de TV escuche y dibuje el efecto. No es una columna: es motor.
-        </div>
-      </PanelSection>
-
-      {/* ── Sorteos y reconocimientos ───────────────────────────────── */}
-      <PanelSection id="sorteos-manuales" title="Sorteos y reconocimientos" icon="🎉" status="pendiente">
-        <div className="pdj-sub">
-          Sortear entre los presentes o reconocer a alguien en particular, con un premio adjunto.
-        </div>
-
-        <div className="pdj-campo">
-          <span className="pdj-campo-lbl">A quién</span>
-          <select className="pdj-input" disabled defaultValue="">
-            <option value="">Sorteo al azar entre {participants.length} presente(s)</option>
-          </select>
-        </div>
-
-        <div className="pdj-campo">
-          <span className="pdj-campo-lbl">Premio adjunto</span>
-          <select className="pdj-input" disabled defaultValue="">
-            <option value="">Sin premio</option>
-          </select>
-        </div>
-
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button type="button" className="pdj-mini pdj-mini-p" disabled>🎲 Sortear</button>
-          <button type="button" className="pdj-mini" disabled>🏅 Reconocer</button>
-        </div>
-        <div className="pdj-campo-hint">
-          Otorgar el premio escribiría en <code>pantalla_granted_rewards</code>, pero todavía
-          nada lo consume: la TV no muestra el cartel y el invitado no ve el premio. Se deja
-          apagado hasta que ese circuito exista.
+          <strong>Requiere RPC:</strong> falta el canal de broadcast que le avise a la TV qué
+          efecto dibujar. No es una columna que falte.
         </div>
       </PanelSection>
 
@@ -89,9 +59,9 @@ export default function SeccionesPendientesVivo({ event, participants }) {
           <button type="button" className="pdj-mini pdj-mini-p" disabled>Dar</button>
         </div>
         <div className="pdj-campo-hint">
-          El cupo de súper votos lo lleva <code>pantalla_participants.extra_super_votes</code>,
-          pero repartirlo por equipo necesita que el motor sepa quién es de qué equipo. Todavía
-          no hay tabla de pertenencia.
+          <strong>Requiere RPC:</strong> <code>pantalla_participants.team_id</code> ya existe,
+          pero repartir el cupo por equipo necesita el motor de puntaje de equipos, que
+          todavía no está escrito.
         </div>
       </PanelSection>
 
@@ -111,9 +81,10 @@ export default function SeccionesPendientesVivo({ event, participants }) {
           ))}
         </div>
         <div className="pdj-campo-hint">
-          Los de arriba son decorativos: apuntan al link común. Para que sirvan,
-          <code style={{ margin: "0 3px" }}>pantalla_join_event</code> tiene que aceptar un rol
-          firmado — hoy no recibe ninguno, y por eso nadie puede auto-asignarse VIP.
+          <strong>Requiere RPC:</strong> los de arriba son decorativos, apuntan al link común.
+          Para que sirvan, <code style={{ margin: "0 3px" }}>pantalla_join_event</code> tiene
+          que aceptar un token firmado por rol — hoy no recibe ninguno, y por eso nadie puede
+          auto-asignarse VIP.
         </div>
       </PanelSection>
     </>

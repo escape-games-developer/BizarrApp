@@ -157,6 +157,32 @@ export const savePrizes = (eventId, filas) =>
     })), { onConflict: "event_id,prize_key" })
     .select("prize_key"));
 
+// ── Premios otorgados ────────────────────────────────────────────────────────
+//
+// `pantalla_granted_rewards` la lee el invitado sólo para sus propias filas y el
+// admin para todas. El panel escribe con `source='manual'` (reconocimiento a
+// alguien puntual) o `'raffle'` (sorteo). Los otros tres valores del CHECK
+// —achievement, vip_gift, team_round— los pone el motor, no esta pantalla.
+
+export async function fetchGrantedRewards(eventId, limite = 30) {
+  if (!eventId) return [];
+  const { data, error } = await supabase.from("pantalla_granted_rewards")
+    .select("*").eq("event_id", eventId)
+    .order("granted_at", { ascending: false }).limit(limite);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export const grantReward = (eventId, { user_id, prize_key, source, source_key = null, payload = null }) =>
+  escribir(supabase.from("pantalla_granted_rewards")
+    .insert({ event_id: eventId, user_id, prize_key, source, source_key, payload })
+    .select("id"));
+
+/** Marca la entrega de un premio real. No se puede desmarcar: es un hecho. */
+export const markRewardDelivered = (id) =>
+  escribir(supabase.from("pantalla_granted_rewards")
+    .update({ delivered_at: new Date().toISOString() }).eq("id", id).select("id"));
+
 // ── Premios reales del local (4.12) ──────────────────────────────────────────
 export const fetchPhysicalPrizes = (eventId) => leer("pantalla_physical_prizes", eventId, "position");
 

@@ -7,6 +7,7 @@ import SeccionEstadisticas from "./sections/SeccionEstadisticas";
 import SeccionQr from "./sections/SeccionQr";
 import SeccionTvLink from "./sections/SeccionTvLink";
 import SeccionInvitados from "./sections/SeccionInvitados";
+import SeccionSorteos from "./sections/SeccionSorteos";
 import SeccionesPendientesVivo from "./sections/SeccionesPendientesVivo";
 import HistorialTab from "./HistorialTab";
 import PanelSection from "./PanelSection";
@@ -84,7 +85,7 @@ function SonandoAhora({ event, current }) {
 // ─── Vista ───────────────────────────────────────────────────────────────────
 export default function PantallaConsola({ shared }) {
   const {
-    event, candidates, current, stats, participants, refresh, refreshAdmin, onError,
+    event, candidates, current, stats, refresh, refreshAdmin, onError,
   } = shared;
 
   const [ocupado, setOcupado] = useState(false);
@@ -274,6 +275,7 @@ export default function PantallaConsola({ shared }) {
         <SeccionQr {...shared} />
         <SeccionTvLink {...shared} />
         <SeccionInvitados {...shared} />
+        <SeccionSorteos {...shared} />
 
         {/* El historial ya no tiene pestaña propia: vive como una sección más. */}
         <PanelSection id="historial" title="Historial de la noche" icon="🕘"
@@ -281,7 +283,7 @@ export default function PantallaConsola({ shared }) {
           <HistorialTab {...shared} />
         </PanelSection>
 
-        <SeccionesPendientesVivo event={event} participants={participants} />
+        <SeccionesPendientesVivo event={event} />
       </aside>
     </div>
   );
