@@ -24,7 +24,7 @@ const TIEMPOS = [
   { campo: "transition_fade_out_seconds", label: "Fade out (s)" },
 ];
 
-const CAMPOS = ["transition_enabled", "transition_gif_url", ...TIEMPOS.map((t) => t.campo)];
+const CAMPOS = ["transition_enabled", "transition_gif_url", ...TIEMPOS.map((t) => t.campo), "rain_anticipation_seconds", "rain_tail_seconds"];
 
 export default function SeccionTransicion({ event, refresh, onError }) {
   const [gifs,    setGifs]    = useState([]);
@@ -38,6 +38,8 @@ export default function SeccionTransicion({ event, refresh, onError }) {
       transition_fade_in_seconds:  event.transition_fade_in_seconds,
       transition_hold_seconds:     event.transition_hold_seconds,
       transition_fade_out_seconds: event.transition_fade_out_seconds,
+      rain_anticipation_seconds:   event.rain_anticipation_seconds ?? 6,
+      rain_tail_seconds:           event.rain_tail_seconds ?? 0,
     },
     [event.id, ...CAMPOS.map((c) => event[c])],
   );
@@ -56,6 +58,8 @@ export default function SeccionTransicion({ event, refresh, onError }) {
       transition_fade_in_seconds:  Number(b.transition_fade_in_seconds) || 0,
       transition_hold_seconds:     Number(b.transition_hold_seconds) || 0,
       transition_fade_out_seconds: Number(b.transition_fade_out_seconds) || 0,
+      rain_anticipation_seconds:   Number(b.rain_anticipation_seconds) || 6,
+      rain_tail_seconds:           Number(b.rain_tail_seconds) || 0,
     });
     await refresh();
   });
@@ -86,6 +90,10 @@ export default function SeccionTransicion({ event, refresh, onError }) {
 
   const off = !b.transition_enabled;
   const total = TIEMPOS.reduce((s, t) => s + (Number(b[t.campo]) || 0), 0);
+
+  // Los inputs devuelven texto, así que se convierte acá y no en el render.
+  const lluviaAntes = Number(b.rain_anticipation_seconds) || 0;
+  const lluviaCola  = Number(b.rain_tail_seconds) || 0;
 
   return (
     <PanelSection id="transicion" title="Transición entre canciones" icon="🎞">
@@ -173,6 +181,38 @@ export default function SeccionTransicion({ event, refresh, onError }) {
           Transición total: <strong style={{ color: total > 6 ? P.amarillo : P.tenue }}>
             {total.toFixed(1)}s
           </strong>{total > 6 && " — es bastante silencio entre tema y tema."}
+        </div>
+
+        <div style={{ marginTop: 14, borderTop: "1px solid rgba(240,232,255,.1)", paddingTop: 12 }}>
+          <span className="pdj-campo-lbl" style={{ marginBottom: 8, display: "block" }}>⛈ Lluvia entre canciones</span>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div>
+              <label htmlFor="rain_anticipation_seconds" style={{ fontSize: 9, fontWeight: 700, letterSpacing: .4, textTransform: "uppercase", color: P.tenue2, display: "block", marginBottom: 3 }}>
+                Segundos antes del fin
+              </label>
+              <input id="rain_anticipation_seconds" className="pdj-input" type="number" min={1} max={30} step={1}
+                value={b.rain_anticipation_seconds}
+                onChange={(e) => set("rain_anticipation_seconds", e.target.value)}
+                style={{ padding: "6px 8px", fontSize: 11 }} />
+            </div>
+            <div>
+              <label htmlFor="rain_tail_seconds" style={{ fontSize: 9, fontWeight: 700, letterSpacing: .4, textTransform: "uppercase", color: P.tenue2, display: "block", marginBottom: 3 }}>
+                Segundos del tema nuevo
+              </label>
+              <input id="rain_tail_seconds" className="pdj-input" type="number" min={0} max={15} step={1}
+                value={b.rain_tail_seconds}
+                onChange={(e) => set("rain_tail_seconds", e.target.value)}
+                style={{ padding: "6px 8px", fontSize: 11 }} />
+            </div>
+          </div>
+          <div className="pdj-campo-hint">
+            La lluvia arranca N segundos antes del fin del video y se mantiene M segundos del tema nuevo.
+          </div>
+          <div className="pdj-campo-hint">
+            {lluviaCola > 0
+              ? `Lluvia total por transición: ${lluviaAntes + lluviaCola} s (${lluviaAntes} s antes del corte + ${lluviaCola} s del tema nuevo)`
+              : `Lluvia total por transición: ${lluviaAntes} s`}
+          </div>
         </div>
       </div>
 

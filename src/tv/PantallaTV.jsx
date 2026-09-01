@@ -77,10 +77,6 @@ function QrPanel({ code, block }) {
         <div style={{ background: "#fff", padding: "2cqw", borderRadius: "3cqw", display: "flex", maxHeight: "62cqh", maxWidth: "78cqw" }}>
           <QRCode value={guestUrl(code)} style={{ height: "100%", width: "100%" }} />
         </div>
-        <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "min(12cqw,14cqh)",
-          letterSpacing: ".12em", color: C.white, marginTop: "3cqh", order: 2,
-        }}>{code}</div>
       </div>
   );
 }
@@ -157,18 +153,13 @@ function EditableOverlayText({ block }) {
   return <div style={{ bottom: block.content.textPosition === "bottom" ? "3cqh" : "auto", color: block.content.textColor, fontSize: `min(${block.content.textSize / 2}cqw,${block.content.textSize / 2}cqh)`, fontWeight: block.content.bold ? 800 : 400, left: "4cqw", position: "absolute", right: "4cqw", textAlign: "center", textShadow: "0 2px 6px #000", top: block.content.textPosition === "top" ? "3cqh" : "auto" }}>{block.content.text}</div>;
 }
 
-function TvStatic({ phase, waiting, eventName }) {
+function TvStatic({ phase, waiting }) {
   if (phase === "idle" && !waiting) return null;
   return (
     <div className={`tv-static tv-static-${phase === "idle" ? "static" : phase}`} aria-hidden="true">
       <div className="tv-static-noise" />
       <div className="tv-static-scanlines" />
       <div className="tv-static-band" />
-      <div className="tv-static-brand">
-        <strong>BIZARREN TV</strong>
-        {eventName && <em>{eventName}</em>}
-        {waiting && <span>ESPERANDO PRÓXIMO TEMA</span>}
-      </div>
     </div>
   );
 }
@@ -187,7 +178,7 @@ export default function PantallaTV() {
   const { event, candidates, current, loading } =
     usePantallaEvent({ eventId, client: supabaseAnon });
   const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
-    useContinuousTvPlayers({ current, eventId, token, unlocked });
+    useContinuousTvPlayers({ current, eventId, token, unlocked, rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6, rainTailSeconds: event?.rain_tail_seconds ?? 0 });
 
   // 1. Validar el acceso contra el servidor.
   useEffect(() => {
@@ -389,7 +380,7 @@ export default function PantallaTV() {
         {canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>} 
       </div>
 
-      <TvStatic phase={rainPhase} waiting={!current || readyCount < 2} eventName={event?.name}/>
+      <TvStatic phase={rainPhase} waiting={!current || readyCount < 2}/>
 
       <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>
     </>

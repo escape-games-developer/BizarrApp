@@ -17,8 +17,6 @@ import { loadYouTubeApi, safeDuration, safeState, safeTime, YT_STATE } from "./y
  * cuando bloquea: mirando la consola se sabe exactamente quién pidió el cambio.
  */
 
-export const TV_TRANSITION_SECONDS = 6;
-export const TV_TRANSITION_MS = TV_TRANSITION_SECONDS * 1000;
 export const TV_PLAYER_IDS = ["pantalla-tv-player-a", "pantalla-tv-player-b"];
 
 const WATCH_MS        = 400;
@@ -85,7 +83,7 @@ export function effectiveEndOf(item, duration) {
   return real;
 }
 
-export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
+export function useContinuousTvPlayers({ current, eventId, token, unlocked, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
   const [visiblePlayer, setVisiblePlayer] = useState(0);
   const [rainPhase, setRainPhase] = useState("idle");
   const [playerError, setPlayerError] = useState(null);
@@ -114,6 +112,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
   const advanceFailRef = useRef(new Map());
 
   latestCurrentRef.current = current;
+  const rainAnticipationRef = useRef(rainAnticipationSeconds);
+  const rainTailRef = useRef(rainTailSeconds);
+  rainAnticipationRef.current = rainAnticipationSeconds;
+  rainTailRef.current = rainTailSeconds;
 
   const later = useCallback((fn, delay) => {
     const timer = setTimeout(() => { timersRef.current.delete(timer); fn(); }, delay);
@@ -265,10 +267,13 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
      * Lluvia + rampa de bajada del player activo. No decide nada por sí sola.
      *
      * La bajada dura TODA la ventana de transición y el saliente NO se pausa
-     * acá: antes bajaba en 1 s y se pausaba, pero el swap recién ocurre a los
-     * TV_TRANSITION_MS, así que quedaban ~5 s de silencio bajo la lluvia. El
+     * acá: antes bajaba en 1 s y se pausaba, pero el swap recién ocurre al final
+     * de la ventana, así que quedaban segundos de silencio bajo la lluvia. El
      * saliente ahora sigue sonando hasta que el entrante está audible; lo pausa
      * `finishSwap`, recién cuando ya hay con qué reemplazarlo.
+     *
+     * La ventana es la anticipación de lluvia configurada en el evento: la
+     * rampa dura exactamente lo que dura la lluvia, no una constante aparte.
      */
     const runOutro = (sourceItem) => {
       setRainPhase("entering");
@@ -276,7 +281,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       const index = activeIndexRef.current;
       const volume = sourceItem?.youtube_volume ?? 100;
       debug(`Crossfade out — player ${index === 0 ? "A" : "B"} ${volume} → 0`);
-      fadeVolume(index, playersRef.current[index], volume, 0, TV_TRANSITION_MS);
+      fadeVolume(index, playersRef.current[index], volume, 0, rainAnticipationRef.current * 1000);
     };
 
     /**
@@ -344,7 +349,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
 
       const item      = slot.item;
       const elapsed   = Date.now() - transition.startedAt;
-      const remaining = Math.max(0, TV_TRANSITION_MS - elapsed);
+      const remaining = Math.max(0, rainAnticipationRef.current * 1000 - elapsed);
       const volume    = item.youtube_volume ?? 100;
 
       // El entrante sube YA, en paralelo con la bajada del saliente: eso es lo
@@ -361,11 +366,12 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
         slotsRef.current[index].role     = "current";
         slotsRef.current[1 - index].role = "idle";
         setVisiblePlayer(index);
-        setRainPhase("leaving");
         // El saliente ya llegó a 0 con su propia rampa: recién ahora se pausa.
+        // Esto NO se demora con la cola de lluvia: dejar el video anterior
+        // corriendo detrás de la lluvia sería un segundo audio en silencio.
         cancelFade(previousIndex);
         try { playersRef.current[previousIndex]?.pauseVideo(); } catch { /* noop */ }
-        later(() => setRainPhase("idle"), 700);
+        later(() => { setRainPhase("leaving"); later(() => setRainPhase("idle"), 700); }, rainTailRef.current * 1000);
         transitionRef.current = null;
         skipStreakRef.current = 0;
         watchTicksRef.current = { itemId: null, hits: 0 };
@@ -483,8 +489,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
         skipStreakRef.current = 0;
         setPlayerError(null);
         setPhase("PLAYING");
-        setRainPhase("leaving");
-        later(() => setRainPhase("idle"), 700);
+        later(() => { setRainPhase("leaving"); later(() => setRainPhase("idle"), 700); }, rainTailRef.current * 1000);
       }
     };
 
@@ -615,7 +620,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked }) {
       if (!(effectiveEnd > time)) { ticks.hits = 0; return; }   // lecturas no confiables
 
       const remaining = effectiveEnd - time;
-      if (remaining > TV_TRANSITION_SECONDS) { ticks.itemId = item.id; ticks.hits = 0; return; }
+      if (remaining > rainAnticipationRef.current) { ticks.itemId = item.id; ticks.hits = 0; return; }
 
       // Dos muestras seguidas antes de creerle: una lectura suelta del player
       // (publicidad, buffering, cambio de video) no puede cortar la canción.
