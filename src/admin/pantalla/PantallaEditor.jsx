@@ -1,6 +1,6 @@
 import PlaylistPanel from "./playlist/PlaylistPanel";
-import EventNameEditor from "./EventNameEditor";
-import { P, ESTADO_EVENTO } from "../../components/pantalla/pantallaUi";
+import EventoHeader from "./EventoHeader";
+import { P } from "../../components/pantalla/pantallaUi";
 
 /**
  * Editor del evento — la arquitectura de uso del admin de DJ Democracy.
@@ -14,28 +14,26 @@ import { P, ESTADO_EVENTO } from "../../components/pantalla/pantallaUi";
  */
 export default function PantallaEditor({ shared, secciones }) {
   const { event, items } = shared;
-  const est = ESTADO_EVENTO[event.status] || ESTADO_EVENTO.draft;
-  const enVivo = event.status === "live";
 
   return (
+    <>
+      {/* Cabecera común: evento, código, QR, estado del evento, modo de
+          contenido, modo de votación, estado de la votación y de la TV. */}
+      <EventoHeader
+        event={event} items={items} activos={shared.stats.activos}
+        onError={shared.onError}
+        irA={shared.goTo ? { label: "🔴 Ir a En vivo", onClick: () => shared.goTo("pantallaLive") } : null}
+      />
+
     <div className="pdj-shell">
       {/* ── Columna principal: playlist ──────────────────────────────── */}
       <div className="pdj-shell-main">
-        <div style={{ marginBottom: 13 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-              <EventNameEditor event={event} compact onError={shared.onError}
-                onSaved={async () => { await shared.refresh(); await shared.refreshEvents(); }} />
-            </div>
-            <span className={`pdj-estado${enVivo ? " pdj-estado-live" : ""}`}
-              style={{ color: est.color, background: est.bg, border: `1px solid ${est.borde}` }}>
-              <span className="pdj-punto" />{est.label}
-            </span>
-          </div>
-          <div style={{ fontSize: 11.5, color: P.tenue, marginTop: 5 }}>
-            <strong style={{ color: P.amarillo, fontWeight: 800 }}>{items.length}</strong>
-            {items.length === 1 ? " canción en la playlist" : " canciones en la playlist"}
-          </div>
+        {/* El nombre y el estado del evento ya los muestra la cabecera común,
+            que además deja editarlos. Acá queda sólo el conteo de la playlist,
+            que es el título real de esta columna. */}
+        <div style={{ fontSize: 11.5, color: P.tenue, marginBottom: 13 }}>
+          <strong style={{ color: P.amarillo, fontWeight: 800 }}>{items.length}</strong>
+          {items.length === 1 ? " canción en la playlist" : " canciones en la playlist"}
         </div>
 
         <PlaylistPanel {...shared} />
@@ -47,5 +45,6 @@ export default function PantallaEditor({ shared, secciones }) {
         {secciones}
       </aside>
     </div>
+    </>
   );
 }

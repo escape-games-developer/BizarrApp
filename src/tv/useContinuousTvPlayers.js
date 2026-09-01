@@ -116,6 +116,8 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
   const rainTailRef = useRef(rainTailSeconds);
   rainAnticipationRef.current = rainAnticipationSeconds;
   rainTailRef.current = rainTailSeconds;
+  // Ventana real del cruce en curso, ya acotada al largo del tema (ver `ventanaDeCruce`).
+  const crossfadeMsRef = useRef(rainAnticipationSeconds * 1000);
 
   const later = useCallback((fn, delay) => {
     const timer = setTimeout(() => { timersRef.current.delete(timer); fn(); }, delay);
@@ -275,13 +277,32 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
      * La ventana es la anticipación de lluvia configurada en el evento: la
      * rampa dura exactamente lo que dura la lluvia, no una constante aparte.
      */
+    /**
+     * Ventana real del cruce, en ms.
+     *
+     * La anticipación configurada es un TECHO, no un valor fijo. Si el tema dura
+     * menos que esa ventana, el cruce arrancaría apenas empieza a sonar y la TV
+     * pasaría de canción sola a los pocos segundos de abrirla — el bug que ya
+     * tuvimos. Con `effectiveEnd` conocido se limita al 40% del tema; sin él
+     * (final natural, avance del servidor) se usa la configuración tal cual.
+     *
+     * Con los valores normales no cambia nada: 6 s de anticipación en un tema de
+     * 3 minutos siguen siendo 6 s. Sólo muerde en el caso patológico — un short
+     * de 20 s con la anticipación en 30.
+     */
+    const ventanaDeCruce = (effectiveEnd) => {
+      const techo = Math.max(1, rainAnticipationRef.current) * 1000;
+      if (!(effectiveEnd > 0)) return techo;
+      return Math.max(1000, Math.min(techo, effectiveEnd * 400));
+    };
+
     const runOutro = (sourceItem) => {
       setRainPhase("entering");
       later(() => setRainPhase("static"), 450);
       const index = activeIndexRef.current;
       const volume = sourceItem?.youtube_volume ?? 100;
-      debug(`Crossfade out — player ${index === 0 ? "A" : "B"} ${volume} → 0`);
-      fadeVolume(index, playersRef.current[index], volume, 0, rainAnticipationRef.current * 1000);
+      debug(`Crossfade out — player ${index === 0 ? "A" : "B"} ${volume} → 0 en ${crossfadeMsRef.current}ms`);
+      fadeVolume(index, playersRef.current[index], volume, 0, crossfadeMsRef.current);
     };
 
     /**
@@ -316,6 +337,9 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
       };
       transitionRef.current = transition;
       setPhase("TRANSITIONING");
+      // La ventana se fija ACÁ y no se vuelve a leer: si el DJ cambia la
+      // anticipación en mitad de un cruce, este cruce termina con la que empezó.
+      crossfadeMsRef.current = ventanaDeCruce(extra.effectiveEnd);
       runOutro(sourceItem);
 
       const ok = await requestAdvance(reason, itemId, activeIndexRef.current, extra);
@@ -335,6 +359,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
         startedAt: Date.now(), reason: REASON.EXTERNAL,
       };
       setPhase("TRANSITIONING");
+      crossfadeMsRef.current = ventanaDeCruce(0);
       logAdvance(REASON.EXTERNAL, sourceItemId, activeIndexRef.current, {
         source: "servidor (manual-admin | kick-threshold)",
       });
@@ -349,7 +374,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
 
       const item      = slot.item;
       const elapsed   = Date.now() - transition.startedAt;
-      const remaining = Math.max(0, rainAnticipationRef.current * 1000 - elapsed);
+      const remaining = Math.max(0, crossfadeMsRef.current - elapsed);
       const volume    = item.youtube_volume ?? 100;
 
       // El entrante sube YA, en paralelo con la bajada del saliente: eso es lo
@@ -620,7 +645,11 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
       if (!(effectiveEnd > time)) { ticks.hits = 0; return; }   // lecturas no confiables
 
       const remaining = effectiveEnd - time;
-      if (remaining > rainAnticipationRef.current) { ticks.itemId = item.id; ticks.hits = 0; return; }
+      // Mismo cálculo que usará el cruce: acotado al largo real del tema, para
+      // que un video más corto que la anticipación no dispare el cambio apenas
+      // arranca. Sin esto, un short de 20 s con la anticipación en 30 pasaría de
+      // tema a los ~800 ms de empezar a sonar.
+      if (remaining * 1000 > ventanaDeCruce(effectiveEnd)) { ticks.itemId = item.id; ticks.hits = 0; return; }
 
       // Dos muestras seguidas antes de creerle: una lectura suelta del player
       // (publicidad, buffering, cambio de video) no puede cortar la canción.

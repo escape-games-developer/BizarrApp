@@ -9,6 +9,7 @@ import SeccionTvLink from "./sections/SeccionTvLink";
 import SeccionInvitados from "./sections/SeccionInvitados";
 import SeccionSorteos from "./sections/SeccionSorteos";
 import SeccionesPendientesVivo from "./sections/SeccionesPendientesVivo";
+import EventoHeader from "./EventoHeader";
 import HistorialTab from "./HistorialTab";
 import PanelSection from "./PanelSection";
 
@@ -111,6 +112,15 @@ export default function PantallaConsola({ shared }) {
   const enVivo    = event.status === "live";
 
   return (
+    <>
+      {/* Misma cabecera que el Editor: el DJ ve el estado del evento sin
+          cambiar de vista ni abrir ningún acordeón. */}
+      <EventoHeader
+        event={event} items={shared.items} activos={stats.activos}
+        onError={onError}
+        irA={shared.goTo ? { label: "✏️ Ir al Editor", onClick: () => shared.goTo("pantallaEditor") } : null}
+      />
+
     <div className="pdj-shell">
       {/* ── Columna principal ──────────────────────────────────────── */}
       <div className="pdj-shell-main">
@@ -286,5 +296,6 @@ export default function PantallaConsola({ shared }) {
         <SeccionesPendientesVivo event={event} />
       </aside>
     </div>
+    </>
   );
 }
