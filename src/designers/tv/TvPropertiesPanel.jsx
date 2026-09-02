@@ -5,6 +5,7 @@ import { designerTheme as T } from "../theme";
 
 const modes = [{ value: "none", label: "Ninguno" }, { value: "color", label: "Color" }, { value: "image", label: "Imagen" }];
 const sizes = [{ value: "small", label: "Chico" }, { value: "medium", label: "Medio" }, { value: "large", label: "Grande" }];
+const fontOptions = <><option value="inherit">Predeterminada</option><option value="inter">Inter</option><option value="poppins">Poppins</option><option value="space">Space Grotesk</option><option value="system">Sistema</option></>;
 
 function FileField({ onLoad }) {
   const [error, setError] = useState("");
@@ -130,7 +131,11 @@ export default function TvPropertiesPanel({ config, selectedId, onScreenChange, 
           <NumberField label="X %" value={selected.x} onChange={x => patchBlock({ x })}/><NumberField label="Y %" value={selected.y} onChange={y => patchBlock({ y })}/>
           <NumberField label="Ancho %" value={selected.w} onChange={w => patchBlock({ w })}/><NumberField label="Alto %" value={selected.h} onChange={h => patchBlock({ h })}/>
         </div>
-        <div style={{ marginTop: 8 }}><NumberField label="Capa" value={selected.z} step={1} onChange={z => patchBlock({ z })}/></div>
+        <div style={{ alignItems: "end", display: "grid", gap: 6, gridTemplateColumns: "1fr auto auto", marginTop: 8 }}>
+          <NumberField label="Capa" value={selected.z} step={1} onChange={z => patchBlock({ z })}/>
+          <button type="button" title="Subir una capa" onClick={() => patchBlock({ z: Number(selected.z || 0) + 1 })} style={{ ...inputStyle, cursor: "pointer", padding: "7px 10px" }}>↑</button>
+          <button type="button" title="Bajar una capa" onClick={() => patchBlock({ z: Math.max(0, Number(selected.z || 0) - 1) })} style={{ ...inputStyle, cursor: "pointer", padding: "7px 10px" }}>↓</button>
+        </div>
       </SectionCard>
 
       {contentEditable && <SectionCard title="Imagen y fondo">
@@ -139,12 +144,47 @@ export default function TvPropertiesPanel({ config, selectedId, onScreenChange, 
         <div style={{ marginTop: 9 }}><Field label={`Opacidad del bloque ${Math.round(selected.opacity * 100)}%`}><input style={{ width: "100%", accentColor: T.primary }} type="range" min="0" max="1" step="0.05" value={selected.opacity} onChange={event => patchBlock({ opacity: Number(event.target.value) })}/></Field></div>
       </SectionCard>}
 
-      {contentEditable && <SectionCard title="Texto dentro del componente">
+      {contentEditable && selectedId !== "qr" && <SectionCard title="Texto dentro del componente">
         <div style={{ display: "grid", gap: 9 }}>
           <Field label="Texto"><input style={inputStyle} value={selected.content?.text || ""} placeholder="Sin texto" onChange={event => patchNested("content", { text: event.target.value })}/></Field>
           <Field label="Posición"><Chips value={selected.content?.textPosition || "bottom"} options={[{ value: "top", label: "Arriba" }, { value: "bottom", label: "Abajo" }]} onChange={textPosition => patchNested("content", { textPosition })}/></Field>
           <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}><NumberField label="Tamaño (px)" value={selected.content?.textSize || 16} min={6} onChange={textSize => patchNested("content", { textSize })}/><ColorField label="Color" value={selected.content?.textColor || "#ffffff"} onChange={textColor => patchNested("content", { textColor })}/></div>
           <label style={{ alignItems: "center", display: "flex", gap: 7, fontSize: 11 }}><input type="checkbox" checked={selected.content?.bold ?? true} onChange={event => patchNested("content", { bold: event.target.checked })}/> Negrita</label>
+        </div>
+      </SectionCard>}
+
+      {selectedId === "qr" && <SectionCard title="QR · Contenido">
+        <div style={{ display: "grid", gap: 9 }}>
+          <label style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+            <span>Mostrar código del evento</span><input type="checkbox" checked={selected.content?.showCode ?? false} onChange={event => patchNested("content", { showCode: event.target.checked })}/>
+          </label>
+          <label style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+            <span>Mostrar subtítulo (“Entrá y votá…”)</span><input type="checkbox" checked={selected.content?.showSubtitle ?? false} onChange={event => patchNested("content", { showSubtitle: event.target.checked })}/>
+          </label>
+          {selected.content?.showSubtitle && <Field label="Texto del subtítulo"><input style={inputStyle} value={selected.content?.subtitle || ""} onChange={event => patchNested("content", { subtitle: event.target.value })}/></Field>}
+          <Field label="Posición del texto"><select style={inputStyle} value={selected.content?.textPosition || "top"} onChange={event => patchNested("content", { textPosition: event.target.value })}><option value="top">Arriba del QR</option><option value="bottom">Abajo del QR</option></select></Field>
+          <Field label="Alineación del texto"><Chips value={selected.font.align} options={[{ value: "left", label: "Izquierda" }, { value: "center", label: "Centro" }, { value: "right", label: "Derecha" }]} onChange={align => patchNested("font", { align })}/></Field>
+        </div>
+      </SectionCard>}
+
+      {selectedId === "qr" && <SectionCard title="Tipografía · Etiqueta">
+        <div style={{ display: "grid", gap: 9 }}>
+          <Field label="Fuente"><select style={inputStyle} value={selected.content?.labelFont || "inherit"} onChange={event => patchNested("content", { labelFont: event.target.value })}>{fontOptions}</select></Field>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+            <NumberField label="Tamaño (px)" min={6} value={selected.content?.labelSize ?? 18} onChange={labelSize => patchNested("content", { labelSize })}/>
+            <ColorField label="Color" value={selected.content?.labelColor || "#FFD600"} onChange={labelColor => patchNested("content", { labelColor })}/>
+          </div>
+        </div>
+      </SectionCard>}
+
+      {selectedId === "qr" && <SectionCard title="Tipografía · Código">
+        <div style={{ display: "grid", gap: 9 }}>
+          <Field label="Fuente"><select style={inputStyle} value={selected.content?.codeFont || "inherit"} onChange={event => patchNested("content", { codeFont: event.target.value })}>{fontOptions}</select></Field>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+            <NumberField label="Tamaño (px)" min={6} value={selected.content?.codeSize} onChange={codeSize => patchNested("content", { codeSize })}/>
+            <ColorField label="Color" value={selected.content?.codeColor || "#FFD600"} onChange={codeColor => patchNested("content", { codeColor })}/>
+          </div>
+          <p style={{ color: T.mutedForeground, fontSize: 9, lineHeight: 1.4, margin: 0 }}>Dejá el tamaño vacío para usar el tamaño automático proporcional al bloque.</p>
         </div>
       </SectionCard>}
 
@@ -159,9 +199,9 @@ export default function TvPropertiesPanel({ config, selectedId, onScreenChange, 
         <div style={{ marginTop: 9 }}><NumberField label="Esquinas redondeadas (px)" value={selected.radius} onChange={radius => patchBlock({ radius })}/></div>
       </SectionCard>}
 
-      {contentEditable && <SectionCard title="Tipografía">
+      {contentEditable && selectedId !== "qr" && <SectionCard title="Tipografía">
         <div style={{ display: "grid", gap: 9 }}>
-          <Field label="Fuente"><select style={inputStyle} value={selected.font.family} onChange={event => patchNested("font", { family: event.target.value })}><option value="inherit">Predeterminada</option><option value="inter">Inter</option><option value="poppins">Poppins</option><option value="space">Space Grotesk</option><option value="system">Sistema</option></select></Field>
+          <Field label="Fuente"><select style={inputStyle} value={selected.font.family} onChange={event => patchNested("font", { family: event.target.value })}>{fontOptions}</select></Field>
           <Field label="Alineación del texto"><Chips value={selected.font.align} options={[{ value: "left", label: "Izquierda" }, { value: "center", label: "Centro" }, { value: "right", label: "Derecha" }]} onChange={align => patchNested("font", { align })}/></Field>
           <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
             <NumberField label="Título (px)" value={selected.font.titleSize} onChange={titleSize => patchNested("font", { titleSize })}/>

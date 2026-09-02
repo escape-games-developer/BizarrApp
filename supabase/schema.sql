@@ -67,6 +67,8 @@ CREATE POLICY "profiles: admin lee todos"
 -- ============================================================================
 CREATE TABLE admin_users (
   user_id    uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role       text NOT NULL DEFAULT 'general_admin'
+             CHECK (role IN ('general_admin', 'operator')),
   created_at timestamptz DEFAULT now()
 );
 
@@ -178,6 +180,7 @@ CREATE TABLE game_state (
   active_placa      text,       -- placa activa en pantalla gigante
   placa_custom      jsonb,      -- datos de placa personalizada {emoji,title,subtitle}
   zocalo_active     boolean     DEFAULT false,  -- zócalo de mensajes on/off
+  screen_audio_enabled boolean  NOT NULL DEFAULT false, -- audio remoto de Pantalla Gigante
 
   -- Rey del Orto
   raffle_state      text        NOT NULL DEFAULT 'idle'
@@ -591,4 +594,3 @@ CREATE POLICY "coupons: sistema inserta"
   WITH CHECK (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()));
 
 ALTER PUBLICATION supabase_realtime ADD TABLE coupons;
-

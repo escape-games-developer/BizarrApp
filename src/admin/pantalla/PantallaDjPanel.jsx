@@ -86,23 +86,6 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
         </div>
       )}
 
-      {/* Selector de evento */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-        <select className="pdj-input" style={{ flex: "1 1 200px" }}
-          value={eventId || ""} onChange={(e) => setEventId(e.target.value || null)}>
-          {events.length === 0 && <option value="">Sin eventos todavía</option>}
-          {events.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.status === "live" ? "🔴 " : e.status === "ended" ? "⏹ " : "📝 "}{e.name} · {e.code}
-            </option>
-          ))}
-        </select>
-        <button className="pdj-mini pdj-mini-p" disabled={busy} onClick={nuevoEvento}
-          style={{ padding: "10px 16px" }}>
-          + Nuevo evento
-        </button>
-      </div>
-
       {!ev.event && ev.loading && (
         <>
           <div className="pdj-skel" style={{ height: 66 }} />

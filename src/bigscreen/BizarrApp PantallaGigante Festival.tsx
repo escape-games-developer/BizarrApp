@@ -663,6 +663,12 @@ export default function PantallaGigante() {
     return localStorage.getItem("bizarrapp_audio_enabled") === "true";
   });
 
+  React.useEffect(() => {
+    if (typeof gameState?.screen_audio_enabled !== "boolean") return;
+    setAudioEnabled(gameState.screen_audio_enabled);
+    localStorage.setItem("bizarrapp_audio_enabled", String(gameState.screen_audio_enabled));
+  }, [gameState?.screen_audio_enabled]);
+
   const enableAudio = React.useCallback(() => {
     setAudioEnabled(true);
     localStorage.setItem("bizarrapp_audio_enabled", "true");

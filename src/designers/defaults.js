@@ -53,7 +53,13 @@ export const DEFAULT_TV_CONFIG = {
   blocks: {
     video: createTvBlock({ x: 0, y: 0, w: 100, h: 100, z: 1, border: { enabled: false, width: 0, color: "#ffffff" } }),
     logo: createTvBlock({ x: 1.5, y: 2, w: 14, h: 14, z: 3, bg: { mode: "image", color: "#111111", image: "/logo.png", opacity: 1 }, content: { text: "", textPosition: "bottom", textSize: 16, textColor: "#ffffff", bold: true } }),
-    qr: createTvBlock({ x: 2, y: 61, w: 16, h: 35, z: 3, content: { text: "ESCANEÁ PARA VOTAR", textPosition: "top", textSize: 16, textColor: "#FFD600", bold: true } }),
+    qr: createTvBlock({ x: 2, y: 61, w: 16, h: 35, z: 3, content: {
+      text: "ESCANEÁ PARA VOTAR", textPosition: "top", textSize: 16,
+      textColor: "#FFD600", bold: true, showCode: false, showSubtitle: false,
+      subtitle: "Entrá y votá…", labelFont: "inherit", labelSize: 18,
+      labelColor: "#FFD600", codeFont: "inherit", codeSize: null,
+      codeColor: "#FFD600",
+    } }),
     upcoming: createTvBlock({ x: 79, y: 61, w: 19, h: 35, z: 3, bg: { mode: "color", color: "#111111", image: null, opacity: 0.65 }, border: { enabled: false, width: 1, color: "#ffd500" }, shadow: { enabled: true, strength: "soft" }, radius: 15, font: { family: "poppins", align: "left", titleSize: 15, titleWeight: "normal", artistSize: null, scoreSize: null, titleColor: null, artistColor: null, scoreColor: null } }),
     nowPlaying: createTvBlock({ x: 20, y: 2, w: 58, h: 10, z: 3 }),
     progress: createTvBlock({ x: 20, y: 14, w: 58, h: 5, z: 3 }),

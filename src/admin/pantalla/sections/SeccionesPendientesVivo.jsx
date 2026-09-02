@@ -23,7 +23,8 @@ const ROLES_QR = [
   { id: "staff",    ico: "🛠", label: "Staff" },
 ];
 
-export default function SeccionesPendientesVivo({ event }) {
+export default function SeccionesPendientesVivo({ event, onlyRoles = false, excludeRoles = false }) {
+  if (onlyRoles) return <RolesQr event={event} />;
   return (
     <>
       {/* ── Efectos de TV ───────────────────────────────────────────── */}
@@ -66,7 +67,14 @@ export default function SeccionesPendientesVivo({ event }) {
       </PanelSection>
 
       {/* ── QRs de roles especiales ─────────────────────────────────── */}
-      <PanelSection id="qr-roles" title="QRs de roles especiales" icon="🎫" status="pendiente">
+      {!excludeRoles && <RolesQr event={event} />}
+    </>
+  );
+}
+
+function RolesQr({ event }) {
+  return (
+      <PanelSection id="qr-roles" title="QRs de roles especiales" icon="🎫" status="pendiente" defaultOpen>
         <div className="pdj-sub">
           Un QR por rol: quien lo escanea entra ya con ese rol, sin que el staff lo asigne a mano.
         </div>
@@ -87,6 +95,5 @@ export default function SeccionesPendientesVivo({ event }) {
           auto-asignarse VIP.
         </div>
       </PanelSection>
-    </>
   );
 }

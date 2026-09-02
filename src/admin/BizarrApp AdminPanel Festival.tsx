@@ -14,9 +14,12 @@ import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
 import DesignerView from "../views/Designer/DesignerView";
 import TvDesigner from "../designers/tv/TvDesigner";
+import UsuariosPanel from "./UsuariosPanel";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
 import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import PantallaSidebarMenu from "./pantalla/PantallaSidebarMenu";
+import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
+import { getTvLink, tvUrl } from "../services/pantallaDj";
 import {
   RaffleScreen,
   TriviaScreen,
@@ -76,7 +79,8 @@ const css = `
   /* Main */
   .main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:10;}
   .mhdr{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;
-    background:rgba(8,4,15,.9);border-bottom:1px solid rgba(155,47,255,.1);flex-shrink:0;}
+    background:rgba(8,4,15,.96);border-bottom:1px solid rgba(155,47,255,.16);flex-shrink:0;
+    position:sticky;top:0;z-index:500;backdrop-filter:blur(16px);}
   .mhdr-title{font-family:'Syne',sans-serif;font-weight:900;font-size:17px;
     background:var(--sg);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .mbody{flex:1;overflow-y:auto;padding:14px 16px;scrollbar-width:thin;scrollbar-color:rgba(155,47,255,.15) transparent;}
@@ -252,6 +256,8 @@ const SECS = [
   {id:"designer", icon:"✦", label:"Diseñador",        group:"General",    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
   {id:"designerTv",icon:"📺",label:"Pantalla TV",group:"Diseñadores de Pantalla",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
   {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",group:"Diseñadores de Pantalla",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
+  {id:"usuarios", icon:"👥", label:"Usuarios", group:"Administración", adminOnly:true,
+    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
 ];
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2229,6 +2235,7 @@ export default function AdminPanel(){
   const [active,   setActive]   = useState(null);
   const [authSession, setAuthSession] = useState(undefined); // undefined = verificando sesión
   const [isAdmin,     setIsAdmin]     = useState(undefined); // undefined = verificando admin_users
+  const [adminRole,   setAdminRole]   = useState(undefined);
   const [user, setUser] = useState(null);
   useEffect(() => {
     supabase.auth.getUser().then(({data:{user}}) => setUser(user));
@@ -2240,13 +2247,27 @@ export default function AdminPanel(){
   }, []);
   useEffect(() => {
     const uid = authSession?.user?.id;
-    if (!uid) { setIsAdmin(undefined); return; }
+    if (!uid) { setIsAdmin(undefined); setAdminRole(undefined); return; }
     let cancelled = false;
+    // Primero comprobamos acceso usando únicamente la columna histórica. Así
+    // el panel sigue abriendo aunque la migración de roles aún no esté aplicada.
     supabase.from("admin_users").select("user_id").eq("user_id", uid).maybeSingle()
-      .then(({ data }) => { if (!cancelled) setIsAdmin(!!data); });
+      .then(async ({ data, error }) => {
+        if (cancelled) return;
+        const autorizado = !error && !!data;
+        setIsAdmin(autorizado);
+        if (!autorizado) { setAdminRole(null); return; }
+
+        // Con bases anteriores, `role` todavía no existe. En ese caso los
+        // administradores ya registrados conservan acceso completo.
+        const { data: rolData, error: rolError } = await supabase
+          .from("admin_users").select("role").eq("user_id", uid).maybeSingle();
+        if (!cancelled) setAdminRole(rolError ? "general_admin" : (rolData?.role || "general_admin"));
+      });
     return () => { cancelled = true; };
   }, [authSession?.user?.id]);
   const { session, gameState } = useGameState();
+  const pantallaGlobal = usePantallaEvent({ discoverLive: true });
   const controls = useAdminControls(session?.id ?? null);
   const zocaloOn = gameState?.zocalo_active ?? false;
   const setZocaloOn = (val) => {
@@ -2254,6 +2275,18 @@ export default function AdminPanel(){
     controls?.toggleZocalo(newVal);
   };
   const { connectedCount } = usePresence(session?.id, null);
+  const screenAudioOn = gameState?.screen_audio_enabled ?? false;
+  const pantallaActiva = pantallaGlobal.event?.status === "live";
+  const abrirPantallaTv = useCallback(async()=>{
+    const evento = pantallaGlobal.event;
+    if(!evento) return;
+    try{
+      const link = await getTvLink(evento.id);
+      window.open(tvUrl(link.code||evento.code,link.token),"_blank","noopener");
+    }catch(err){
+      showToast({type:"error",title:"Pantalla TV",text:err.message});
+    }
+  },[pantallaGlobal.event]);
   const { pending, approved, approve, reject } = useMessages(session?.id, "admin");
   const {
     pending: vidPending,
@@ -2288,7 +2321,12 @@ export default function AdminPanel(){
     prevMsgCount.current = pending.length;
   },[pending]);
   useEffect(()=>{ window.__bizarrToast = showToast; },[]);
-  const curSec = SECS.find(s=>s.id===sec)||SECS[0];
+  const canManageUsers = adminRole === "general_admin";
+  const visibleSecs = SECS.filter(s=>!s.adminOnly || canManageUsers);
+  const curSec = visibleSecs.find(s=>s.id===sec)||visibleSecs[0]||SECS[0];
+  useEffect(()=>{
+    if(adminRole && sec==="usuarios" && !canManageUsers) setSec("launch");
+  },[adminRole,sec,canManageUsers]);
   const groups = [...new Set(SECS.map(s=>s.group))];
   const goTo   = useCallback(id=>setSec(id),[]);
   useEffect(()=>{
@@ -2334,6 +2372,7 @@ export default function AdminPanel(){
       case "designer":  return <DesignerView/>;
       case "designerTv": return <TvDesigner sessionId="default"/>;
       case "designerGuest": return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Diseñador de Pantalla Invitado — próxima etapa</div>;
+      case "usuarios": return canManageUsers ? <UsuariosPanel/> : null;
       default: return <div style={{padding:20,color:"rgba(240,232,255,.25)",fontSize:12}}>Sección en construcción</div>;
     }
   };
@@ -2407,14 +2446,14 @@ export default function AdminPanel(){
             </div>
           </div>
           <div className="sb-nav">
-            {[...new Set(SECS.map(s=>s.group))].map((grp, gi)=>(
+            {[...new Set(visibleSecs.map(s=>s.group))].map((grp, gi)=>(
               <div key={grp}>
                 {!sbCollapsed ? (
                   <div className="sb-group-label">{grp}</div>
                 ) : (
                   gi>0 && <div className="sb-group-sep"/>
                 )}
-                {SECS.filter(s=>s.group===grp&&!s.parent).map(s=>(
+                {visibleSecs.filter(s=>s.group===grp&&!s.parent).map(s=>(
                   <button key={s.id}
                     className={`sb-btn${sec===s.id?" sb-btn-active":""}`}
                     onClick={()=>setSec(s.id)}
@@ -2449,7 +2488,7 @@ export default function AdminPanel(){
               <div className="mhdr-title">{curSec.icon} {curSec.label}</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <div style={{position:"relative"}}>
+              <div style={{position:"relative",order:6}}>
                 <button onClick={()=>setBellOpen(b=>!b)}
                   style={{background:"#1A0D2E",border:"1px solid #9B2FFF44",borderRadius:"50%",width:36,height:36,color:"#F0E8FF",cursor:"pointer",position:"relative",padding:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"border-color .15s"}}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2509,32 +2548,47 @@ export default function AdminPanel(){
                   </div>
                 )}
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:6,background:"#FF2D7822",border:"1px solid #FF2D78",borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box"}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:"#FF2D78",display:"inline-block",animation:"pulse 1.2s infinite"}}/>
-                <span style={{fontSize:12,fontWeight:700,color:"#FF2D78"}}>EN VIVO</span>
+              <button type="button" onClick={abrirPantallaTv} disabled={!pantallaGlobal.event}
+                style={{display:"flex",alignItems:"center",gap:6,background:"#7A6E8A18",
+                  border:"1px solid #7A6E8A66",borderRadius:20,padding:"5px 14px",minWidth:96,
+                  justifyContent:"center",height:30,boxSizing:"border-box",cursor:pantallaGlobal.event?"pointer":"not-allowed",
+                  color:pantallaGlobal.event?"#F0E8FF":"#7A6E8A",fontSize:11,fontWeight:700,
+                  opacity:pantallaGlobal.event?1:.55,order:1}} title="Abrir la Pantalla TV del evento activo">
+                📺 ABRIR TV
+              </button>
+              <div style={{display:"flex",alignItems:"center",gap:6,
+                background:pantallaActiva?"#00F5A018":"#7A6E8A18",
+                border:`1px solid ${pantallaActiva?"#00F5A0":"#7A6E8A66"}`,
+                borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box",order:2}}
+                title={pantallaActiva?"La pantalla del evento está activa":"No hay una pantalla de evento activa"}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:pantallaActiva?"#00F5A0":"#7A6E8A",display:"inline-block",animation:pantallaActiva?"pulse 1.2s infinite":"none"}}/>
+                <span style={{fontSize:11,fontWeight:700,color:pantallaActiva?"#00F5A0":"#7A6E8A"}}>
+                  {pantallaActiva?"EN VIVO":"FUERA DE LÍNEA"}
+                </span>
               </div>
 
-              <div style={{display:"flex",alignItems:"center",gap:6,background:"#FFD60022",border:"1px solid #FFD60088",borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,background:"#FFD60022",border:"1px solid #FFD60088",borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box",order:4}}>
                 <span style={{fontSize:12,fontWeight:700,color:"#FFD600"}}>👥 {connectedCount}</span>
               </div>
 
-              <div onClick={()=>setZocaloOn(z=>!z)}
-                style={{display:"flex",alignItems:"center",gap:6,background:zocaloOn?"#00F5A022":"#7A6E8A22",border:`1px solid ${zocaloOn?"#00F5A0":"#7A6E8A"}`,borderRadius:20,padding:"5px 14px",minWidth:100,justifyContent:"center",height:30,boxSizing:"border-box",cursor:"pointer",transition:"all .15s"}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:zocaloOn?"#00F5A0":"#7A6E8A",display:"inline-block",boxShadow:zocaloOn?"0 0 6px #00F5A0":"none"}}/>
-                <span style={{fontSize:12,fontWeight:700,color:zocaloOn?"#00F5A0":"#7A6E8A"}}>ZÓCALO</span>
+              <div style={{display:"flex",alignItems:"center",gap:6,background:"#9B2FFF18",border:"1px solid #9B2FFF66",borderRadius:20,padding:"5px 14px",minWidth:116,justifyContent:"center",height:30,boxSizing:"border-box",order:5}}
+                title="Código del evento de Pantalla">
+                <span style={{fontSize:10,fontWeight:600,color:"#9B8DAE"}}>CÓDIGO</span>
+                <span style={{fontSize:12,fontWeight:800,letterSpacing:1.4,color:"#F0E8FF"}}>{pantallaGlobal.event?.code||"—"}</span>
               </div>
 
-              <div style={{
+              <button type="button" onClick={()=>controls?.toggleScreenAudio(!screenAudioOn)} style={{
                 display:"flex",alignItems:"center",gap:6,
-                background: "#7A6E8A22",
-                border: "1px solid #7A6E8A55",
+                background: screenAudioOn?"#00E5FF18":"#7A6E8A22",
+                border: `1px solid ${screenAudioOn?"#00E5FF88":"#7A6E8A55"}`,
                 borderRadius:20,padding:"5px 14px",minWidth:100,
                 justifyContent:"center",height:30,boxSizing:"border-box",
+                cursor:"pointer",order:3,
               }}
-              title="El operador debe tocar la Pantalla Gigante una vez para activar el audio">
-                <span style={{fontSize:13}}>🔇</span>
-                <span style={{fontSize:11,fontWeight:700,color:"#7A6E8A"}}>AUDIO PANTALLA</span>
-              </div>
+              title={screenAudioOn?"Silenciar el audio de la pantalla":"Activar el audio de la pantalla"}>
+                <span style={{fontSize:13}}>{screenAudioOn?"🔊":"🔇"}</span>
+                <span style={{fontSize:11,fontWeight:700,color:screenAudioOn?"#00E5FF":"#7A6E8A"}}>AUDIO PANTALLA</span>
+              </button>
             </div>
           </div>}
           <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow,...(sec==="designer"?{padding:0,overflow:"hidden"}:{})}} key={sec}>

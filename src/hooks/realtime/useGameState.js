@@ -163,6 +163,10 @@ export function useAdminControls(sessionId) {
     update({ zocalo_active: on }),
   [update]);
 
+  const toggleScreenAudio = useCallback((on) =>
+    update({ screen_audio_enabled: on }),
+  [update]);
+
   const sendPlaca = useCallback(async (placaId, customData = null) => {
     await dismissActiveVideo();
     return update({ active_placa: placaId, active_game: null,
@@ -453,7 +457,7 @@ export function useAdminControls(sessionId) {
     launchDuelo, cerrarDuelo,
     openEscenarioInvitation, launchEscenario,
     launchMinijuego,
-    toggleZocalo, sendPlaca, clearPlaca,
+    toggleZocalo, toggleScreenAudio, sendPlaca, clearPlaca,
     projectVideo,
   };
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
+import { useGameState } from "../hooks/realtime/useGameState";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig } from "../designers/lib/persistence";
@@ -67,16 +68,22 @@ function Reacciones({ eventId, size = "medium" }) {
 
 // ─── Panel lateral: QR + próximas ────────────────────────────────────────────
 function QrPanel({ code, block }) {
+  const content = block.content || {};
+  const align = block.font?.align || "center";
+  const label = <div style={{
+    fontFamily: fontFamily(content.labelFont), fontWeight: content.bold ? 900 : 400,
+    fontSize: content.labelSize ? `${content.labelSize}px` : "min(8cqw,12cqh)",
+    letterSpacing: ".08em", color: content.labelColor || content.textColor || C.gold,
+  }}>{content.text}</div>;
   return (
-      <div style={{ alignItems: "center", display: "flex", flexDirection: "column", height: "100%", justifyContent: "center", textAlign: "center", width: "100%" }}>
-        <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: block.content?.bold ? 900 : 400, fontSize: `min(${(block.content?.textSize || 16) / 2}cqw,${(block.content?.textSize || 16) / 2}cqh)`,
-          letterSpacing: ".08em", color: block.content?.textColor || C.gold, marginBottom: "3cqh",
-          order: block.content?.textPosition === "bottom" ? 3 : 0,
-        }}>{block.content?.text}</div>
+      <div style={{ alignItems: align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center", display: "flex", flexDirection: "column", gap: "3cqh", height: "100%", justifyContent: "center", textAlign: align, width: "100%" }}>
+        {content.textPosition !== "bottom" && label}
         <div style={{ background: "#fff", padding: "2cqw", borderRadius: "3cqw", display: "flex", maxHeight: "62cqh", maxWidth: "78cqw" }}>
           <QRCode value={guestUrl(code)} style={{ height: "100%", width: "100%" }} />
         </div>
+        {content.showSubtitle && <span style={{ color: content.labelColor || C.gold, fontFamily: fontFamily(content.labelFont), fontSize: `max(8px,${Number(content.labelSize || 18) * .72}px)` }}>{content.subtitle || "Entrá y votá…"}</span>}
+        {content.showCode && <b style={{ color: content.codeColor || C.gold, fontFamily: fontFamily(content.codeFont), fontSize: content.codeSize ? `${content.codeSize}px` : "min(11cqw,18cqh)" }}>{code}</b>}
+        {content.textPosition === "bottom" && label}
       </div>
   );
 }
@@ -174,11 +181,17 @@ export default function PantallaTV() {
   const [authErr,  setAuthErr]  = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [canvasConfig, setCanvasConfig] = useState(() => loadTvConfig("default"));
+  const { gameState } = useGameState();
+  const screenAudioOn = gameState?.screen_audio_enabled ?? false;
 
   const { event, candidates, current, loading } =
     usePantallaEvent({ eventId, client: supabaseAnon });
   const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
-    useContinuousTvPlayers({ current, eventId, token, unlocked, rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6, rainTailSeconds: event?.rain_tail_seconds ?? 0 });
+    useContinuousTvPlayers({ current, eventId, token, unlocked, muted: !screenAudioOn,
+      playing: event?.is_playing !== false,
+      captionsEnabled: event?.youtube_captions_enabled === true,
+      rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6,
+      rainTailSeconds: event?.rain_tail_seconds ?? 0 });
 
   // 1. Validar el acceso contra el servidor.
   useEffect(() => {

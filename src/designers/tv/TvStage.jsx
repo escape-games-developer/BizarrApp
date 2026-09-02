@@ -18,7 +18,19 @@ function BlockContent({ id, block }) {
   const titleStyle = { fontSize: "min(10cqw,18cqh)", fontWeight: block.font.titleWeight, color: block.font.titleColor || "#fff" };
   if (id.startsWith("custom-") || id === "logo") return null;
   if (id === "video") return <div style={{ alignItems: "center", background: "radial-gradient(circle,#202027,#050505 70%)", display: "flex", height: "100%", justifyContent: "center", width: "100%" }}><span style={{ color: "rgba(255,255,255,.32)", fontSize: "min(14cqw,22cqh)" }}>▶</span></div>;
-  if (id === "qr") return <div style={{ alignItems: "center", display: "flex", flexDirection: "column", gap: "3cqh", height: "100%", justifyContent: "center", padding: "4cqh 4cqw" }}><strong style={{ color: block.content?.textColor || "#FFD600", fontSize: `min(${(block.content?.textSize || 16) / 2}cqw,${(block.content?.textSize || 16) / 2}cqh)`, order: block.content?.textPosition === "bottom" ? 3 : 0 }}>{block.content?.text}</strong><QRCode value="BIZARREN-DEMO" style={{ background: "white", height: "58cqh", maxWidth: "80cqw", padding: "2cqw", width: "auto" }}/><b style={{ fontSize: "min(11cqw,18cqh)" }}>ABC123</b></div>;
+  if (id === "qr") {
+    const c = block.content || {};
+    const labelSize = c.labelSize ? `${c.labelSize}px` : "min(8cqw,12cqh)";
+    const codeSize = c.codeSize ? `${c.codeSize}px` : "min(11cqw,18cqh)";
+    const label = <div style={{ color: c.labelColor || c.textColor || "#FFD600", fontFamily: fontFamily(c.labelFont), fontSize: labelSize, fontWeight: c.bold ? 800 : 400 }}>{c.text}</div>;
+    return <div style={{ alignItems: block.font.align === "left" ? "flex-start" : block.font.align === "right" ? "flex-end" : "center", display: "flex", flexDirection: "column", gap: "3cqh", height: "100%", justifyContent: "center", padding: "4cqh 4cqw", textAlign: block.font.align }}>
+      {c.textPosition !== "bottom" && label}
+      <QRCode value="BIZARREN-DEMO" style={{ background: "white", height: "58cqh", maxWidth: "80cqw", padding: "2cqw", width: "auto" }}/>
+      {c.showSubtitle && <span style={{ color: c.labelColor || "#FFD600", fontFamily: fontFamily(c.labelFont), fontSize: `max(8px,${Number(c.labelSize || 18) * .72}px)` }}>{c.subtitle || "Entrá y votá…"}</span>}
+      {c.showCode && <b style={{ color: c.codeColor || "#FFD600", fontFamily: fontFamily(c.codeFont), fontSize: codeSize }}>ABC123</b>}
+      {c.textPosition === "bottom" && label}
+    </div>;
+  }
   if (id === "upcoming") return <div style={{ height: "100%", padding: "5cqh 5cqw" }}><strong style={{ color: "#00e5ff", fontSize: "min(8cqw,13cqh)" }}>PRÓXIMAS CANCIONES</strong>{[1,2,3].map(n => <div key={n} style={{ alignItems: "center", background: "rgba(255,255,255,.05)", borderRadius: "2cqw", display: "flex", fontSize: "min(6cqw,10cqh)", gap: "3cqw", marginTop: "3cqh", padding: "2cqh 3cqw" }}><b>{n}</b><span>Canción {n}<small style={{ display: "block", opacity: .5 }}>Artista</small></span></div>)}</div>;
   if (id === "nowPlaying") return <div style={{ alignItems: "center", display: "flex", gap: "2cqw", height: "100%", padding: "2cqh 2cqw" }}><div style={{ aspectRatio: 1, background: "linear-gradient(135deg,#f97316,#9b2fff)", height: "80%", borderRadius: "2cqw" }}/><div><div style={titleStyle}>Todos me miran</div><div style={{ fontSize: "min(7cqw,14cqh)", color: block.font.artistColor || "#aaa" }}>Gloria Trevi</div></div></div>;
   if (id === "progress") return <div style={{ background: "rgba(255,255,255,.15)", borderRadius: 99, height: "20%", margin: "auto", overflow: "hidden", width: "90%" }}><span style={{ background: T.primary, display: "block", height: "100%", width: "45%" }}/></div>;

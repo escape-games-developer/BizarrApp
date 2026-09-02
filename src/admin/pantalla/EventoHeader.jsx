@@ -47,7 +47,7 @@ const ESTADOS = [
  * vistazo, qué evento es, en qué estado está, y los accesos a las otras tres
  * superficies (Cliente, TV y Consola DJ).
  */
-export default function EventoHeader({ event, items, activos, irA, onError }) {
+export default function EventoHeader({ event, items, activos, irA, onError, editor = false }) {
   const [qrAbierto, setQrAbierto] = useState(false);
   const [copiado,   setCopiado]   = useState(null);
   const [tv,        setTv]        = useState(null);
@@ -68,6 +68,26 @@ export default function EventoHeader({ event, items, activos, irA, onError }) {
       window.open(tvUrl(event.code, link.token), "_blank", "noopener");
     } catch (err) { onError?.(err.message); }
   };
+
+  if (editor) return (
+    <div className="pdj-editor-hero">
+      <div className="pdj-editor-hero-copy">
+        <EventNameEditor event={event} onError={onError} />
+        <div className="pdj-editor-hero-sub">
+          {items.length} {items.length === 1 ? "canción" : "canciones"} en la playlist
+          <span>·</span>{activos} {activos === 1 ? "persona activa" : "personas activas"}
+        </div>
+      </div>
+      <div className="pdj-editor-hero-actions">
+        <span className={`pdj-estado${enVivo ? " pdj-estado-live" : ""}`}
+          style={{ color: est.color, background: est.bg, border: `1px solid ${est.borde}` }}>
+          <span className="pdj-punto" />{est.label}
+        </span>
+        <button className="pdj-mini" onClick={abrirTv}>📺 Abrir TV</button>
+        {irA && <button className="pdj-mini pdj-mini-p" onClick={irA.onClick}>{irA.label}</button>}
+      </div>
+    </div>
+  );
 
   return (
     <>

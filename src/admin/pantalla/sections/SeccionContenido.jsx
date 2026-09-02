@@ -31,7 +31,7 @@ export default function SeccionContenido({ event, items, refresh }) {
   const conAudio = items.filter((i) => i.audio_path).length;
 
   return (
-    <PanelSection id="modo-contenido" title="Modo de contenido" icon="🎬">
+    <PanelSection id="modo-contenido" title="Modo de contenido" icon="🎬" defaultOpen>
       <CampoSelect label="Qué reproduce la TV" value={modo} options={MODOS}
         onChange={setModo}
         hint="En modo video la TV muestra el clip de YouTube. En modo MP3 sólo suena el audio del archivo del bar." />

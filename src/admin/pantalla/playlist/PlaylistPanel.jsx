@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../../../lib/supabase";
 import {
-  addItems, importPlaylist, refillCandidates, reorderItems,
+  addItems, reorderItems,
   deleteItems, setItemsEnabled, parseYoutubeLines, updateItem,
 } from "../../../services/pantallaDj";
 import { P } from "../../../components/pantalla/pantallaUi";
@@ -37,15 +36,8 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
   const [aviso,       setAviso]       = useState(null);
   const [buscar,      setBuscar]      = useState("");
   const [seleccion,   setSeleccion]   = useState(() => new Set());
-  const [playlists,   setPlaylists]   = useState([]);
-  const [playlistId,  setPlaylistId]  = useState("");
   const [arrastrando, setArrastrando] = useState(null);
   const [encima,      setEncima]      = useState(null);
-
-  useEffect(() => {
-    supabase.from("playlists").select("id,name").order("position")
-      .then(({ data, error }) => { if (!error) setPlaylists(data || []); });
-  }, []);
 
   useEffect(() => { setSeleccion(new Set()); }, [event.id]);
 
@@ -121,14 +113,6 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
     });
   };
 
-  const importar = () => {
-    if (!playlistId) return;
-    correr(async () => {
-      const n = await importPlaylist(event.id, playlistId);
-      flash(n > 0 ? `✓ ${n} canción(es) importada(s)` : "La playlist no aportó temas nuevos.");
-    });
-  };
-
   // ── Herramientas ──────────────────────────────────────────────────────────
   const duplicados = useMemo(() => {
     const vistos = new Set(), repetidos = [];
@@ -194,13 +178,6 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
     flash(mensaje(n));
   });
 
-  const metricas = {
-    total:        items.length,
-    activos:      items.filter((i) => i.enabled).length,
-    candidatos:   items.filter((i) => i.is_active_candidate && i.id !== event.current_item_id).length,
-    reproducidos: items.filter((i) => i.times_played > 0).length,
-  };
-
   return (
     <>
       {aviso && (
@@ -211,49 +188,34 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
       )}
 
       {/* ── Agregar de YouTube ─────────────────────────────────────────── */}
-      <div className="pdj-card">
+      <div className="pdj-card pdj-youtube-card">
         <div className="pdj-card-titulo">
-          <span style={{ fontSize: 15 }}>▶️</span><h4>Agregar videos de YouTube</h4>
+          <span className="pdj-youtube-icon">▻</span><h4>Agregar videos de YouTube</h4>
+        </div>
+        <div className="pdj-youtube-help">
+          Pegá uno o varios links (uno por línea). Soporta youtube.com/watch, youtu.be y /shorts/.<br />
+          <span>Opcional: <code>URL | Título | Artista</code> para forzar título y artista manuales, o <code>URL | Título | Artista | Inicio | Fin</code> (segundos de recorte).</span>
         </div>
         <textarea className="pdj-input" value={texto} disabled={busy}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder={"Pegá uno o varios links de YouTube…\n\nURL\nURL | Título\nURL | Título | Artista\nURL | Título | Artista | Inicio | Fin"} />
-        <div className="pdj-campo-hint">
-          Acepta youtube.com/watch?v=…, youtu.be/…, /shorts/… o el ID directo.
-          <strong> Inicio</strong> y <strong>Fin</strong> son segundos de recorte, opcionales.
-        </div>
-        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 11, alignItems: "center" }}>
-          <button className="pdj-mini pdj-mini-p" style={{ padding: "11px 20px" }}
+          placeholder={"https://www.youtube.com/watch?v=…\nhttps://youtu.be/xxxx | Mi Título\nhttps://youtu.be/yyyy | Mi Título | AC/DC | 15 | 200"} />
+        <div className="pdj-youtube-actions">
+          <button className="pdj-mini pdj-mini-p" style={{ padding: "10px 22px" }}
             disabled={busy || !texto.trim()} onClick={agregar}>
-            {busy ? "Agregando…" : "+ Agregar canciones"}
+            {busy ? "Agregando…" : "🔗 Agregar"}
           </button>
-          <select className="pdj-input" style={{ flex: "1 1 150px", width: "auto" }}
-            value={playlistId} onChange={(e) => setPlaylistId(e.target.value)}>
-            <option value="">Importar playlist del bar…</option>
-            {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <button className="pdj-mini pdj-mini-a" style={{ padding: "11px 16px" }}
-            disabled={busy || !playlistId} onClick={importar}>↧ Importar</button>
         </div>
       </div>
 
       {/* ── Lista ──────────────────────────────────────────────────────── */}
-      <div className="pdj-card">
-        <div className="pdj-card-titulo">
-          <span style={{ fontSize: 15 }}>≡</span>
-          <h4>Temas cargados</h4>
-          <span className="pdj-hint">
-            {metricas.activos} habilitados · {metricas.candidatos} candidatas · {metricas.reproducidos} reproducidas
-          </span>
-        </div>
-
+      <div className="pdj-playlist-list">
         {/* Barra de herramientas */}
         <div className="pdj-plbar">
           <input className="pdj-input" style={{ flex: "1 1 190px", width: "auto" }}
             placeholder="🔍 Buscar por título, artista o álbum…"
             value={buscar} onChange={(e) => setBuscar(e.target.value)} />
-          <button className="pdj-mini" disabled={visibles.length === 0} onClick={alternarTodo}>
-            {todosVisiblesSeleccionados ? "☑ Quitar selección" : "☐ Seleccionar todo"}
+          <button className="pdj-mini" disabled title="La búsqueda automática de portadas estará disponible próximamente">
+            Buscar portadas faltantes (0)
           </button>
           <button className="pdj-mini" disabled={busy || items.length === 0} onClick={limpiarDuplicados}
             title="Elimina las repeticiones del mismo video, conservando la primera">
@@ -263,12 +225,10 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
             title="Descarga la lista en el mismo formato que acepta el alta">
             ↥ Exportar lista
           </button>
-          <button className="pdj-mini" disabled={busy}
-            title="Rearma la ventana de candidatas según las reglas del evento"
-            onClick={() => correr(() => refillCandidates(event.id))}>
-            ↻ Recalcular candidatas
-          </button>
         </div>
+        <button className="pdj-select-all" disabled={visibles.length === 0} onClick={alternarTodo}>
+          {todosVisiblesSeleccionados ? "☑ Quitar selección" : "▣ Seleccionar todo"}
+        </button>
 
         {/* Acciones sobre la selección */}
         {seleccion.size > 0 && (

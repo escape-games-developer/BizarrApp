@@ -9,7 +9,6 @@ import SeccionTvLink from "./sections/SeccionTvLink";
 import SeccionInvitados from "./sections/SeccionInvitados";
 import SeccionSorteos from "./sections/SeccionSorteos";
 import SeccionesPendientesVivo from "./sections/SeccionesPendientesVivo";
-import EventoHeader from "./EventoHeader";
 import HistorialTab from "./HistorialTab";
 import PanelSection from "./PanelSection";
 
@@ -25,7 +24,7 @@ import PanelSection from "./PanelSection";
  */
 
 // ─── Sonando ahora ───────────────────────────────────────────────────────────
-function SonandoAhora({ event, current }) {
+function SonandoAhora({ event, current, siguiente, children }) {
   const cover = portada(current);
   // El tiempo lo reporta la TV. Sin TV conectada no se inventa progreso: los
   // 421 temas tienen `duration_seconds` en NULL, así que no hay de dónde sacarlo.
@@ -36,19 +35,15 @@ function SonandoAhora({ event, current }) {
 
   return (
     <div className="pdj-ahora">
-      <div style={{
-        fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 10,
-        letterSpacing: "2.2px", color: "rgba(255,45,120,.8)", marginBottom: 12,
-      }}>
-        {event.is_playing ? "● SONANDO AHORA" : "○ EN PAUSA"}
-      </div>
-
       <div className="pdj-ahora-row">
         {cover
           ? <img className="pdj-ahora-cover" src={cover} alt="" loading="lazy" decoding="async" />
           : <div className="pdj-ahora-cover-vacia">🎵</div>}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="pdj-ahora-body">
+          <div className="pdj-ahora-label">
+            {event.is_playing ? "SONANDO AHORA" : "EN PAUSA"}
+          </div>
           <div className="pdj-ahora-tit">{current ? current.title : "Nada sonando"}</div>
           <div className="pdj-ahora-art">
             {current ? (current.artist || "—") : "Pasá a la primera canción para arrancar"}
@@ -61,24 +56,29 @@ function SonandoAhora({ event, current }) {
               </strong>
             </div>
           )}
+
+          {siguiente && (
+            <div className="pdj-ahora-next">
+              A continuación · <strong>{siguiente.title}</strong>
+              <span> — {siguiente.artist || "—"}</span>
+            </div>
+          )}
+
+          {current && hayTiempo && (
+            <>
+              <div className="pdj-barra"><div className="pdj-barra-fill" style={{ width: `${progreso}%` }} /></div>
+              <div className="pdj-tiempos">
+                <span>{tiempo(transcurrido)}</span>
+                <span>−{tiempo(restante)}</span>
+              </div>
+            </>
+          )}
+          {current && !hayTiempo && (
+            <div className="pdj-tiempo-sin-tv">La TV todavía no reporta el tiempo.</div>
+          )}
+          {children}
         </div>
       </div>
-
-      {current && hayTiempo && (
-        <>
-          <div className="pdj-barra"><div className="pdj-barra-fill" style={{ width: `${progreso}%` }} /></div>
-          <div className="pdj-tiempos">
-            <span>{tiempo(transcurrido)} transcurrido</span>
-            <span>−{tiempo(restante)} restante</span>
-          </div>
-        </>
-      )}
-      {current && !hayTiempo && (
-        <div style={{ fontSize: 10.5, color: P.tenue2, marginTop: 11 }}>
-          La TV todavía no reporta tiempo, y los temas no tienen duración guardada:
-          no hay transcurrido ni restante que mostrar.
-        </div>
-      )}
     </div>
   );
 }
@@ -113,99 +113,62 @@ export default function PantallaConsola({ shared }) {
 
   return (
     <>
-      {/* Misma cabecera que el Editor: el DJ ve el estado del evento sin
-          cambiar de vista ni abrir ningún acordeón. */}
-      <EventoHeader
-        event={event} items={shared.items} activos={stats.activos}
-        onError={onError}
-        irA={shared.goTo ? { label: "✏️ Ir al Editor", onClick: () => shared.goTo("pantallaEditor") } : null}
-      />
-
-    <div className="pdj-shell">
+    <div className="pdj-live-page">
+    <div className="pdj-shell pdj-live-shell">
       {/* ── Columna principal ──────────────────────────────────────── */}
       <div className="pdj-shell-main">
-        <SonandoAhora event={event} current={current} />
-
-        {/* El motor recién fija la próxima al avanzar: se muestra como quién
-            va ganando, no como algo ya decidido. */}
-        {siguiente && (
-          <div className="pdj-next">
-            {portada(siguiente) && (
-              <img className="pdj-next-cover" src={portada(siguiente)} alt="" loading="lazy" />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 9.5, fontWeight: 800, letterSpacing: "1.4px",
-                color: "rgba(0,229,255,.75)", marginBottom: 3,
-              }}>A CONTINUACIÓN · LIDERANDO LA VOTACIÓN</div>
-              <div className="pdj-rank-tit">{siguiente.title}</div>
-              <div className="pdj-rank-art">{siguiente.artist || "—"}</div>
-            </div>
-            <div className="pdj-rank-score">
-              <b style={{ color: colorScore(siguiente.score) }}>{conSigno(siguiente.score)}</b>
-              <span>PTS</span>
-            </div>
-          </div>
-        )}
-
-        {/* ── Controles ──────────────────────────────────────────── */}
-        <div className="pdj-card">
-          <div className="pdj-card-titulo">
-            <span style={{ fontSize: 15 }}>🎛</span><h4>Controles</h4>
-            {!enVivo && <span className="pdj-hint">El evento no está en vivo</span>}
-          </div>
-
-          <div className="pdj-controles">
-            <button className="pdj-btn pdj-btn-principal" disabled={ocupado || !enVivo}
+        <SonandoAhora event={event} current={current} siguiente={siguiente}>
+          <div className="pdj-live-player-controls">
+            <button className="pdj-btn pdj-live-round" disabled title="No hay una operación segura para reabrir un tema archivado">|◀</button>
+            <button className="pdj-btn pdj-btn-principal pdj-live-round" disabled={ocupado || !current}
+              aria-label={event.is_playing ? "Pausar" : "Reproducir"}
+              onClick={() => correr(() => saveEventFields(event.id, { is_playing: !event.is_playing }))}>
+              {event.is_playing ? "Ⅱ" : "▶"}
+            </button>
+            <button className="pdj-btn pdj-live-round" disabled={ocupado || !enVivo}
               onClick={() => correr(() => advanceEvent(event.id, null, event.current_item_id))}>
-              <span className="pdj-btn-ico">⏭</span>PASAR CANCIÓN
+              ▶|
             </button>
-
+            <button className="pdj-btn pdj-live-round" disabled={ocupado || !enVivo || candidates.length === 0}
+              aria-label="Lanzar una canción aleatoria"
+              onClick={() => {
+                const pool = candidates.filter((item) => item.id !== event.current_item_id);
+                const item = pool[Math.floor(Math.random() * pool.length)];
+                if (item) correr(() => advanceEvent(event.id, item.id, event.current_item_id));
+              }}>⤨</button>
             <button className={`pdj-btn${event.voting_frozen ? " pdj-btn-on" : ""}`} disabled={ocupado}
-              onClick={() => correr(() => freezeVoting(event.id, !event.voting_frozen))}
-              title="Congela el orden que se muestra. Los votos siguen entrando por detrás.">
-              <span className="pdj-btn-ico">{event.voting_frozen ? "▶" : "⏸"}</span>
-              {event.voting_frozen ? "REANUDAR RANKING" : "BLOQUEAR RANKING"}
+              onClick={() => correr(() => freezeVoting(event.id, !event.voting_frozen))}>
+              <span className="pdj-btn-ico">▦</span>
+              {event.voting_frozen ? "REANUDAR RANKING" : "BLOQUEAR"}
             </button>
-
             <button className={`pdj-btn${event.voting_disabled ? " pdj-btn-on" : ""}`} disabled={ocupado}
-              onClick={() => correr(() =>
-                saveEventFields(event.id, { voting_disabled: !event.voting_disabled }))}
-              title="Corta la votación entera: nadie puede votar hasta que se reactive.">
+              onClick={() => correr(() => saveEventFields(event.id, { voting_disabled: !event.voting_disabled }))}>
               <span className="pdj-btn-ico">{event.voting_disabled ? "🔓" : "🔒"}</span>
-              {event.voting_disabled ? "ACTIVAR VOTACIÓN" : "PAUSAR VOTOS"}
+              {event.voting_disabled ? "ACTIVAR VOTOS" : "PAUSAR VOTOS"}
             </button>
-
             <button className="pdj-btn pdj-btn-peligro" disabled={ocupado}
               onClick={() => {
-                if (window.confirm(
-                  "¿Reiniciar todos los votos del evento?\n\n" +
-                  "Se borran los votos y los súper votos usados. La playlist no se toca.")) {
+                if (window.confirm("¿Reiniciar todos los votos del evento?\n\nSe borran los votos y los súper votos usados. La playlist no se toca.")) {
                   correr(() => resetVotes(event.id));
                 }
               }}>
               <span className="pdj-btn-ico">↻</span>REINICIAR VOTOS
             </button>
           </div>
-
-          {event.voting_frozen && (
-            <div className="pdj-campo-hint" style={{ marginTop: 10 }}>
-              Con el ranking bloqueado el orden que ven todos queda quieto, pero los votos se
-              siguen registrando. Al reanudar, el ranking salta al estado real.
-            </div>
-          )}
-          {event.voting_disabled && (
-            <div className="pdj-campo-hint" style={{ marginTop: 6, color: P.amarillo }}>
-              La votación está cortada: el servidor rechaza cualquier voto.
-            </div>
-          )}
-        </div>
+          <button className={`pdj-live-voting-toggle${event.voting_disabled ? " is-off" : ""}`}
+            disabled={ocupado}
+            onClick={() => correr(() => saveEventFields(event.id, { voting_disabled: !event.voting_disabled }))}>
+            {event.voting_disabled ? "Activar votación" : "Desactivar votación"}
+          </button>
+          {event.voting_frozen && <div className="pdj-campo-hint">El ranking visible está bloqueado; los votos siguen entrando.</div>}
+          {event.voting_disabled && <div className="pdj-campo-hint" style={{ color: P.amarillo }}>La votación está desactivada.</div>}
+        </SonandoAhora>
 
         {/* ── Top en vivo ────────────────────────────────────────── */}
-        <div className="pdj-card">
+        <div className="pdj-card pdj-live-ranking">
           <div className="pdj-card-titulo">
-            <span style={{ fontSize: 15 }}>🔥</span><h4>Top en vivo</h4>
-            <span className="pdj-hint">{candidates.length} candidatas</span>
+            <span style={{ fontSize: 15 }}>🔥</span><h4>Top 15</h4>
+            <span className="pdj-hint">En vivo · {candidates.length} candidatas</span>
           </div>
 
           {candidates.length === 0 ? (
@@ -216,8 +179,8 @@ export default function PantallaConsola({ shared }) {
                 Cargá canciones desde el Editor; el servidor arma la ventana de candidatas solo.
               </div>
             </div>
-          ) : candidates.map((item, i) => (
-            <div key={item.id} className={`pdj-rank${i === 0 ? " pdj-rank-1" : ""}`}>
+          ) : candidates.slice(0, 15).map((item, i) => (
+            <div key={item.id} className={`pdj-rank${i < 3 ? " pdj-rank-podio" : ""}${i === 0 ? " pdj-rank-1" : ""}`}>
               <span className="pdj-rank-pos">{i + 1}</span>
               {portada(item) && (
                 <img className="pdj-rank-cover" src={portada(item)} alt="" loading="lazy" decoding="async" />
@@ -248,6 +211,8 @@ export default function PantallaConsola({ shared }) {
       <aside className="pdj-shell-side">
         <div className="pdj-shell-side-tit">Cabina</div>
 
+        <SeccionQr {...shared} />
+        <SeccionesPendientesVivo event={event} onlyRoles />
         <SeccionEstadisticas stats={stats} />
 
         {/* Sacar tema: estado en vivo de la votación para voltear. */}
@@ -282,7 +247,6 @@ export default function PantallaConsola({ shared }) {
           )}
         </PanelSection>
 
-        <SeccionQr {...shared} />
         <SeccionTvLink {...shared} />
         <SeccionInvitados {...shared} />
         <SeccionSorteos {...shared} />
@@ -293,8 +257,9 @@ export default function PantallaConsola({ shared }) {
           <HistorialTab {...shared} />
         </PanelSection>
 
-        <SeccionesPendientesVivo event={event} />
+        <SeccionesPendientesVivo event={event} excludeRoles />
       </aside>
+    </div>
     </div>
     </>
   );

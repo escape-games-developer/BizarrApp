@@ -83,7 +83,7 @@ export function effectiveEndOf(item, duration) {
   return real;
 }
 
-export function useContinuousTvPlayers({ current, eventId, token, unlocked, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
+export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
   const [visiblePlayer, setVisiblePlayer] = useState(0);
   const [rainPhase, setRainPhase] = useState("idle");
   const [playerError, setPlayerError] = useState(null);
@@ -110,14 +110,52 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
   const fadesRef      = useRef([null, null]);
   // Ultimo fallo del RPC de avance por item: evita reintentar 2 veces por segundo.
   const advanceFailRef = useRef(new Map());
+  const captionsEnabledRef = useRef(captionsEnabled);
 
   latestCurrentRef.current = current;
+  captionsEnabledRef.current = captionsEnabled;
   const rainAnticipationRef = useRef(rainAnticipationSeconds);
   const rainTailRef = useRef(rainTailSeconds);
   rainAnticipationRef.current = rainAnticipationSeconds;
   rainTailRef.current = rainTailSeconds;
   // Ventana real del cruce en curso, ya acotada al largo del tema (ver `ventanaDeCruce`).
   const crossfadeMsRef = useRef(rainAnticipationSeconds * 1000);
+
+  useEffect(() => {
+    for (const player of playersRef.current) {
+      if (!player) continue;
+      try {
+        if (muted) player.mute();
+        else player.unMute();
+      } catch { /* el player todavía puede estar inicializando */ }
+    }
+  }, [muted, readyCount]);
+
+  const applyCaptions = useCallback((player) => {
+    if (!player) return;
+    try {
+      if (captionsEnabledRef.current) player.loadModule?.("captions");
+      else {
+        player.setOption?.("captions", "track", {});
+        player.unloadModule?.("captions");
+      }
+    } catch { /* la API no expone el módulo hasta que el video empieza */ }
+  }, []);
+
+  useEffect(() => {
+    playersRef.current.forEach(applyCaptions);
+  }, [captionsEnabled, readyCount, applyCaptions]);
+
+  // Orden remota de la cabina. No cambia de tema ni toca la máquina de
+  // transiciones: actúa únicamente sobre el player que está al aire.
+  useEffect(() => {
+    const player = playersRef.current[activeIndexRef.current];
+    if (!player || !current) return;
+    try {
+      if (playing) player.playVideo();
+      else player.pauseVideo();
+    } catch { /* el iframe todavía puede estar inicializando */ }
+  }, [playing, current?.id, readyCount]);
 
   const later = useCallback((fn, delay) => {
     const timer = setTimeout(() => { timersRef.current.delete(timer); fn(); }, delay);
@@ -602,7 +640,9 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
       TV_PLAYER_IDS.forEach((id, index) => {
         playersRef.current[index] = new YT.Player(id, {
           width: "100%", height: "100%",
-          playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, iv_load_policy: 3, fs: 0, disablekb: 1, playsinline: 1 },
+          playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, iv_load_policy: 3,
+            cc_load_policy: captionsEnabledRef.current ? 1 : 0,
+            fs: 0, disablekb: 1, playsinline: 1 },
           events: {
             onReady: () => {
               readyRef.current[index] = true;
@@ -612,7 +652,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
             },
             onStateChange: (event) => {
               // PAUSED / CUED / BUFFERING / UNSTARTED nunca avanzan nada.
-              if (event.data === YT.PlayerState.PLAYING) onPlayerPlaying(index);
+              if (event.data === YT.PlayerState.PLAYING) {
+                applyCaptions(event.target);
+                onPlayerPlaying(index);
+              }
               else if (event.data === YT.PlayerState.ENDED) onPlayerEnded(index);
             },
             onError: (event) => onPlayerError(index, event.data),
@@ -689,7 +732,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, rain
       phaseRef.current = "IDLE";
       controllerRef.current = null;
     };
-  }, [eventId, later, token, unlocked]);
+  }, [eventId, later, token, unlocked, applyCaptions]);
 
   useEffect(() => { controllerRef.current?.handleCurrent(current); }, [current]);
 

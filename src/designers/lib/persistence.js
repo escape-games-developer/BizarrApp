@@ -24,7 +24,11 @@ export function normalizeTvConfig(loaded) {
   const normalizeBlocks = blocks => Object.fromEntries(Object.entries(blocks || {}).map(([id, block]) => [id, {
     ...block,
     border: { enabled: false, ...block.border },
-    content: { text: "", textPosition: "bottom", textSize: 16, textColor: "#ffffff", bold: true, ...block.content },
+    content: { text: "", textPosition: "bottom", textSize: 16, textColor: "#ffffff", bold: true,
+      ...(id === "qr" ? { showCode: false, showSubtitle: false, subtitle: "Entrá y votá…",
+        labelFont: "inherit", labelSize: 18, labelColor: "#FFD600",
+        codeFont: "inherit", codeSize: null, codeColor: "#FFD600" } : {}),
+      ...block.content },
   }]));
   return { ...loaded, blocks: normalizeBlocks(loaded.blocks), customBlocks: normalizeBlocks(loaded.customBlocks) };
 }

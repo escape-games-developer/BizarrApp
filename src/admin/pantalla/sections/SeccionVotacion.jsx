@@ -31,7 +31,7 @@ export default function SeccionVotacion({ event, refresh }) {
   });
 
   return (
-    <PanelSection id="modo-votacion" title="Modo de votación" icon="🗳">
+    <PanelSection id="modo-votacion" title="Modo de votación" icon="🗳" defaultOpen>
       <CampoSelect label="Cómo vota el público" value={modo} options={MODOS}
         onChange={setModo} hint={EXPLICACION[modo]} />
       <BotonGuardar estado={estado} mensaje={mensaje}
