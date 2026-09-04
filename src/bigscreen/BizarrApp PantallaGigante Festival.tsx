@@ -675,9 +675,11 @@ export default function PantallaGigante() {
   }, []);
 
   // ── Determinar qué mostrar ─────────────────────────────────────────────────
-  const hasPlaca    = !!gameState?.active_placa;
+  // Los estados históricos pueden seguir en la base, pero un módulo congelado
+  // no debe reaparecer en la salida pública de la pantalla.
+  const hasPlaca    = !!gameState?.active_placa && gameState.active_placa !== "escenario_karaoke";
   const hasGame     = !!gameState?.active_game;
-  const hasEscenario= !!gameState?.active_escenario;
+  const hasEscenario= !!gameState?.active_escenario && gameState.active_escenario !== "karaoke";
 
   // Prioridad de capas: juego > escenario > video > placa > idle.
   // El video TAPA a la placa (active_placa="logo" es el estado de reposo y

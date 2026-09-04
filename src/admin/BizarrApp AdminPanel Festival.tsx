@@ -260,6 +260,10 @@ const SECS = [
     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
 ];
 
+// Módulos congelados por producto. Conservamos sus entradas y paneles para
+// poder reactivarlos, pero no los exponemos en los accesos operativos.
+const FROZEN_MODULE_IDS = new Set(["karaoke"]);
+
 // ══════════════════════════════════════════════════════════════════════════
 // PANEL LANZAR — botonera de show
 // ══════════════════════════════════════════════════════════════════════════
@@ -273,7 +277,7 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
     {id:"ftl",     icon:"💃",label:"Follow Leader",   col:"#FF9500",bg:"rgba(255,149,0,.1)", bdr:"rgba(255,149,0,.3)"},
     {id:"pt",      icon:"🏋️",label:"Trainer",         col:"#00F5A0",bg:"rgba(0,245,160,.1)", bdr:"rgba(0,245,160,.3)"},
     {id:"karaoke", icon:"🎤",label:"Karaoke",         col:"#9B2FFF",bg:"rgba(155,47,255,.1)",bdr:"rgba(155,47,255,.3)"},
-  ];
+  ].filter(item => !FROZEN_MODULE_IDS.has(item.id));
   const isOn = id => active === id;
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
@@ -1936,7 +1940,7 @@ function PlacasPanel({sec, controls}){
     {id:"escenario_karaoke",emoji:"🎤",title:"Si lo sabe cante",     sub:"Invitación al karaoke",              col:"#9B2FFF"},
     {id:"break",     emoji:"⏸️", title:"Break / Pausa",          sub:"Volvemos en un momento",             col:"#FF9500"},
     {id:"cierre",    emoji:"🌙",title:"Cierre de noche",         sub:"¡Gracias por esta noche!",           col:"#9B2FFF"},
-  ];
+  ].filter(preset => preset.id !== "escenario_karaoke");
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
@@ -2322,7 +2326,7 @@ export default function AdminPanel(){
   },[pending]);
   useEffect(()=>{ window.__bizarrToast = showToast; },[]);
   const canManageUsers = adminRole === "general_admin";
-  const visibleSecs = SECS.filter(s=>!s.adminOnly || canManageUsers);
+  const visibleSecs = SECS.filter(s=>(!s.adminOnly || canManageUsers) && !FROZEN_MODULE_IDS.has(s.id));
   const curSec = visibleSecs.find(s=>s.id===sec)||visibleSecs[0]||SECS[0];
   useEffect(()=>{
     if(adminRole && sec==="usuarios" && !canManageUsers) setSec("launch");

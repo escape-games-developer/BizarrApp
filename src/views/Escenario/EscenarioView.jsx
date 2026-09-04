@@ -272,7 +272,8 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
     );
   }
 
-  if (!activeEscenario) return <EscenarioStandby />;
+  // Karaoke queda congelado sin borrar su vista ni su case de enrutamiento.
+  if (!activeEscenario || activeEscenario === "karaoke") return <EscenarioStandby />;
 
   switch (activeEscenario) {
     case "duelo":   return <DueloView user={user} sessionId={sessionId} ytConfig={ytConfig} gameState={gameState} />;
