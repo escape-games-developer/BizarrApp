@@ -1,5 +1,5 @@
 import { useRaffle }         from "../../hooks/useRaffle";
-import { useTriviaVoter }    from "../../hooks/realtime/useTriviaVotes";
+import { useTriviaQuestion, useTriviaVoter } from "../../hooks/realtime/useTriviaVotes";
 import { BlockedView }       from "../../components/UI";
 import { TEAMS }             from "../../constants/theme";
 import DueloCard             from "./DueloCard";
@@ -107,14 +107,11 @@ function DesafioDemente({ user, sessionId, gameState }) {
   const t = user?.team ? TEAMS[user.team] : null;
   const questionIdx = gameState?.trivia_question ?? 0;
   const triviaState = gameState?.trivia_state ?? "idle";
-  const questionPayload = gameState?.minijuego_payload?.question || null;
-  const question = questionPayload ? {
-    ...questionPayload,
-    options: questionPayload.options || questionPayload.opts || [],
-  } : null;
+  const roundId = gameState?.trivia_round_id ?? null;
+  const question = useTriviaQuestion(sessionId, roundId, questionIdx, triviaState);
 
-  const { myVote, vote, hasVoted } = useTriviaVoter(
-    sessionId, questionIdx, user?.id, user?.team
+  const { myVote, vote, hasVoted, sending, error } = useTriviaVoter(
+    sessionId, roundId, questionIdx, user?.id, user?.team
   );
 
   if (triviaState === "idle" || !question) return (
@@ -152,7 +149,7 @@ function DesafioDemente({ user, sessionId, gameState }) {
         ¡Desafío terminado!
       </div>
       {gameState?.trivia_winner_team && t && gameState.trivia_winner_team === user?.team ? (
-        <div style={{ fontSize: 14, color: "#86EFAC" }}>¡Tu equipo ganó el cupón! 🎉</div>
+        <div style={{ fontSize: 14, color: "#86EFAC" }}>¡Tu equipo ganó el desafío! 🎉</div>
       ) : (
         <div style={{ fontSize: 13, color: "rgba(245,230,192,.5)" }}>Mejor suerte la próxima.</div>
       )}
@@ -172,6 +169,7 @@ function DesafioDemente({ user, sessionId, gameState }) {
           <span style={{ fontSize: 12, color: t.color, fontWeight: 700 }}>{t.name}</span>
         </div>
       )}
+      {!t && <div style={{padding:"10px 12px",marginBottom:12,borderRadius:10,background:"rgba(239,68,68,.1)",color:"#FCA5A5",fontSize:12,textAlign:"center"}}>Elegí Team Batata o Team Membrillo en tu perfil para votar.</div>}
 
       <div style={{
         padding: "14px", background: "rgba(138,85,247,.08)",
@@ -195,7 +193,7 @@ function DesafioDemente({ user, sessionId, gameState }) {
             <button
               key={i}
               onClick={() => vote(i)}
-              disabled={hasVoted || triviaState === "revealed"}
+              disabled={!t || hasVoted || sending || triviaState !== "active"}
               style={{
                 padding: "12px 14px", borderRadius: 10, textAlign: "left",
                 border: "1px solid",
@@ -223,6 +221,7 @@ function DesafioDemente({ user, sessionId, gameState }) {
           ✓ Voto enviado · Esperá el resultado en pantalla
         </div>
       )}
+      {error && <div style={{marginTop:10,textAlign:"center",fontSize:12,color:"#FCA5A5"}}>{error}</div>}
     </div>
   );
 }

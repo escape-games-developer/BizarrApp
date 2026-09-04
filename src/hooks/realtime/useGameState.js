@@ -209,12 +209,13 @@ export function useAdminControls(sessionId) {
   [update]);
 
   // ── Desafío Demente ───────────────────────────────────────────────────────
-  const startTrivia = useCallback(async (coupon) => {
+  const startTrivia = useCallback(async (coupon, roundId) => {
     await dismissActiveVideo();
     return update({
       active_game:        "trivia",
       trivia_state:       "active",
       trivia_question:    0,
+      trivia_round_id:    roundId,
       trivia_coupon:      coupon,
       trivia_winner_team: null,
     });
@@ -237,6 +238,7 @@ export function useAdminControls(sessionId) {
       trivia_state:       "idle",
       trivia_question:    0,
       trivia_winner_team: null,
+      trivia_round_id:    null,
       active_game:        null,
     }),
   [update]);

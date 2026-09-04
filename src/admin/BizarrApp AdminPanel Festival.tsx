@@ -8,6 +8,7 @@ import { useApplauseRound } from "../hooks/realtime/useApplauseRound";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
+import { useTriviaAccumulated, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
 import PlaylistsPanel from "./PlaylistsPanel";
@@ -1021,22 +1022,53 @@ function PalabraPanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 // DESAFÍO DEMENTE
 // ══════════════════════════════════════════════════════════════════════════
-function TriviaPanel({sec}){
-  const [phase,    setPhase]    = useState("idle");
+function TriviaPanel({sec, controls, sessionId, gameState}){
   const [qs,       setQs]       = useState([]);
-  const [curQ,     setCurQ]     = useState(0);
-  const [revealed, setRevealed] = useState(false);
   const [coupon,   setCoupon]   = useState("BEER50");
   const [newQ,     setNewQ]     = useState("");
   const [newOpts,  setNewOpts]  = useState(["","","",""]);
   const [newCorr,  setNewCorr]  = useState(0);
-  const bata=0, memb=0;
+  const [actionError, setActionError] = useState(null);
+  const phase = gameState?.active_game === "trivia" ? gameState?.trivia_state || "idle" : "idle";
+  const curQ = gameState?.trivia_question ?? 0;
+  const roundId = gameState?.trivia_round_id ?? null;
+  const revealed = phase === "revealed";
+  const { pcts } = useTriviaVotes(sessionId, roundId, curQ);
+  const { accumulated, leader } = useTriviaAccumulated(sessionId, roundId);
+  const bata = pcts?.batata ?? 50, memb = pcts?.membrillo ?? 50;
+
+  useEffect(() => {
+    if (!sessionId || !roundId) return;
+    supabase.from("trivia_questions").select("question_idx,question_text,options,correct_option")
+      .eq("session_id", sessionId).eq("round_id", roundId).order("question_idx")
+      .then(({data}) => {
+        if (data?.length) setQs(data.map(q => ({text:q.question_text,opts:q.options,correct:q.correct_option})));
+      });
+  }, [sessionId, roundId]);
 
   const addQ = () => {
     if(!newQ.trim()||newOpts.some(o=>!o.trim())) return;
     setQs(q=>[...q,{text:newQ,opts:newOpts,correct:newCorr}]);
     setNewQ(""); setNewOpts(["","","",""]); setNewCorr(0);
   };
+
+  const launch = async () => {
+    if (!sessionId || !qs.length) return;
+    setActionError(null);
+    const nextRound = crypto.randomUUID();
+    const { error } = await supabase.from("trivia_questions").insert(qs.map((q, question_idx) => ({
+      session_id: sessionId, round_id: nextRound, question_idx,
+      question_text: q.text, options: q.opts, correct_option: q.correct,
+    })));
+    if (error) { setActionError("No se pudieron guardar las preguntas."); return; }
+    const result = await controls?.startTrivia(coupon, nextRound);
+    if (result?.error) setActionError("No se pudo iniciar el desafío.");
+  };
+
+  const reveal = async () => { const r=await controls?.revealTriviaAnswer(); if(r?.error)setActionError("No se pudo revelar."); };
+  const next = async () => { const r=await controls?.nextTriviaQuestion(curQ); if(r?.error)setActionError("No se pudo avanzar."); };
+  const finish = async () => { const r=await controls?.finishTrivia(leader); if(r?.error)setActionError("No se pudo finalizar."); };
+  const reset = async () => { const r=await controls?.resetTrivia(); if(!r?.error){setQs([]);setCoupon("BEER50");}else setActionError("No se pudo resetear."); };
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
@@ -1100,7 +1132,7 @@ function TriviaPanel({sec}){
             </button>
           </div>
 
-          <button className="btn btn-p btn-full" onClick={()=>setPhase("active")}>
+          <button className="btn btn-p btn-full" onClick={launch} disabled={!qs.length}>
             🧠 Lanzar Desafío Demente!
           </button>
         </>
@@ -1146,19 +1178,19 @@ function TriviaPanel({sec}){
           </div>
 
           <div style={{display:"flex",gap:7}}>
-            {!revealed&&<button className="btn btn-p" style={{flex:1}} onClick={()=>setRevealed(true)}>👁 Revelar</button>}
+            {!revealed&&<button className="btn btn-p" style={{flex:1}} onClick={reveal}>👁 Revelar</button>}
             {revealed&&curQ<qs.length-1&&(
-              <button className="btn btn-p" style={{flex:1}} onClick={()=>{setCurQ(q=>q+1);setRevealed(false);}}>
+              <button className="btn btn-p" style={{flex:1}} onClick={next}>
                 ▶ Siguiente
               </button>
             )}
             {revealed&&curQ===qs.length-1&&(
               <button className="btn btn-p" style={{flex:1,background:"linear-gradient(135deg,#00F5A0,#00E5FF)",color:"#08040F"}}
-                onClick={()=>setPhase("finished")}>
+                onClick={finish}>
                 🏆 Ver ganador
               </button>
             )}
-            <button className="btn btn-r" onClick={()=>{setPhase("idle");setCurQ(0);setRevealed(false);}}>⏹</button>
+            <button className="btn btn-r" onClick={reset}>⏹</button>
           </div>
         </div>
       )}
@@ -1168,16 +1200,18 @@ function TriviaPanel({sec}){
           <div style={{fontSize:32,marginBottom:8}}>🏆</div>
           <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
             color:bata>=memb?"#FF9500":"#FFD600",marginBottom:4}}>
-            {bata>=memb?"🍠 Team Batata":"🍋 Team Membrillo"} ganó!
+             {leader ? (leader==="batata"?"🍠 Team Batata ganó!":"🍋 Team Membrillo ganó!") : "🤝 Empate"}
           </div>
           <div style={{fontSize:11,color:"rgba(240,232,255,.35)",marginBottom:12}}>
-            Cupón <strong style={{color:"#FFD600"}}>{coupon}</strong> enviado a los celulares del equipo ganador.
+            Premio configurado: <strong style={{color:"#FFD600"}}>{coupon}</strong>. La entrega se gestiona por separado.
           </div>
-          <button className="btn btn-g btn-full" onClick={()=>{setPhase("idle");setCurQ(0);setRevealed(false);}}>
+           <div style={{fontSize:11,color:"rgba(240,232,255,.45)",marginBottom:10}}>Aciertos: Batata {accumulated.batata} · Membrillo {accumulated.membrillo}</div>
+           <button className="btn btn-g btn-full" onClick={reset}>
             ↻ Nueva partida
           </button>
         </div>
       )}
+      {actionError&&<div style={{marginTop:10,color:"#FCA5A5",fontSize:11,textAlign:"center"}}>{actionError}</div>}
     </div>
   );
 }
@@ -1319,7 +1353,7 @@ function PantallaPreview() {
   if (activeGame === "rey del orto") {
     content = <RaffleScreen gameState={gameState}/>;
   } else if (activeGame === "trivia") {
-    content = <TriviaScreen gameState={gameState}/>;
+    content = <TriviaScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (hasEscenario) {
     content = <EscenarioScreen gameState={gameState}/>;
   } else if (liveVideo && !hasGame) {
@@ -2351,7 +2385,7 @@ export default function AdminPanel(){
       case "rey":       return <ReyPanel sec={curSec}/>;
       case "suma":      return <SumaPanel sec={curSec}/>;
       case "palabra":   return <PalabraPanel sec={curSec}/>;
-      case "trivia":    return <TriviaPanel sec={curSec}/>;
+      case "trivia":    return <TriviaPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "mensajes":  return <MensajesPanel sec={curSec} zocaloOn={zocaloOn} setZocaloOn={setZocaloOn} pending={pending} approved={approved} approve={approve} reject={reject}/>;
       case "videos":    return <VideosPanel
         sec={curSec}

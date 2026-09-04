@@ -3,6 +3,7 @@ import QRCode from "react-qr-code";
 import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
+import { BIGSCREEN_CSS, RaffleScreen, TriviaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig } from "../designers/lib/persistence";
@@ -181,13 +182,16 @@ export default function PantallaTV() {
   const [authErr,  setAuthErr]  = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [canvasConfig, setCanvasConfig] = useState(() => loadTvConfig("default"));
-  const { gameState } = useGameState();
+  const { gameState, session } = useGameState();
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
 
   const { event, candidates, current, loading } =
     usePantallaEvent({ eventId, client: supabaseAnon });
+  const sharesSession = !event?.session_id || event.session_id === session?.id;
+  const activeGame = sharesSession ? gameState?.active_game : null;
+  const hasLiveLayer = activeGame === "rey del orto" || activeGame === "trivia";
   const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
-    useContinuousTvPlayers({ current, eventId, token, unlocked, muted: !screenAudioOn,
+    useContinuousTvPlayers({ current, eventId, token, unlocked, muted: !screenAudioOn || hasLiveLayer,
       playing: event?.is_playing !== false,
       captionsEnabled: event?.youtube_captions_enabled === true,
       rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6,
@@ -391,6 +395,17 @@ export default function PantallaTV() {
         </ConfiguredBlock>)}
 
         {canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>} 
+
+        {hasLiveLayer && (
+          <div data-tv-live-game style={{
+            position: "absolute", inset: 0, zIndex: 2147483647,
+            background: C.bg, overflow: "hidden",
+          }}>
+            <style>{BIGSCREEN_CSS}</style>
+            {activeGame === "rey del orto" && <RaffleScreen gameState={gameState}/>}
+            {activeGame === "trivia" && <TriviaScreen gameState={gameState} sessionId={session?.id}/>}
+          </div>
+        )}
       </div>
 
       <TvStatic phase={rainPhase} waiting={!current || readyCount < 2}/>
