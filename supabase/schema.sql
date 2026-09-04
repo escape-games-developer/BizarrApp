@@ -229,15 +229,13 @@ CREATE TABLE trivia_votes (
   id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id   uuid        NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   round_id     uuid        NOT NULL,
-  question_idx integer     NOT NULL CHECK (question_idx BETWEEN 0 AND 9),
+  question_idx integer     NOT NULL CONSTRAINT trivia_votes_question_idx_check CHECK (question_idx BETWEEN 0 AND 9),
   user_id      uuid        NOT NULL REFERENCES auth.users(id),
   team         text        NOT NULL CHECK (team IN ('batata','membrillo')),
   option_idx   integer     NOT NULL CHECK (option_idx BETWEEN 0 AND 3),
   created_at   timestamptz DEFAULT now(),
-  UNIQUE (session_id, round_id, question_idx, user_id)
+  CONSTRAINT trivia_votes_round_user_unique UNIQUE (session_id, round_id, question_idx, user_id)
 );
-
-CREATE INDEX trivia_votes_session_q ON trivia_votes(session_id, round_id, question_idx);
 
 ALTER TABLE trivia_votes ENABLE ROW LEVEL SECURITY;
 
@@ -251,8 +249,11 @@ CREATE POLICY "trivia_votes: usuario inserta propio"
     AND EXISTS (SELECT 1 FROM profiles p WHERE p.id=auth.uid() AND p.team=trivia_votes.team)
   );
 
-CREATE POLICY "trivia_votes: todos pueden leer totales"
-  ON trivia_votes FOR SELECT USING (true);
+CREATE POLICY "trivia_votes: usuario lee propio"
+  ON trivia_votes FOR SELECT USING (auth.uid() = user_id);
+
+REVOKE SELECT ON TABLE trivia_votes FROM anon, authenticated;
+GRANT SELECT, INSERT ON TABLE trivia_votes TO authenticated;
 
 
 -- ============================================================================
@@ -260,10 +261,10 @@ CREATE POLICY "trivia_votes: todos pueden leer totales"
 CREATE TABLE trivia_questions (
   session_id uuid NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   round_id uuid NOT NULL,
-  question_idx integer NOT NULL CHECK (question_idx BETWEEN 0 AND 99),
+  question_idx integer NOT NULL CONSTRAINT trivia_questions_question_idx_check CHECK (question_idx BETWEEN 0 AND 9),
   question_text text NOT NULL,
-  options jsonb NOT NULL CHECK (jsonb_typeof(options) = 'array' AND jsonb_array_length(options) BETWEEN 2 AND 4),
-  correct_option integer NOT NULL CHECK (correct_option BETWEEN 0 AND 3),
+  options jsonb NOT NULL CONSTRAINT trivia_questions_options_check CHECK (jsonb_typeof(options) = 'array' AND jsonb_array_length(options) BETWEEN 2 AND 4),
+  correct_option integer NOT NULL CONSTRAINT trivia_questions_correct_option_check CHECK (correct_option BETWEEN 0 AND 3 AND correct_option < jsonb_array_length(options)),
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (session_id, round_id, question_idx)
 );
@@ -272,7 +273,11 @@ CREATE POLICY "trivia_questions: admin gestiona" ON trivia_questions FOR ALL
   USING (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()))
   WITH CHECK (EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid()));
 
-CREATE VIEW trivia_questions_public AS
+REVOKE ALL ON TABLE trivia_questions FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE trivia_questions TO authenticated;
+
+CREATE VIEW trivia_questions_public
+WITH (security_barrier = true, security_invoker = false) AS
 SELECT q.session_id, q.round_id, q.question_idx, q.question_text, q.options,
   CASE WHEN g.trivia_state IN ('revealed','finished')
              AND g.trivia_round_id=q.round_id AND g.trivia_question=q.question_idx
@@ -283,22 +288,38 @@ FROM trivia_questions q JOIN game_state g USING (session_id);
 -- Totales agregados por pregunta. El admin y la pantalla gigante la consultan.
 -- NO hace falta calcular porcentajes en el cliente.
 -- ============================================================================
-CREATE VIEW trivia_totals AS
+CREATE VIEW trivia_totals
+WITH (security_barrier = true, security_invoker = false) AS
 SELECT
-  session_id,
-  round_id,
-  question_idx,
-  COUNT(*) FILTER (WHERE team = 'batata')     AS batata_votes,
-  COUNT(*) FILTER (WHERE team = 'membrillo')  AS membrillo_votes,
-  COUNT(*) FILTER (WHERE option_idx = 0)      AS opt_0,
-  COUNT(*) FILTER (WHERE option_idx = 1)      AS opt_1,
-  COUNT(*) FILTER (WHERE option_idx = 2)      AS opt_2,
-  COUNT(*) FILTER (WHERE option_idx = 3)      AS opt_3,
-  COUNT(*) FILTER (WHERE team='batata' AND option_idx=q.correct_option) AS batata_correct,
-  COUNT(*) FILTER (WHERE team='membrillo' AND option_idx=q.correct_option) AS membrillo_correct,
-  COUNT(*)                                    AS total_votes
-FROM trivia_votes v JOIN trivia_questions q USING (session_id, round_id, question_idx)
-GROUP BY session_id, round_id, question_idx;
+  v.session_id,
+  v.round_id,
+  v.question_idx,
+  COUNT(*) FILTER (WHERE v.team = 'batata')     AS batata_votes,
+  COUNT(*) FILTER (WHERE v.team = 'membrillo')  AS membrillo_votes,
+  COUNT(*) FILTER (WHERE v.option_idx = 0)      AS opt_0,
+  COUNT(*) FILTER (WHERE v.option_idx = 1)      AS opt_1,
+  COUNT(*) FILTER (WHERE v.option_idx = 2)      AS opt_2,
+  COUNT(*) FILTER (WHERE v.option_idx = 3)      AS opt_3,
+  CASE WHEN g.trivia_state IN ('revealed','finished') AND g.trivia_round_id=v.round_id
+       THEN COUNT(*) FILTER (WHERE v.team='batata' AND v.option_idx=q.correct_option)
+       ELSE NULL END AS batata_correct,
+  CASE WHEN g.trivia_state IN ('revealed','finished') AND g.trivia_round_id=v.round_id
+       THEN COUNT(*) FILTER (WHERE v.team='membrillo' AND v.option_idx=q.correct_option)
+       ELSE NULL END AS membrillo_correct,
+  COUNT(*) AS total_votes
+FROM trivia_votes v
+JOIN trivia_questions q USING (session_id, round_id, question_idx)
+JOIN game_state g ON g.session_id=v.session_id
+GROUP BY v.session_id, v.round_id, v.question_idx, g.trivia_state, g.trivia_round_id;
+
+REVOKE ALL ON TABLE trivia_questions_public FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE trivia_totals FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE trivia_questions_public TO anon, authenticated;
+GRANT SELECT ON TABLE trivia_totals TO anon, authenticated;
+
+-- El score no se persiste: se deriva de votos correctos. trivia_winner_team
+-- continua siendo escrito por Admin. Los votos legacy sin preguntas asociadas
+-- se conservan fisicamente aunque no aparezcan en trivia_totals historicos.
 
 
 -- ============================================================================
