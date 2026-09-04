@@ -120,10 +120,11 @@ export default function BizarrApp() {
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
                  activeEscenario={gameState?.active_escenario ?? null}
                  isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
-                 gameOpen={gameOpen} setGameOpen={setGameOpen}/>;
+                 gameState={gameState} gameOpen={gameOpen} setGameOpen={setGameOpen}/>;
       case "escenario":
         return <EscenarioView user={user} activeEscenario={gameState?.active_escenario ?? null}
-                 isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id} ytConfig={ytConfig}/>;
+                 isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
+                 ytConfig={ytConfig} gameState={gameState}/>;
       case "pantalla":
         return <PantallaView user={user}
                  messages={messages.filter(m => m.user_id === user?.id)}
