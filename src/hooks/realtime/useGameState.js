@@ -179,11 +179,43 @@ export function useAdminControls(sessionId) {
   }, [update, dismissActiveVideo]);
 
   // ── Rey del Orto ──────────────────────────────────────────────────────────
-  const launchRaffle = useCallback(async (prize, excludePrevious = false) => {
+  // El sorteo tiene dos pasos separados a propósito. `launchRaffle` deja la
+  // largada persistida en game_state (de ahí sacan la cuenta regresiva el
+  // cliente y la TV) y `drawRaffleWinner` le pide el ganador al servidor.
+  // Separados, un refresh del admin en mitad del estroboscópico no deja la
+  // ronda colgada: el panel vuelve a pedir el sorteo sin relanzar nada.
+  const launchRaffle = useCallback(async (prize, excludePrevious = false, currentPayload = null) => {
     await dismissActiveVideo();
-    await update({ raffle_state: "launched", active_game: "rey del orto" });
-    return async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    // La regla de la ronda viaja en minijuego_payload.raffle, en el MISMO
+    // UPDATE que abre la ronda: queda persistida antes de que exista la
+    // posibilidad de resolver un ganador. Sin esto, un F5 del admin durante
+    // los 10s de estroboscópico reseteaba el toggle a false y el sorteo salía
+    // con una regla distinta a la que había elegido.
+    // Merge no destructivo: se preserva cualquier otra clave del payload.
+    const base = (currentPayload && typeof currentPayload === "object" && !Array.isArray(currentPayload))
+      ? currentPayload
+      : {};
+    return update({
+      raffle_state:       "launched",
+      active_game:        "rey del orto",
+      active_placa:       null,
+      placa_custom:       null,
+      active_escenario:   null,
+      // Limpiar al lanzar: si no, durante los 10s de estroboscópico seguía
+      // colgado el ganador de la ronda anterior.
+      raffle_winner_id:   null,
+      raffle_winner_name: null,
+      raffle_prize:       prize?.trim() || "Consumición libre para dos",
+      minijuego_payload:  { ...base, raffle: { exclude_previous: !!excludePrevious } },
+    });
+  }, [update, dismissActiveVideo]);
+
+  // Al ganador lo elige la Edge Function con service_role — nunca el cliente.
+  const drawRaffleWinner = useCallback(async ({ prize, excludePrevious = false } = {}) => {
+    if (!sessionId) return { error: "Sin sesión activa" };
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return { error: "Sesión de admin vencida — volvé a entrar." };
+    try {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/launch-raffle`,
         {
@@ -200,12 +232,27 @@ export function useAdminControls(sessionId) {
           }),
         }
       );
-      return res.json();
-    };
-  }, [sessionId, update, dismissActiveVideo]);
+      const body = await res.json().catch(() => ({}));
+      // La function contesta 4xx/5xx con {error}. Sin este chequeo el panel
+      // cantaba "ganador" aunque el servidor no hubiera elegido a nadie.
+      if (!res.ok || body?.error) return { error: body?.error || `Error ${res.status}` };
+      return { winner: body.winner };
+    } catch (err) {
+      return { error: err.message || "No se pudo contactar al servidor." };
+    }
+  }, [sessionId]);
 
+  // Limpia también active_game/active_placa: si no, la TV se quedaba con la
+  // capa del sorteo encima del DJ y RaffleScreen estroboscopiaba sin fin.
   const resetRaffle = useCallback(() =>
-    update({ raffle_state: "idle", raffle_winner_id: null, raffle_winner_name: null }),
+    update({
+      raffle_state:       "idle",
+      raffle_winner_id:   null,
+      raffle_winner_name: null,
+      active_game:        null,
+      active_placa:       null,
+      placa_custom:       null,
+    }),
   [update]);
 
   // ── Desafío Demente ───────────────────────────────────────────────────────
@@ -450,7 +497,7 @@ export function useAdminControls(sessionId) {
   // ── Return — SIN gameState (ese lo da useGameState) ───────────────────────
   return {
     announceGame, activateGame, deactivateGame,
-    launchRaffle, resetRaffle,
+    launchRaffle, drawRaffleWinner, resetRaffle,
     startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia,
     activateEscenario, deactivateEscenario,
     startDuelo, revealDuelo,

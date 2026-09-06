@@ -17,6 +17,7 @@ import DesignerView from "../views/Designer/DesignerView";
 import TvDesigner from "../designers/tv/TvDesigner";
 import UsuariosPanel from "./UsuariosPanel";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
+import { useRaffle, raffleCountdown } from "../hooks/useRaffle";
 import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import PantallaSidebarMenu from "./pantalla/PantallaSidebarMenu";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
@@ -791,79 +792,287 @@ function KaraokePanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 // REY DEL ORTO
 // ══════════════════════════════════════════════════════════════════════════
-function ReyPanel({sec}){
-  const [phase,  setPhase]  = useState("idle");
-  const [prize,  setPrize]  = useState("");
-  const [cd,     setCd]     = useState(10);
-  const [bgCol,  setBgCol]  = useState("#000");
-  const strobeRef = useRef(null);
-  const cdRef     = useRef(null);
-  const iRef      = useRef(0);
+// Ventana de presencia del sorteo. Tiene que ser idéntica a
+// PRESENCE_WINDOW_MS de la Edge Function `launch-raffle` (v6): desde esa
+// versión el servidor sortea SOLO entre los que tienen last_seen dentro de
+// los últimos 2 minutos. Si estos dos números se separan, el panel promete
+// una pileta de participantes que el servidor no usa.
+const REY_PRESENCE_WINDOW_MS = 2 * 60 * 1000;
 
-  const stopAll = () => { clearInterval(strobeRef.current); clearInterval(cdRef.current); };
+const reyActivo = (c) =>
+  Date.now() - new Date(c.last_seen).getTime() < REY_PRESENCE_WINDOW_MS;
 
-  const launch = () => {
-    setPhase("active"); setCd(10); iRef.current=0;
-    strobeRef.current = setInterval(()=>{
-      iRef.current=(iRef.current+1)%STROBE.length;
-      setBgCol(iRef.current%2===0?"#000":STROBE[iRef.current]);
-    },120);
-    cdRef.current = setInterval(()=>{
-      setCd(c=>{ if(c<=1){ stopAll(); setPhase("winner"); setBgCol("#000"); return 0; } return c-1; });
-    },1000);
+// Misma regla que aplica el servidor: activo en la ventana y, si el toggle
+// está puesto, que no haya ganado antes.
+const reyElegibles = (rows, excludePrev) =>
+  (rows || []).filter(c => reyActivo(c) && (!excludePrev || c.excluded_raffle !== true));
+
+function ReyPanel({sec, controls, sessionId, gameState}){
+  const [prize,       setPrize]       = useState("");
+  const [excludePrev, setExcludePrev] = useState(false);
+  const [candidates,  setCandidates]  = useState(null);
+  const [busy,        setBusy]        = useState(false);
+  const [actionError, setActionError] = useState(null);
+  // Guarda contra doble sorteo: marca la ronda ya resuelta por ESTE panel.
+  const drawnRef = useRef(null);
+
+  // Toda la fase sale de game_state — nada de estado local de fase. Un refresh
+  // del admin en cualquier punto del sorteo cae parado en la misma pantalla.
+  const isRey      = gameState?.active_game === "rey del orto";
+  const phase      = isRey ? (gameState?.raffle_state ?? "idle") : "idle";
+  const announcing = !isRey && gameState?.active_placa === "game_rey";
+  const livePrize  = gameState?.raffle_prize ?? "";
+  const winnerName = gameState?.raffle_winner_name ?? null;
+  const { cd } = useRaffle(gameState);   // la misma cuenta regresiva que ven cliente y TV
+
+  // Configuración de la ronda EN CURSO. Con la ronda abierta la fuente de
+  // verdad es lo persistido en game_state, nunca el toggle local: después de
+  // un F5 el estado local arranca en false y mandaría al servidor una regla
+  // distinta a la que se lanzó. En idle manda el toggle, que es donde el
+  // admin todavía está decidiendo.
+  const rondaAbierta   = phase === "launched" || phase === "winner";
+  const roundExclude   = gameState?.minijuego_payload?.raffle?.exclude_previous === true;
+  const excludeEfectivo = rondaAbierta ? roundExclude : excludePrev;
+
+  // Trae la sesión entera y el filtro de elegibilidad lo aplica reyElegibles,
+  // que replica la regla de la Edge Function v6 (ventana de 2 minutos +
+  // excluded_raffle). Los inactivos se siguen listando en gris, pero no
+  // cuentan ni habilitan el lanzamiento.
+  // Devuelve las filas además de guardarlas: `launch` revalida con datos
+  // frescos antes de lanzar, sin depender del snapshot que hay en pantalla.
+  const loadCandidates = useCallback(async () => {
+    if (!sessionId) { setCandidates(null); return []; }
+    const { data, error } = await supabase
+      .from("connected_users")
+      .select("user_id,name,avatar_emoji,excluded_raffle,last_seen")
+      .eq("session_id", sessionId)
+      .order("last_seen", { ascending: false });
+    if (error) { setActionError("No pudimos leer los conectados."); return null; }
+    setCandidates(data || []);
+    return data || [];
+  }, [sessionId]);
+  // Relee al entrar al panel, al cambiar de fase y al pasar a la placa de
+  // anuncio. Sin intervalos: para refrescar en el medio está el botón ↻.
+  useEffect(() => { loadCandidates(); }, [loadCandidates, phase, announcing]);
+
+  const elegibles = reyElegibles(candidates, excludeEfectivo);
+  const inactivos = (candidates || []).filter(c => !reyActivo(c));
+
+  // useAdminControls devuelve un objeto nuevo en cada render y el
+  // estroboscópico re-renderiza cada 130ms: con `controls` en las deps del
+  // efecto de abajo el timeout se reiniciaba sin parar y el sorteo no se
+  // resolvía nunca. Por eso viaja por ref.
+  const controlsRef = useRef(controls);
+  useEffect(() => { controlsRef.current = controls; });
+
+  // El servidor resuelve el sorteo cuando termina la cuenta regresiva. El
+  // disparo se ancla en updated_at, así que si el admin refresca en mitad del
+  // estroboscópico el panel retoma el sorteo en vez de dejar la ronda colgada.
+  const roundKey  = gameState?.updated_at ?? "";
+  const roundPriz = gameState?.raffle_prize;
+  useEffect(() => {
+    if (phase !== "launched" || !sessionId) return undefined;
+    if (drawnRef.current === roundKey) return undefined;
+    const t = setTimeout(async () => {
+      if (drawnRef.current === roundKey) return;
+      drawnRef.current = roundKey;
+      const res = await controlsRef.current?.drawRaffleWinner({
+        prize: roundPriz, excludePrevious: excludeEfectivo,
+      });
+      if (res?.error) { setActionError(res.error); drawnRef.current = null; }
+    }, raffleCountdown(roundKey) * 1000);
+    return () => clearTimeout(t);
+  }, [phase, sessionId, roundKey, roundPriz, excludeEfectivo]);
+
+  const announce = async () => {
+    if (busy) return; setBusy(true); setActionError(null);
+    const r = await controls?.announceGame("rey");
+    if (r?.error) setActionError("No se pudo mostrar la placa.");
+    setBusy(false);
   };
-  useEffect(()=>()=>stopAll(),[]);
+
+  const launch = async () => {
+    if (busy || !sessionId) return;
+    setBusy(true); setActionError(null); drawnRef.current = null;
+    // La ventana de presencia es de 2 minutos: el listado en pantalla puede
+    // haber envejecido mientras el admin cargaba el premio. Revalidamos contra
+    // el servidor antes de lanzar en vez de descubrirlo con el 400 de la
+    // Edge Function cuando ya está el estroboscópico en la pantalla gigante.
+    const fresh = await loadCandidates();
+    if (fresh === null) { setBusy(false); return; }
+    if (reyElegibles(fresh, excludePrev).length === 0) {
+      setActionError("Ya no queda nadie activo en los últimos 2 minutos.");
+      setBusy(false); return;
+    }
+    // La decisión del toggle se congela acá: viaja en el mismo UPDATE que abre
+    // la ronda y a partir de ahora la manda game_state, no el estado local.
+    const r = await controls?.launchRaffle(
+      prize || livePrize, excludePrev, gameState?.minijuego_payload,
+    );
+    if (r?.error) setActionError("No se pudo lanzar el sorteo.");
+    setBusy(false);
+  };
+
+  const drawNow = async () => {
+    if (busy) return; setBusy(true); setActionError(null);
+    drawnRef.current = gameState?.updated_at ?? "";
+    const res = await controls?.drawRaffleWinner({
+      prize: gameState?.raffle_prize, excludePrevious: excludeEfectivo,
+    });
+    if (res?.error) { setActionError(res.error); drawnRef.current = null; }
+    setBusy(false);
+  };
+
+  const reset = async () => {
+    if (busy) return; setBusy(true); setActionError(null); drawnRef.current = null;
+    const r = await controls?.resetRaffle();
+    if (r?.error) setActionError("No se pudo resetear."); else setPrize("");
+    setBusy(false);
+  };
+
+  const listaElegibles = (
+    <div className="card">
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div className="ctitle" style={{margin:0}}>
+          {elegibles.length} en el sorteo
+          {inactivos.length > 0 && (
+            <span style={{fontWeight:400,color:"rgba(240,232,255,.3)"}}>
+              {" "}· {inactivos.length} inactivos
+            </span>
+          )}
+        </div>
+        <button className="btn btn-g" style={{padding:"3px 10px",fontSize:10}}
+          onClick={loadCandidates}>↻</button>
+      </div>
+      {/* Con la ronda ya lanzada el toggle es de solo lectura y muestra la
+          regla persistida: la decisión se congela en LANZAR. */}
+      <label style={{display:"flex",alignItems:"center",gap:7,fontSize:11,
+        color:"rgba(240,232,255,.55)",marginBottom:9,
+        cursor:rondaAbierta?"default":"pointer",opacity:rondaAbierta?.6:1}}>
+        <input type="checkbox" checked={excludeEfectivo} disabled={rondaAbierta}
+          onChange={e=>setExcludePrev(e.target.checked)}/>
+        Excluir a los que ya ganaron esta noche
+        {rondaAbierta&&(
+          <span style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>· fijado para esta ronda</span>
+        )}
+      </label>
+      {candidates === null && (
+        <div style={{fontSize:11,color:"rgba(240,232,255,.3)"}}>Cargando conectados…</div>
+      )}
+      {candidates !== null && elegibles.length === 0 && (
+        <div style={{fontSize:11,color:"#FCA5A5"}}>
+          {(candidates.length === 0)
+            ? "Nadie hizo check-in en esta sesión."
+            : "Nadie estuvo activo en los últimos 2 minutos."}
+        </div>
+      )}
+      <div style={{maxHeight:150,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
+        {(candidates || []).map(c=>{
+          const entra = reyElegibles([c], excludeEfectivo).length === 1;
+          return (
+            <div key={c.user_id} style={{display:"flex",alignItems:"center",gap:7,
+              padding:"5px 8px",borderRadius:8,fontSize:11,
+              background:"rgba(240,232,255,.04)",opacity:entra?1:.4}}>
+              <span style={{fontSize:14}}>{c.avatar_emoji || "👤"}</span>
+              <span style={{flex:1,color:"#F0E8FF"}}>{c.name}</span>
+              {!reyActivo(c) && (
+                <span style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>inactivo</span>
+              )}
+              {c.excluded_raffle && (
+                <span style={{fontSize:9,color:"#FFD600"}}>ya ganó</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",marginTop:8,lineHeight:1.5}}>
+        Sortean solo los activos en los últimos 2 minutos — la misma ventana que
+        aplica el servidor. Los grises quedan afuera. Tocá ↻ para refrescar.
+      </div>
+    </div>
+  );
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {phase==="idle"&&(
-        <div className="card">
-          <div className="ctitle">Premio del sorteo</div>
-          <input className="inp" value={prize} onChange={e=>setPrize(e.target.value)}
-            placeholder="Ej: Trago gratis 🍺"/>
-          <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:10,lineHeight:1.5}}>
-            El ganador lo ve en su celular y en pantalla gigante.
-            El servidor selecciona al ganador — no manipulable desde el cliente.
-          </div>
-          <button className="btn btn-p btn-full" onClick={()=>setPhase("announcing")}>
-            📢 Anunciar → mostrar placa en pantalla
-          </button>
-        </div>
-      )}
-
-      {phase==="announcing"&&(
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <div className="chip chip-wait">⏳ Placa en pantalla</div>
-          </div>
-          <div style={{padding:"12px",background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.25)",
-            borderRadius:11,marginBottom:12,textAlign:"center"}}>
-            <div style={{fontSize:28,marginBottom:4}}>🎰</div>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
-              background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
-              WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-              REY DEL ORTO
+      {phase==="idle"&&!announcing&&(
+        <>
+          <div className="card">
+            <div className="ctitle">Premio del sorteo</div>
+            <input className="inp" value={prize} onChange={e=>setPrize(e.target.value)}
+              placeholder="Ej: Trago gratis 🍺"/>
+            <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:10,lineHeight:1.5}}>
+              El ganador lo ve en su celular y en pantalla gigante.
+              El servidor selecciona al ganador — no manipulable desde el cliente.
             </div>
-            <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>Premio: {prize}</div>
+            <button className="btn btn-p btn-full" onClick={announce} disabled={busy}>
+              📢 Anunciar → mostrar placa en pantalla
+            </button>
           </div>
-          <button className="btn btn-p btn-full" onClick={launch}>
-            🎰 LANZAR SORTEO AHORA
-          </button>
-        </div>
+          {listaElegibles}
+        </>
       )}
 
-      {phase==="active"&&(
-        <div className="card" style={{background:bgCol,transition:"background .08s",borderColor:"rgba(255,214,0,.3)"}}>
+      {phase==="idle"&&announcing&&(
+        <>
+          <div className="card">
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <div className="chip chip-wait">⏳ Placa en pantalla</div>
+            </div>
+            <div style={{padding:"12px",background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.25)",
+              borderRadius:11,marginBottom:12,textAlign:"center"}}>
+              <div style={{fontSize:28,marginBottom:4}}>🎰</div>
+              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
+                background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
+                WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
+                REY DEL ORTO
+              </div>
+              <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>
+                Premio: {prize || livePrize || "—"}
+              </div>
+            </div>
+            <input className="inp" value={prize} onChange={e=>setPrize(e.target.value)}
+              placeholder="Premio (editable hasta lanzar)"/>
+            <button className="btn btn-p btn-full" onClick={launch}
+              disabled={busy||elegibles.length===0}>
+              🎰 LANZAR SORTEO AHORA
+            </button>
+            {elegibles.length===0&&(
+              <div style={{fontSize:10,color:"#FCA5A5",marginTop:7,textAlign:"center"}}>
+                Nadie activo en los últimos 2 minutos — tocá ↻ para refrescar.
+              </div>
+            )}
+            <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={reset} disabled={busy}>
+              ⏹ Cancelar
+            </button>
+          </div>
+          {listaElegibles}
+        </>
+      )}
+
+      {phase==="launched"&&(
+        <div className="card" style={{borderColor:"rgba(255,214,0,.3)"}}>
           <div style={{textAlign:"center",padding:"8px 0"}}>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:64,
-              color:bgCol==="#000"?"rgba(255,255,255,.9)":"rgba(8,4,15,.6)"}}>
+            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:64,color:"#FFD600"}}>
               {cd}
             </div>
-            <div style={{fontSize:11,fontWeight:700,
-              color:bgCol==="#000"?"rgba(255,255,255,.4)":"rgba(8,4,15,.4)",letterSpacing:2}}>
+            <div style={{fontSize:11,fontWeight:700,color:"rgba(240,232,255,.4)",letterSpacing:2}}>
               REY DEL ORTO
             </div>
+            <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginTop:6}}>
+              {cd>0 ? "Estroboscópico en pantalla…" : "Pidiendo ganador al servidor…"}
+            </div>
+            {/* Regla congelada de esta ronda, leída de game_state: es la que
+                va a viajar a la Edge Function, sobreviva o no el refresh. */}
+            <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",marginTop:6}}>
+              Excluye ganadores anteriores: <strong>{roundExclude ? "sí" : "no"}</strong>
+            </div>
           </div>
+          <button className="btn btn-p btn-full" style={{marginTop:10}} onClick={drawNow} disabled={busy}>
+            🏆 Elegir ganador ahora
+          </button>
+          <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={reset} disabled={busy}>
+            ⏹ Cancelar sorteo
+          </button>
         </div>
       )}
 
@@ -871,14 +1080,22 @@ function ReyPanel({sec}){
         <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.3)"}}>
           <div style={{fontSize:36,marginBottom:8}}>🏆</div>
           <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#00F5A0",marginBottom:4}}>
-            ¡GANADOR!
+            {winnerName || "¡GANADOR!"}
           </div>
-          <div style={{fontSize:11,color:"rgba(240,232,255,.4)",marginBottom:4}}>Premio: <strong style={{color:"#FFD600"}}>{prize}</strong></div>
+          <div style={{fontSize:11,color:"rgba(240,232,255,.4)",marginBottom:4}}>
+            Premio: <strong style={{color:"#FFD600"}}>{livePrize || "—"}</strong>
+          </div>
           <div style={{fontSize:10,color:"rgba(240,232,255,.25)",marginBottom:14}}>
-            Nombre del ganador en pantalla gigante y celular del ganador.
+            Ya está en la pantalla gigante y en el celular del ganador.
           </div>
-          <button className="btn btn-g btn-full" onClick={()=>setPhase("idle")}>↻ Nuevo sorteo</button>
+          <button className="btn btn-g btn-full" onClick={reset} disabled={busy}>
+            ↻ Nuevo sorteo
+          </button>
         </div>
+      )}
+
+      {actionError&&(
+        <div style={{marginTop:10,color:"#FCA5A5",fontSize:11,textAlign:"center"}}>{actionError}</div>
       )}
     </div>
   );
@@ -2393,7 +2610,7 @@ export default function AdminPanel(){
       case "ftl":       return <EscenarioPanel sec={curSec} type="ftl"/>;
       case "pt":        return <EscenarioPanel sec={curSec} type="pt"/>;
       case "karaoke":   return <KaraokePanel sec={curSec}/>;
-      case "rey":       return <ReyPanel sec={curSec}/>;
+      case "rey":       return <ReyPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "suma":      return <SumaPanel sec={curSec}/>;
       case "palabra":   return <PalabraPanel sec={curSec}/>;
       case "trivia":    return <TriviaPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;

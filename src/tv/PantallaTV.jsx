@@ -3,7 +3,7 @@ import QRCode from "react-qr-code";
 import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
-import { BIGSCREEN_CSS, RaffleScreen, TriviaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
+import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig } from "../designers/lib/persistence";
@@ -190,6 +190,18 @@ export default function PantallaTV() {
   const sharesSession = !event?.session_id || event.session_id === session?.id;
   const activeGame = sharesSession ? gameState?.active_game : null;
   const hasLiveLayer = activeGame === "rey del orto" || activeGame === "trivia";
+  // Placas de anuncio (el "📢 Anunciar" del admin escribe active_placa).
+  // No entra en hasLiveLayer a propósito — el muteo del DJ no cambia por una
+  // placa, solo por un juego en vivo.
+  //
+  // Exclusiones: `escenario_karaoke` no es proyectable (igual que en
+  // /pantalla), y `logo`/`logo_animado` son el REPOSO del admin y suelen
+  // quedar seteadas casi siempre. En /pantalla eso es inofensivo porque el
+  // video las tapa, pero acá el reposo es el canvas del DJ: si no se
+  // excluyeran, la TV quedaría permanentemente cubierta por el logo.
+  const PLACAS_NO_TV = ["escenario_karaoke", "logo", "logo_animado"];
+  const activePlaca = sharesSession ? gameState?.active_placa : null;
+  const hasPlaca = !!activePlaca && !PLACAS_NO_TV.includes(activePlaca);
   const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
     useContinuousTvPlayers({ current, eventId, token, unlocked, muted: !screenAudioOn || hasLiveLayer,
       playing: event?.is_playing !== false,
@@ -395,6 +407,21 @@ export default function PantallaTV() {
         </ConfiguredBlock>)}
 
         {canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>} 
+
+        {/* Placa de anuncio. Reusa el PlacaScreen de /pantalla — mismo catálogo,
+            mismos assets de /placas — en vez de duplicar el diseño. Va debajo
+            del juego en vivo y con el guard explícito por si alguna vez
+            coexistieran active_placa y active_game. Los reproductores del DJ
+            quedan montados detrás, igual que con la capa de juego. */}
+        {hasPlaca && !hasLiveLayer && (
+          <div data-tv-placa style={{
+            position: "absolute", inset: 0, zIndex: 2147483647,
+            background: C.bg, overflow: "hidden",
+          }}>
+            <style>{BIGSCREEN_CSS}</style>
+            <PlacaScreen logo="/logo.png" gameState={gameState}/>
+          </div>
+        )}
 
         {hasLiveLayer && (
           <div data-tv-live-game style={{
