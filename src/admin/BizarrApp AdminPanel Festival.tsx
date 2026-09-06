@@ -1022,6 +1022,10 @@ function PalabraPanel({sec}){
 // ══════════════════════════════════════════════════════════════════════════
 // DESAFÍO DEMENTE
 // ══════════════════════════════════════════════════════════════════════════
+// trivia_questions.question_idx tiene CHECK BETWEEN 0 AND 9: mas de 10 preguntas
+// hace fallar el INSERT entero al lanzar la ronda.
+const MAX_TRIVIA_Q = 10;
+
 function TriviaPanel({sec, controls, sessionId, gameState}){
   const [qs,       setQs]       = useState([]);
   const [coupon,   setCoupon]   = useState("BEER50");
@@ -1033,9 +1037,11 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
   const curQ = gameState?.trivia_question ?? 0;
   const roundId = gameState?.trivia_round_id ?? null;
   const revealed = phase === "revealed";
-  const { pcts } = useTriviaVotes(sessionId, roundId, curQ);
-  const { accumulated, leader } = useTriviaAccumulated(sessionId, roundId);
+  const { pcts } = useTriviaVotes(sessionId, roundId, curQ, phase);
+  const { accumulated, leader } = useTriviaAccumulated(sessionId, roundId, phase);
   const bata = pcts?.batata ?? 50, memb = pcts?.membrillo ?? 50;
+  // El ganador persistido manda; leader es el calculo en vivo previo al finish.
+  const winnerTeam = gameState?.trivia_winner_team ?? leader;
 
   useEffect(() => {
     if (!sessionId || !roundId) return;
@@ -1047,7 +1053,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
   }, [sessionId, roundId]);
 
   const addQ = () => {
-    if(!newQ.trim()||newOpts.some(o=>!o.trim())) return;
+    if(!newQ.trim()||newOpts.some(o=>!o.trim())||qs.length>=MAX_TRIVIA_Q) return;
     setQs(q=>[...q,{text:newQ,opts:newOpts,correct:newCorr}]);
     setNewQ(""); setNewOpts(["","","",""]); setNewCorr(0);
   };
@@ -1056,7 +1062,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
     if (!sessionId || !qs.length) return;
     setActionError(null);
     const nextRound = crypto.randomUUID();
-    const { error } = await supabase.from("trivia_questions").insert(qs.map((q, question_idx) => ({
+    const { error } = await supabase.from("trivia_questions").insert(qs.slice(0, MAX_TRIVIA_Q).map((q, question_idx) => ({
       session_id: sessionId, round_id: nextRound, question_idx,
       question_text: q.text, options: q.opts, correct_option: q.correct,
     })));
@@ -1084,7 +1090,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
           {/* Preguntas cargadas */}
           <div className="card">
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div className="ctitle" style={{margin:0}}>{qs.length} preguntas cargadas</div>
+              <div className="ctitle" style={{margin:0}}>{qs.length}/{MAX_TRIVIA_Q} preguntas cargadas</div>
             </div>
             {qs.map((q,i)=>(
               <div key={i} style={{padding:"8px 10px",background:"rgba(240,232,255,.04)",
@@ -1126,8 +1132,13 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             <div style={{fontSize:9.5,color:"rgba(0,245,160,.5)",marginTop:4,marginBottom:8}}>
               ● = respuesta correcta
             </div>
+            {qs.length>=MAX_TRIVIA_Q&&(
+              <div style={{fontSize:9.5,color:"rgba(255,214,0,.6)",marginBottom:8}}>
+                Máximo {MAX_TRIVIA_Q} preguntas por ronda.
+              </div>
+            )}
             <button className="btn btn-g btn-full" onClick={addQ}
-              disabled={!newQ.trim()||newOpts.some(o=>!o.trim())}>
+              disabled={!newQ.trim()||newOpts.some(o=>!o.trim())||qs.length>=MAX_TRIVIA_Q}>
               + Agregar pregunta
             </button>
           </div>
@@ -1138,7 +1149,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
         </>
       )}
 
-      {phase==="active"&&qs[curQ]&&(
+      {(phase==="active"||phase==="revealed")&&qs[curQ]&&(
         <div className="card">
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
             <div className="chip chip-live"><div className="dot-live"/>En vivo</div>
@@ -1199,8 +1210,8 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
         <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.25)"}}>
           <div style={{fontSize:32,marginBottom:8}}>🏆</div>
           <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
-            color:bata>=memb?"#FF9500":"#FFD600",marginBottom:4}}>
-             {leader ? (leader==="batata"?"🍠 Team Batata ganó!":"🍋 Team Membrillo ganó!") : "🤝 Empate"}
+            color:winnerTeam==="membrillo"?"#FFD600":"#FF9500",marginBottom:4}}>
+             {winnerTeam ? (winnerTeam==="batata"?"🍠 Team Batata ganó!":"🍋 Team Membrillo ganó!") : "🤝 Empate"}
           </div>
           <div style={{fontSize:11,color:"rgba(240,232,255,.35)",marginBottom:12}}>
             Premio configurado: <strong style={{color:"#FFD600"}}>{coupon}</strong>. La entrega se gestiona por separado.

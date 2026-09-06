@@ -296,8 +296,8 @@ export function TriviaScreen({ gameState, sessionId }) {
   const roundId = gameState?.trivia_round_id ?? null;
   const phase = gameState?.trivia_state ?? "idle";
   const question = useTriviaQuestion(sessionId, roundId, questionIdx, phase);
-  const { pcts } = useTriviaVotes(sessionId, roundId, questionIdx);
-  const { accumulated } = useTriviaAccumulated(sessionId, roundId);
+  const { pcts } = useTriviaVotes(sessionId, roundId, questionIdx, phase);
+  const { accumulated } = useTriviaAccumulated(sessionId, roundId, phase);
   const bataPct = pcts?.batata ?? 50;
   const membPct = pcts?.membrillo ?? 50;
   const winner = gameState?.trivia_winner_team;
