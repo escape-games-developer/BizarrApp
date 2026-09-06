@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import { supabase }                        from "../../lib/supabase";
 import { BlockedView, VideoRow }           from "../../components/UI";
 import { useYouTubePlaylists }             from "../../hooks/useYouTubePlaylists";
 import { useEscenarioQueue }               from "../../hooks/realtime/useEscenarioQueue";
@@ -75,77 +74,31 @@ function CostumeStrip({ items, color, bg, border }) {
 }
 
 // ─── Duelo de Talentos ───────────────────────────────────────────────────────
-function DueloView({ user, sessionId, ytConfig, gameState }) {
-  const [vote, setVote] = useState(null);
-  const { playlists } = useYouTubePlaylists(ytConfig || {});
-
-  const votesA = gameState?.duelo_votes_a || 0;
-  const votesB = gameState?.duelo_votes_b || 0;
-  const total  = votesA + votesB || 1;
-
-  if (!gameState?.duelo_slot1?.name || !gameState?.duelo_slot2?.name) return (
-    <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
-      No hay participantes todavía.
-    </div>
-  );
-
-  const options = [
-    { id: "a", label: gameState.duelo_slot1.name, color: "#EF4444", bg: "rgba(239,68,68,.1)", border: "rgba(239,68,68,.3)", votes: votesA },
-    { id: "b", label: gameState.duelo_slot2.name, color: "#3B82F6", bg: "rgba(59,130,246,.1)",  border: "rgba(59,130,246,.3)", votes: votesB },
-  ];
-
-  const handleVote = async (optionId) => {
-    if (vote) return;
-    setVote(optionId);
-    const field = optionId === "a" ? "duelo_votes_a" : "duelo_votes_b";
-    await supabase
-      .from("game_state")
-      .update({ [field]: (optionId === "a" ? votesA : votesB) + 1 })
-      .eq("session_id", sessionId);
-  };
-
+// El Duelo se juega desde la pestaña Juegos (postulación + aplausómetro sobre
+// applause_sessions). Acá había una segunda votación que escribía directo
+// game_state.duelo_votes_a/b desde el cliente: contaba distinto que la pantalla,
+// pisaba el contador con read-modify-write y hoy RLS la rechaza — el usuario
+// veía "✓ Voto enviado" sin que se registrara nada. Queda sólo el cartel que
+// manda al flujo real.
+function DueloView() {
   return (
     <div>
       <div className="sec-hdr"><span style={{ fontSize: 20 }}>⚔️</span><h3>Duelo de Talentos</h3></div>
-      <div style={{ fontSize: 12, color: "rgba(245,230,192,.5)", marginBottom: 16, lineHeight: 1.5 }}>
-        Dos participantes en el escenario. Votá al que más te guste.
-      </div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-        {options.map((o) => (
-          <button
-            key={o.id}
-            onClick={() => handleVote(o.id)}
-            style={{
-              flex: 1, padding: "20px 8px", borderRadius: 16, border: "2px solid",
-              borderColor: vote === o.id ? o.color : o.border,
-              background:  vote === o.id ? o.bg : "rgba(255,255,255,.03)",
-              cursor: vote ? "default" : "pointer",
-              transition: "all .2s",
-              transform: vote === o.id ? "scale(1.04)" : "scale(1)",
-            }}
-          >
-            <div style={{ fontSize: 36, marginBottom: 8 }}>⭐</div>
-            <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color: o.color }}>
-              {o.label}
-            </div>
-            <div style={{ fontSize: 11, color: "rgba(245,230,192,.4)", marginTop: 4 }}>
-              {Math.round((o.votes / total) * 100)}%
-            </div>
-            {vote === o.id && (
-              <div style={{ fontSize: 10, color: o.color, marginTop: 6, fontWeight: 700 }}>✓ Tu voto</div>
-            )}
-          </button>
-        ))}
-      </div>
-      {vote ? (
-        <div style={{ textAlign: "center", padding: "10px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 10, fontSize: 12, color: "#86EFAC" }}>
-          ✓ Voto enviado · Los resultados se ven en la pantalla del bar
+      <div style={{
+        textAlign: "center", padding: "34px 20px", borderRadius: 16,
+        background: "rgba(255,45,120,.08)", border: "1px solid rgba(255,45,120,.28)",
+      }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🎤</div>
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15,
+          color: "#FF2D95", marginBottom: 6,
+        }}>
+          El Duelo está en la pestaña Juegos
         </div>
-      ) : (
-        <div style={{ textAlign: "center", fontSize: 11, color: "rgba(245,230,192,.22)" }}>
-          Tocá un participante para votar
+        <div style={{ fontSize: 12.5, color: "rgba(245,230,192,.5)", lineHeight: 1.5 }}>
+          Entrá a 🎮 <strong>Juegos</strong> para postularte y para aplaudir a tu favorito.
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -260,7 +213,7 @@ function KaraokeView({ user, sessionId, ytConfig }) {
 }
 
 // ─── EscenarioView (router) ──────────────────────────────────────────────────
-export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState }) {
+export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -276,7 +229,7 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   if (!activeEscenario || activeEscenario === "karaoke") return <EscenarioStandby />;
 
   switch (activeEscenario) {
-    case "duelo":   return <DueloView user={user} sessionId={sessionId} ytConfig={ytConfig} gameState={gameState} />;
+    case "duelo":   return <DueloView />;
     case "ftl":     return <FollowTheLeaderView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
     case "pt":      return <PersonalTrainerView user={user} sessionId={sessionId} />;
     case "karaoke": return <KaraokeView user={user} sessionId={sessionId} ytConfig={ytConfig} />;

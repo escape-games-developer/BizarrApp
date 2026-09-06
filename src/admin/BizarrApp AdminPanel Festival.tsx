@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useGameState, useAdminControls } from "../hooks/realtime/useGameState";
 import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
-import { useApplauseRound } from "../hooks/realtime/useApplauseRound";
+import { useApplauseRound, resolveDueloWinner } from "../hooks/realtime/useApplauseRound";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
@@ -376,7 +376,9 @@ function DueloAvatar({emoji,photo,size=40,col}){
 // Fuente de verdad del estado: game_state.active_escenario + applause_session.
 function DueloPanel({sec, controls, sessionId, gameState}){
   const { postulaciones } = useDueloPostulaciones(sessionId, null);
-  const { round, counts } = useApplauseRound(sessionId);
+  // Filtro por game_type: sin él, una ronda de PT/FTL posterior secuestraba el
+  // estado del panel del Duelo y mostraba contadores de otro juego.
+  const { round, counts } = useApplauseRound(sessionId, "duelo");
 
   const [slot1, setSlot1]           = useState(null); // fila de duelo_postulaciones
   const [slot2, setSlot2]           = useState(null);
@@ -387,12 +389,16 @@ function DueloPanel({sec, controls, sessionId, gameState}){
 
   const notify = (txt,col="#00F5A0") => { setAlert({txt,col}); setTimeout(()=>setAlert(null),3000); };
 
-  // Estado derivado: A idle · B postulaciones abiertas · C duelo en curso.
+  // Estado derivado — todo desde datos persistidos (game_state + applause_sessions),
+  // así el panel se reconstruye igual después de un F5:
+  //   A idle · B postulaciones abiertas · C duelo en curso · D resultado.
   const escenario = gameState?.active_escenario;
-  const enCurso   = round?.game_type==="duelo" && round?.status==="voting";
-  const estado    = escenario!=="duelo" ? "A" : (enCurso ? "C" : "B");
+  const enCurso   = round?.status==="voting";
+  const cerrado   = round?.status==="finished";
+  const estado    = escenario!=="duelo" ? "A" : enCurso ? "C" : cerrado ? "D" : "B";
   const estadoLabel = estado==="A" ? "En reposo"
-    : estado==="B" ? "Postulaciones abiertas" : "Duelo en curso";
+    : estado==="B" ? "Postulaciones abiertas"
+    : estado==="C" ? "Duelo en curso" : "Resultado";
 
   // Reconstruir slots desde postulaciones 'selected' tras refresh (una sola vez).
   useEffect(()=>{
@@ -462,9 +468,23 @@ function DueloPanel({sec, controls, sessionId, gameState}){
     finally{ setBusy(false); }
   };
 
+  // Cierra la medición en el servidor. `busy` + el guard idempotente del RPC
+  // cubren el doble click y los dos admins simultáneos.
+  const doFinish = async () => {
+    if(busy || !round?.id) return;
+    setBusy(true);
+    try{ await controls?.finishDuelo(round.id); notify("🏁 Duelo finalizado"); }
+    catch(e){ notify("Error al finalizar: "+(e?.message||e), "#FF2D78"); }
+    finally{ setBusy(false); }
+  };
+
   // Slots para Estado C: leer de game_state (persistido en launchDuelo).
   const cSlot1 = gameState?.duelo_slot1;
   const cSlot2 = gameState?.duelo_slot2;
+
+  // Resultado: misma función que usa la TV (ganador de winner_slot, empate por
+  // totales). Si las dos pantallas divergen, divergen juntas.
+  const result = resolveDueloWinner(round, counts);
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
@@ -477,7 +497,8 @@ function DueloPanel({sec, controls, sessionId, gameState}){
             <div className="ctitle" style={{margin:0}}>🎤 Duelo de Talentos</div>
             <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>Estado: {estadoLabel}</div>
           </div>
-          {estado!=="A" && <div className="chip chip-live"><div className="dot-live"/>{estado==="C"?"En vivo":"Invitando"}</div>}
+          {estado!=="A" && <div className="chip chip-live"><div className="dot-live"/>
+            {estado==="C"?"En vivo":estado==="D"?"Cerrado":"Invitando"}</div>}
         </div>
       </div>
 
@@ -594,9 +615,43 @@ function DueloPanel({sec, controls, sessionId, gameState}){
               </div>
             ))}
           </div>
-          {/* La lógica de FIN + countdown + ganador es task 8. Placeholder deshabilitado. */}
-          <button className="btn btn-p btn-full" disabled title="Disponible en la próxima entrega">
+          <button className="btn btn-p btn-full" disabled={busy} onClick={doFinish}>
             🏁 Finalizar Duelo
+          </button>
+        </div>
+      )}
+
+      {/* ── ESTADO D — resultado (ronda cerrada) ── */}
+      {estado==="D" && (
+        <div className="card" style={{borderColor:"rgba(0,245,160,.25)"}}>
+          <div className="ctitle">Resultado</div>
+          <div style={{textAlign:"center",marginBottom:12}}>
+            <div style={{fontSize:34,lineHeight:1}}>{result.tie?"🤝":"🏆"}</div>
+            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
+              color:result.tie?"#FFD600":"#00F5A0",marginTop:6}}>
+              {result.tie
+                ? "Empate"
+                : (result.slot===1 ? cSlot1?.name : cSlot2?.name) || `Slot ${result.slot}`}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            {[{p:cSlot1,likes:result.p1,col:"#FF2D78",n:1},{p:cSlot2,likes:result.p2,col:"#FF9500",n:2}].map(({p,likes,col,n})=>(
+              <div key={n} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
+                background:`${col}10`,
+                border:`1.5px solid ${result.slot===n?col:`${col}44`}`}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+                  <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
+                  <div style={{fontSize:11,fontWeight:700,color:col}}>{p?.name||`Slot ${n}`}</div>
+                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:col}}>❤️ {likes}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-p btn-full" style={{marginBottom:8}} disabled={busy} onClick={doOpen}>
+            🔁 Nueva ronda
+          </button>
+          <button className="btn btn-g btn-full" disabled={busy} onClick={doCancel}>
+            Cerrar duelo
           </button>
         </div>
       )}

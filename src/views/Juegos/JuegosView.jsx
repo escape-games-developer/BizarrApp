@@ -333,7 +333,7 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
   if (gameOpen === "duelo") {
     return (
       <DueloVistaCompleta
-        sessionId={sessionId} user={user}
+        sessionId={sessionId} user={user} gameState={gameState}
         activeEscenario={activeEscenario} onBack={() => setGameOpen?.(null)}
       />
     );

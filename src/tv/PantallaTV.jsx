@@ -4,6 +4,7 @@ import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
 import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
+import DueloBigscreen from "../bigscreen/DueloBigscreen";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig } from "../designers/lib/persistence";
@@ -189,7 +190,12 @@ export default function PantallaTV() {
     usePantallaEvent({ eventId, client: supabaseAnon });
   const sharesSession = !event?.session_id || event.session_id === session?.id;
   const activeGame = sharesSession ? gameState?.active_game : null;
-  const hasLiveLayer = activeGame === "rey del orto" || activeGame === "trivia";
+  // El Duelo es un escenario, no un `active_game`, pero para la TV es lo mismo:
+  // una capa en vivo que tapa el canvas del DJ y le baja el audio (el duelo
+  // suena en vivo en el bar; el video del duelo va muteado a propósito).
+  const activeEscenario = sharesSession ? gameState?.active_escenario : null;
+  const hasDuelo = activeEscenario === "duelo";
+  const hasLiveLayer = activeGame === "rey del orto" || activeGame === "trivia" || hasDuelo;
   // Placas de anuncio (el "📢 Anunciar" del admin escribe active_placa).
   // No entra en hasLiveLayer a propósito — el muteo del DJ no cambia por una
   // placa, solo por un juego en vivo.
@@ -431,6 +437,12 @@ export default function PantallaTV() {
             <style>{BIGSCREEN_CSS}</style>
             {activeGame === "rey del orto" && <RaffleScreen gameState={gameState}/>}
             {activeGame === "trivia" && <TriviaScreen gameState={gameState} sessionId={session?.id}/>}
+            {/* El Duelo cede ante un juego activo: last-write-wins del admin ya
+                los hace excluyentes, pero si coexistieran gana el juego. */}
+            {hasDuelo && !activeGame && (
+              <DueloBigscreen gameState={gameState} sessionId={session?.id ?? null}
+                webappUrl={window.location.origin}/>
+            )}
           </div>
         )}
       </div>

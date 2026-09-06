@@ -104,6 +104,7 @@ export function useDueloPostulaciones(sessionId, user) {
     // Ya está postulado: no repetir (la UNIQUE session_id+user_id igual protege).
     if (postulaciones.some((p) => p.user_id === user.id)) return;
 
+    setError(null); // el reintento arranca limpio, si no el cartel quedaba pegado
     const { error: err } = await supabase
       .from("duelo_postulaciones")
       .insert({

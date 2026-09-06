@@ -3,13 +3,42 @@ import { supabase } from '../../lib/supabase';
 
 const FLUSH_MS = 500;              // throttle de taps del cliente
 
+/**
+ * Resultado de una ronda, derivado SIEMPRE de los mismos dos datos persistidos:
+ * `applause_sessions.winner_slot` (lo escribe el RPC applause_finish) y los
+ * totales de `applause_counts`. Admin y TV llaman a esta función para que no
+ * puedan cantar ganadores distintos.
+ *
+ * El RPC ya modela el empate (migración 20260906195717): winner_slot = 1 si
+ * total1 > total2, 2 si total2 > total1, y NULL cuando empatan. Acá el empate
+ * se deriva de los totales, que es la misma condición, así que Admin, /tv y
+ * cliente coinciden con lo que quedó persistido. El `??` sobre winner_slot es
+ * un fallback para rondas cerradas antes de esa migración.
+ */
+export function resolveDueloWinner(round, counts) {
+  const p1 = Number(counts?.p1) || 0;
+  const p2 = Number(counts?.p2) || 0;
+  if (!round || round.status !== 'finished') return { slot: null, tie: false, p1, p2 };
+  if (p1 === p2) return { slot: null, tie: true, p1, p2 };
+  return { slot: round.winner_slot ?? (p1 > p2 ? 1 : 2), tie: false, p1, p2 };
+}
+
 // Instance id único por montaje: previene colisión de channels cuando varias
 // vistas del mismo hook conviven (PantallaPreview + PantallaGigante).
 function makeInstanceId() {
   return Math.random().toString(36).slice(2, 8);
 }
 
-export function useApplauseRound(sessionId) {
+/**
+ * @param {string|null} sessionId
+ * @param {string|null} gameType  Si se pasa ('duelo' | 'personal_trainer' | ...),
+ *   el hook sólo mira rondas de ese tipo. Sin él (default) se queda con la
+ *   última ronda de la sesión sea del juego que sea, que es como lo usaban
+ *   PT/FTL. El Duelo SÍ lo pasa: con dos juegos de aplausómetro en la misma
+ *   noche, la ronda más reciente podía ser de otro juego y los contadores del
+ *   duelo mostraban los aplausos equivocados.
+ */
+export function useApplauseRound(sessionId, gameType = null) {
   const [round, setRound] = useState(null);
   const [counts, setCounts] = useState({ p1: 0, p2: 0 });
   const [now, setNow] = useState(() => Date.now());
@@ -30,16 +59,20 @@ export function useApplauseRound(sessionId) {
     let cancelled = false;
 
     async function fetchActive() {
-      const { data, error } = await supabase
+      let q = supabase
         .from('applause_sessions')
         .select('*')
         .eq('session_id', sessionId)
-        .in('status', ['idle','countdown','voting','finished'])
+        .in('status', ['idle','countdown','voting','finished']);
+      if (gameType) q = q.eq('game_type', gameType);
+      const { data, error } = await q
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
       if (cancelled) return;
-      if (!error && data) setRound(data);
+      // `data` null también es información: la ronda fue borrada (reset del
+      // admin) y hay que soltarla, si no el panel seguía en "duelo en curso".
+      if (!error) setRound(data || null);
     }
     fetchActive();
 
@@ -49,10 +82,16 @@ export function useApplauseRound(sessionId) {
         event: '*', schema: 'public', table: 'applause_sessions',
         filter: `session_id=eq.${sessionId}`
       }, (payload) => {
-        const row = payload.new || payload.old;
+        // DELETE: con REPLICA IDENTITY default, `old` sólo trae la PK — no hay
+        // game_type para filtrar, así que releemos. Es lo que deja el panel en
+        // "En reposo" cuando el admin borra la ronda para abrir la siguiente.
+        if (payload.eventType === 'DELETE') { fetchActive(); return; }
+        const row = payload.new;
         if (!row) return;
+        // Con filtro de tipo, ignoramos por completo las rondas de otros juegos.
+        if (gameType && row.game_type !== gameType) return;
         // Nos quedamos con la última fila tocada (asumimos 1 ronda activa por vez)
-        setRound(payload.new || null);
+        setRound(row);
       })
       .subscribe();
 
@@ -60,7 +99,7 @@ export function useApplauseRound(sessionId) {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [sessionId]);
+  }, [sessionId, gameType]);
 
   // ---------- suscripción a counts de la ronda activa ----------
   const roundId = round?.id || null;

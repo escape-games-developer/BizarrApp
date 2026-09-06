@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import QRCode from "react-qr-code";
-import { supabaseAnon } from "../lib/supabase";
-import { useApplauseRound } from "../hooks/realtime/useApplauseRound";
+import { supabase } from "../lib/supabase";
+import { useApplauseRound, resolveDueloWinner } from "../hooks/realtime/useApplauseRound";
 import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
 
 const P1_COLOR = "#ff1688"; // Marcelo — fucsia
@@ -378,9 +378,11 @@ function ContestantColumn({ side, name, color, avatar, votes, leader, avatarRef,
 // ── DevPanel — solo dev; dispara votos reales por la MISMA RPC applause_add ────
 function DevPanel({ roundId, counts }) {
   const [auto, setAuto] = useState(false);
+  // applause_add exige auth.uid(): con el cliente anónimo el RPC salía sin
+  // hacer nada y el panel de dev parecía roto. Usa la sesión de la pestaña.
   const add = useCallback((slot, delta) => {
     if (!roundId) return;
-    supabaseAnon.rpc("applause_add", { p_round: roundId, p_slot: slot, p_delta: delta });
+    supabase.rpc("applause_add", { p_round: roundId, p_slot: slot, p_delta: delta });
   }, [roundId]);
 
   useEffect(() => {
@@ -622,31 +624,11 @@ const duelStyles = (
  * Fases: inviting (placa + postulados + QR) · voting (video + gráfica + partículas) · finished.
  */
 export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
-  const { counts } = useApplauseRound(sessionId);
+  // El hook ya trae la ronda de duelo (filtrada por game_type) con su propio
+  // canal realtime. Antes había acá un segundo fetch+canal sobre la misma tabla:
+  // dos suscripciones para el mismo dato, que además podían quedar desfasadas.
+  const { round: currentRound, counts } = useApplauseRound(sessionId, "duelo");
   const { postulaciones } = useDueloPostulaciones(sessionId, null);
-
-  // ── Ronda de duelo más reciente + realtime (canal applause_bigscreen) ───────
-  const [currentRound, setCurrentRound] = useState(null);
-  useEffect(() => {
-    if (!sessionId) { setCurrentRound(null); return; }
-    let cancelled = false;
-    const fetchRound = async () => {
-      const { data } = await supabaseAnon
-        .from("applause_sessions").select("*")
-        .eq("session_id", sessionId).eq("game_type", "duelo")
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (!cancelled) setCurrentRound(data || null);
-    };
-    fetchRound();
-    const channel = supabaseAnon
-      .channel(`applause_bigscreen_${sessionId}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "applause_sessions",
-        filter: `session_id=eq.${sessionId}`,
-      }, fetchRound)
-      .subscribe();
-    return () => { cancelled = true; supabaseAnon.removeChannel(channel); };
-  }, [sessionId]);
 
   // ── Fase derivada ───────────────────────────────────────────────────────────
   const escenario = gameState?.active_escenario;
@@ -808,12 +790,13 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
     );
   }
 
-  // ── FASE FINISHED (placeholder task 8, preservada) ──────────────────────────
+  // ── FASE FINISHED ───────────────────────────────────────────────────────────
+  // El ganador NO se recalcula acá: sale de applause_sessions.winner_slot, que
+  // escribió el RPC. Es el mismo dato y la misma función que muestra el Admin.
   if (fase === "finished") {
-    const p1 = counts?.p1 ?? 0, p2 = counts?.p2 ?? 0;
     const s1 = gameState?.duelo_slot1, s2 = gameState?.duelo_slot2;
-    const empate = p1 === p2;
-    const ganador = p1 > p2 ? s1 : s2;
+    const result = resolveDueloWinner(currentRound, counts);
+    const ganador = result.slot === 1 ? s1 : result.slot === 2 ? s2 : null;
     return (
       <div style={{
         position: "absolute", inset: 0,
@@ -821,9 +804,20 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16,
       }}>
         {keyframes}
-        <div style={{ fontSize: "clamp(50px,8vw,120px)" }}>🏆</div>
-        <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(34px,6vw,90px)", color: "#00F5A0", textAlign: "center" }}>
-          {empate ? `¡EMPATE! ${s1?.name} vs ${s2?.name}` : `GANADOR: ${ganador?.name || "—"}`}
+        <div style={{ fontSize: "clamp(50px,8vw,120px)" }}>{result.tie ? "🤝" : "🏆"}</div>
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(34px,6vw,90px)",
+          color: result.tie ? "#FFD600" : "#00F5A0", textAlign: "center",
+        }}>
+          {result.tie
+            ? `¡EMPATE! ${s1?.name || "—"} vs ${s2?.name || "—"}`
+            : `GANADOR: ${ganador?.name || "—"}`}
+        </div>
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: "clamp(20px,2.4vw,38px)",
+          color: "#F0E8FF", opacity: .8,
+        }}>
+          👍 {result.p1} · {s1?.name || "—"} &nbsp;|&nbsp; {s2?.name || "—"} · {result.p2} 👍
         </div>
       </div>
     );

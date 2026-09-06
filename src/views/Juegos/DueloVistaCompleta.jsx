@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
+import { useApplauseRound, resolveDueloWinner } from "../../hooks/realtime/useApplauseRound";
 
 const DUELO_LOGO = "/placas/Duelo_de_talento-removebg-preview.png";
 const PINK = "#FF2D95";
+const ORANGE = "#FF9500";
 
 // Avatar mini a partir de una fila de duelo_postulaciones (snake_case).
 function MiniAvatar({ p, highlight = false, size = 44 }) {
@@ -24,12 +26,40 @@ function MiniAvatar({ p, highlight = false, size = 44 }) {
   return <div style={base}>{p.avatar_emoji || (p.user_name || "?").slice(0, 1).toUpperCase()}</div>;
 }
 
+// Avatar de un duelista guardado en game_state.duelo_slotN (camelCase mixto:
+// { user_id, name, avatar_id, avatar_emoji, photo_url }).
+function SlotFace({ slot, color, size = 68 }) {
+  const base = {
+    width: size, height: size, borderRadius: "50%", margin: "0 auto",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: size * 0.46, overflow: "hidden",
+    background: "rgba(20,8,30,.6)", border: `2px solid ${color}`,
+    boxShadow: `0 0 16px ${color}66`,
+  };
+  if (slot?.photo_url) {
+    return (
+      <div style={base}>
+        <img src={slot.photo_url} alt={slot.name || ""} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+    );
+  }
+  return <div style={base}>{slot?.avatar_emoji || "🎤"}</div>;
+}
+
 /**
- * DueloVistaCompleta — fase "inviting" del Duelo de Talentos.
- * Muestra el estado de la postulación del usuario y la lista de postulados.
+ * DueloVistaCompleta — vista de cliente del Duelo de Talentos.
+ *
+ * Todas las fases se derivan de datos persistidos, nunca de estado local:
+ *   · convocatoria → duelo_postulaciones (mi fila = mi estado)
+ *   · votación     → applause_sessions (status) + applause_counts (totales)
+ *   · resultado    → applause_sessions.winner_slot
+ * Por eso un F5 en cualquier momento reconstruye exactamente la misma pantalla.
  */
-export default function DueloVistaCompleta({ sessionId, user, activeEscenario, onBack }) {
-  const { postulaciones, misPostulacion, postularme } = useDueloPostulaciones(sessionId, user);
+export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack }) {
+  const { postulaciones, misPostulacion, postularme, error } = useDueloPostulaciones(sessionId, user);
+  const { round, counts, sendTap } = useApplauseRound(sessionId, "duelo");
+  const [enviando, setEnviando] = useState(false);
+  const [taps, setTaps] = useState(0); // feedback inmediato del propio tap
 
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
@@ -76,7 +106,151 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, o
     );
   }
 
+  const s1 = gameState?.duelo_slot1 || null;
+  const s2 = gameState?.duelo_slot2 || null;
+
+  // ── Duelo en curso: aplausómetro ─────────────────────────────────────────────
+  // El tap NO escribe directo: `sendTap` acumula en un buffer local y el hook
+  // lo manda cada 500 ms por el RPC applause_add, que capea por usuario y sólo
+  // acepta aportes mientras la ronda está en 'voting'. Cerrada la ronda, los
+  // taps que lleguen tarde los descarta el servidor.
+  if (round?.status === "voting") {
+    const soyDuelista = !!user?.id && (s1?.user_id === user.id || s2?.user_id === user.id);
+    const lados = [
+      { slot: 1, s: s1, color: PINK,   votes: counts.p1 },
+      { slot: 2, s: s2, color: ORANGE, votes: counts.p2 },
+    ];
+    const tap = (slot) => {
+      sendTap(slot);
+      setTaps((t) => t + 1);
+      if (navigator.vibrate) navigator.vibrate(12);
+    };
+    return (
+      <div>
+        {header}
+        <style>{`
+          @keyframes dueloTapPop { 0%{transform:scale(1)} 45%{transform:scale(.96)} 100%{transform:scale(1)} }
+          .duelo-tap:active { animation: dueloTapPop .18s ease-out; }
+        `}</style>
+
+        {soyDuelista && (
+          <div style={{
+            textAlign: "center", padding: "10px 12px", borderRadius: 12, marginBottom: 12,
+            background: "rgba(255,45,149,.12)", border: `1px solid ${PINK}55`,
+            fontSize: 12.5, fontWeight: 700, color: PINK,
+          }}>
+            🎤 Estás en el escenario — ¡es tu duelo!
+          </div>
+        )}
+
+        <div style={{
+          textAlign: "center", fontSize: 13, color: "rgba(245,230,192,.6)", marginBottom: 14,
+        }}>
+          Tocá sin parar al que más te guste 👏
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          {lados.map(({ slot, s, color, votes }) => (
+            <button
+              key={slot}
+              className="duelo-tap"
+              onClick={() => tap(slot)}
+              style={{
+                flex: 1, padding: "18px 8px", borderRadius: 18, cursor: "pointer",
+                border: `2px solid ${color}`, background: `${color}14`,
+                WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+              }}
+            >
+              <SlotFace slot={s} color={color} />
+              <div style={{
+                fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14,
+                color, marginTop: 8,
+              }}>
+                {s?.name || `Participante ${slot}`}
+              </div>
+              <div style={{
+                fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26,
+                color: "#F0E8FF", marginTop: 4,
+              }}>
+                👍 {votes}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{
+          marginTop: 14, textAlign: "center", fontSize: 11.5, color: "rgba(245,230,192,.35)",
+        }}>
+          {taps > 0 ? `Aportaste ${taps} aplauso${taps === 1 ? "" : "s"}` : "Todavía no aplaudiste"}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Resultado ────────────────────────────────────────────────────────────────
+  // Mismo cálculo que usan Admin y /tv (winner_slot persistido + totales).
+  if (round?.status === "finished") {
+    const result = resolveDueloWinner(round, counts);
+    const ganador = result.slot === 1 ? s1 : result.slot === 2 ? s2 : null;
+    return (
+      <div>
+        {header}
+        <div style={{
+          textAlign: "center", padding: "34px 20px", borderRadius: 20,
+          background: "linear-gradient(135deg, rgba(0,245,160,.14), rgba(255,45,149,.08))",
+          border: "1px solid rgba(0,245,160,.35)",
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>{result.tie ? "🤝" : "🏆"}</div>
+          <div style={{
+            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 20,
+            color: result.tie ? "#FFD600" : "#00F5A0",
+          }}>
+            {result.tie ? "¡Empate!" : `Ganó ${ganador?.name || "—"}`}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+          {[{ slot: 1, s: s1, color: PINK, votes: result.p1 },
+            { slot: 2, s: s2, color: ORANGE, votes: result.p2 }].map(({ slot, s, color, votes }) => (
+            <div key={slot} style={{
+              flex: 1, padding: "14px 8px", borderRadius: 16, textAlign: "center",
+              background: `${color}10`,
+              border: `2px solid ${result.slot === slot ? color : `${color}44`}`,
+            }}>
+              <SlotFace slot={s} color={color} size={52} />
+              <div style={{ fontSize: 12.5, fontWeight: 700, color, marginTop: 6 }}>
+                {s?.name || `Participante ${slot}`}
+              </div>
+              <div style={{
+                fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 20,
+                color: "#F0E8FF", marginTop: 2,
+              }}>👍 {votes}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const otros = postulaciones.filter((p) => p.user_id !== user?.id);
+
+  const handlePostularme = async () => {
+    if (enviando) return;          // corta el doble tap antes de que salga el INSERT
+    setEnviando(true);
+    try { await postularme(); }
+    finally { setEnviando(false); }
+  };
+
+  // El hook deja acá el error de RLS o del UNIQUE. Sin mostrarlo, el botón
+  // parecía no hacer nada y el usuario creía que se había postulado.
+  const errorBox = error ? (
+    <div style={{
+      marginTop: 12, padding: "10px 12px", borderRadius: 12, textAlign: "center",
+      background: "rgba(255,45,120,.1)", border: "1px solid rgba(255,45,120,.35)",
+      fontSize: 12, color: "#FF8FB8",
+    }}>
+      No pudimos registrar tu postulación. Probá de nuevo en unos segundos.
+    </div>
+  ) : null;
 
   // ── Sin postular todavía ─────────────────────────────────────────────────────
   if (!misPostulacion) {
@@ -94,16 +268,19 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, o
             ¿Te animás a subir al escenario? Postulate y esperá que el staff te elija.
           </div>
           <button
-            onClick={postularme}
+            onClick={handlePostularme}
+            disabled={enviando}
             style={{
               width: "100%", padding: "15px", borderRadius: 12, border: "none",
               background: "linear-gradient(135deg, #FF2D95, #FF9500)", color: "#fff",
               fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15,
-              cursor: "pointer", WebkitTapHighlightColor: "transparent",
+              cursor: enviando ? "default" : "pointer", opacity: enviando ? 0.6 : 1,
+              WebkitTapHighlightColor: "transparent",
             }}
           >
-            🎤 Postularme
+            {enviando ? "Enviando…" : "🎤 Postularme"}
           </button>
+          {errorBox}
         </div>
 
         <div style={{ marginTop: 18 }}>
