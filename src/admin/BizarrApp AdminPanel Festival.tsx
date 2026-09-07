@@ -22,6 +22,7 @@ import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import PantallaSidebarMenu from "./pantalla/PantallaSidebarMenu";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { getTvLink, tvUrl } from "../services/pantallaDj";
+import { iniciarJornada } from "../services/jornada";
 import {
   RaffleScreen,
   TriviaScreen,
@@ -270,6 +271,24 @@ const FROZEN_MODULE_IDS = new Set(["karaoke"]);
 // PANEL LANZAR — botonera de show
 // ══════════════════════════════════════════════════════════════════════════
 function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,controls}){
+  // Comienzo de jornada. El reset vive en services/jornada.js — acá sólo se
+  // dispara y se muestra el resultado; no hay lógica de limpieza duplicada.
+  const [jornadaBusy, setJornadaBusy] = useState(false);
+  const [jornadaMsg,  setJornadaMsg]  = useState(null);
+  const arrancarJornada = async () => {
+    if (!window.confirm(
+      "¿Arrancar la jornada?\n\nLa TV vuelve a DJ Democracy: se baja el juego, " +
+      "el escenario, la placa y el video que hayan quedado puestos." +
+      "\n\nNo se borra historial, playlists, resultados ni usuarios.")) return;
+    setJornadaBusy(true); setJornadaMsg(null);
+    try {
+      await iniciarJornada();
+      setActive(null);
+      setJornadaMsg({ ok: true, text: "Jornada iniciada — la TV está en DJ Democracy." });
+    } catch (err) {
+      setJornadaMsg({ ok: false, text: err?.message || String(err) });
+    } finally { setJornadaBusy(false); }
+  };
   const ITEMS=[
     {id:"rey",     icon:"🎰",label:"Rey del Orto",    col:"#FFD600",bg:"rgba(255,214,0,.1)", bdr:"rgba(255,214,0,.3)"},
     {id:"trivia",  icon:"🧠",label:"Desafío Demente", col:"#9B2FFF",bg:"rgba(155,47,255,.1)",bdr:"rgba(155,47,255,.3)"},
@@ -294,6 +313,29 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
           {active&&<button className="btn btn-r" style={{padding:"4px 10px",fontSize:10}}
             onClick={()=>setActive(null)}>⏹ Cerrar</button>}
         </div>
+      </div>
+
+      {/* Inicio de jornada — lo primero de la noche. Deja la TV en DJ
+          Democracy, la capa base. Deliberadamente NO se dispara al montar
+          /tv: un F5 en medio de un juego tiene que conservarlo. */}
+      <div className="card">
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{flex:1}}>
+            <div className="ctitle" style={{margin:0}}>Arrancar la jornada</div>
+            <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",marginTop:2}}>
+              Deja la TV en DJ Democracy: baja juego, escenario, placa y video que hayan quedado de la noche anterior.
+            </div>
+          </div>
+          <button className="btn btn-p" style={{padding:"7px 13px",fontSize:10.5,whiteSpace:"nowrap"}}
+            disabled={jornadaBusy} onClick={arrancarJornada}>
+            {jornadaBusy ? "Iniciando…" : "🌅 Iniciar jornada"}
+          </button>
+        </div>
+        {jornadaMsg && (
+          <div style={{marginTop:8,fontSize:10.5,color:jornadaMsg.ok?"#00F5A0":"#FF2D78"}}>
+            {jornadaMsg.ok ? "✓ " : "✕ "}{jornadaMsg.text}
+          </div>
+        )}
       </div>
 
       {/* Zócalo */}

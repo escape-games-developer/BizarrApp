@@ -1,4 +1,5 @@
 import { supabase, supabaseAnon } from "../lib/supabase";
+import { iniciarJornada } from "./jornada";
 
 /**
  * Módulo Pantalla/Escenario — capa de acceso a datos.
@@ -161,7 +162,27 @@ export const createEvent    = (name, sessionId = null) =>
   rpc("pantalla_create_event", { _name: name, _session_id: sessionId });
 export const duplicateEvent = (eventId, name = null) =>
   rpc("pantalla_duplicate_event", { _event_id: eventId, _name: name });
-export const startEvent  = (eventId) => rpc("pantalla_start_event",  { _event_id: eventId });
+/**
+ * Poner la noche en vivo. Es el comienzo real de la jornada en la app, así que
+ * además del RPC deja `game_state` en neutro: sin esto el evento arranca
+ * limpio pero /tv sigue mostrando el juego con el que se cerró la noche
+ * anterior (ver `services/jornada.js`).
+ *
+ * La limpieza no puede tumbar el arranque del evento: para cuando corre, el
+ * RPC ya se ejecutó y el evento quedó en vivo. Si falla, se avisa por consola
+ * y se sigue — el operador tiene el botón «Iniciar jornada» del panel Lanzar
+ * para reintentar con el error a la vista.
+ */
+export async function startEvent(eventId) {
+  const res = await rpc("pantalla_start_event", { _event_id: eventId });
+  try {
+    await iniciarJornada();
+  } catch (err) {
+    console.warn("[pantallaDj] Evento iniciado, pero no se pudo limpiar la jornada:", err);
+  }
+  return res;
+}
+
 export const endEvent    = (eventId) => rpc("pantalla_end_event",    { _event_id: eventId });
 export const resetEvent  = (eventId) => rpc("pantalla_reset_event",  { _event_id: eventId });
 export const resetVotes  = (eventId) => rpc("pantalla_reset_votes",  { _event_id: eventId });
