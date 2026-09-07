@@ -9,7 +9,7 @@ import PantallaConsola from "./PantallaConsola";
 import SeccionesConfig from "./sections/SeccionesConfig";
 
 /**
- * Admin › Escenario › Pantalla / Escenario.
+ * Admin › DJ Democracy (el módulo Pantalla/Escenario, ya renombrado en la UI).
  *
  * Shell del módulo: selector de evento y carga de datos. Los datos pesados
  * (evento + playlist, participantes + votos + historial) se cargan acá una sola
@@ -97,7 +97,7 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
         <div className="pdj-card pdj-card-acento">
           <div className="pdj-vacio">
             <div className="pdj-vacio-ico">🎧</div>
-            <div className="pdj-vacio-tit">Todavía no hay ningún evento de Pantalla/Escenario</div>
+            <div className="pdj-vacio-tit">Todavía no hay ningún evento de DJ Democracy</div>
             <div className="pdj-vacio-txt">
               Creá uno, cargale la playlist desde YouTube o desde las playlists del bar,
               y ponelo en vivo. Recién ahí los clientes ven la votación en su celular.

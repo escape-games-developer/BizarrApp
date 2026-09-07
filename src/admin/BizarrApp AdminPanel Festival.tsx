@@ -239,10 +239,10 @@ function StatusAlert({text,color,onClose}){
 const SECS = [
   {id:"launch",   icon:"🚀",label:"Lanzar",          group:"Control",    grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
   {id:"placas",   icon:"🖼️", label:"Placas",          group:"Control",    grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
-  // Hijos del desplegable «Pantalla». `parent` los saca de la lista plana del
+  // Hijos del desplegable «DJ Democracy». `parent` los saca de la lista plana del
   // sidebar: los dibuja PantallaSidebarMenu. Siguen siendo secciones normales.
-  {id:"pantallaEditor",icon:"✏️",label:"Pantalla · Editor",group:"Moderación",parent:"pantalla",grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
-  {id:"pantallaLive",icon:"🔴",label:"Pantalla · En vivo",group:"Moderación",parent:"pantalla",grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)",glow:"rgba(255,45,120,.3)"},
+  {id:"pantallaEditor",icon:"✏️",label:"DJ Democracy · Editor",group:"Moderación",parent:"pantalla",grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
+  {id:"pantallaLive",icon:"🔴",label:"DJ Democracy · En vivo",group:"Moderación",parent:"pantalla",grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)",glow:"rgba(255,45,120,.3)"},
   {id:"duelo",    icon:"⚔️", label:"Duelo de Talentos",group:"Escenario", grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
   {id:"ftl",      icon:"💃",label:"Follow the Leader",group:"Escenario",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
   {id:"pt",       icon:"🏋️",label:"Personal Trainer", group:"Escenario",  grad:"linear-gradient(135deg,#00F5A0,#00E5FF)",glow:"rgba(0,245,160,.3)"},
@@ -615,8 +615,15 @@ function DueloPanel({sec, controls, sessionId, gameState}){
               </div>
             ))}
           </div>
-          <button className="btn btn-p btn-full" disabled={busy} onClick={doFinish}>
+          <button className="btn btn-p btn-full" style={{marginBottom:8}} disabled={busy} onClick={doFinish}>
             🏁 Finalizar Duelo
+          </button>
+          {/* Salida directa desde el duelo en curso. Sin esto, la única forma de
+              bajar el Duelo de la TV era finalizar primero y cerrar después: si
+              el operador se iba a otra sección, el overlay quedaba al aire y el
+              DJ no volvía nunca. */}
+          <button className="btn btn-g btn-full" disabled={busy} onClick={doCancel}>
+            Cerrar duelo
           </button>
         </div>
       )}
@@ -2893,7 +2900,7 @@ export default function AdminPanel(){
               </div>
 
               <div style={{display:"flex",alignItems:"center",gap:6,background:"#9B2FFF18",border:"1px solid #9B2FFF66",borderRadius:20,padding:"5px 14px",minWidth:116,justifyContent:"center",height:30,boxSizing:"border-box",order:5}}
-                title="Código del evento de Pantalla">
+                title="Código del evento de DJ Democracy">
                 <span style={{fontSize:10,fontWeight:600,color:"#9B8DAE"}}>CÓDIGO</span>
                 <span style={{fontSize:12,fontWeight:800,letterSpacing:1.4,color:"#F0E8FF"}}>{pantallaGlobal.event?.code||"—"}</span>
               </div>

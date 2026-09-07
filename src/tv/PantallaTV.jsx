@@ -194,8 +194,20 @@ export default function PantallaTV() {
   // una capa en vivo que tapa el canvas del DJ y le baja el audio (el duelo
   // suena en vivo en el bar; el video del duelo va muteado a propósito).
   const activeEscenario = sharesSession ? gameState?.active_escenario : null;
-  const hasDuelo = activeEscenario === "duelo";
-  const hasLiveLayer = activeGame === "rey del orto" || activeGame === "trivia" || hasDuelo;
+  //
+  // El DJ es la CAPA BASE de la TV: siempre montado, y visible siempre que no
+  // haya exactamente uno de estos overlays con contenido real. Por eso cada
+  // capa se decide por separado y `hasLiveLayer` se deriva de ellas, no al
+  // revés: antes `hasLiveLayer` incluía el Duelo sin mirar si el Duelo iba a
+  // renderizar algo. Con `active_escenario='duelo'` y cualquier `active_game`
+  // que la TV no proyecta (suma, palabra), la capa se montaba vacía y su fondo
+  // opaco tapaba el DJ — pantalla negra que ninguna acción del admin sacaba.
+  const showRaffle = activeGame === "rey del orto";
+  const showTrivia = activeGame === "trivia";
+  // El Duelo cede ante un juego activo: el last-write-wins del admin ya los
+  // hace excluyentes, pero si coexistieran gana el juego.
+  const showDuelo  = activeEscenario === "duelo" && !activeGame;
+  const hasLiveLayer = showRaffle || showTrivia || showDuelo;
   // Placas de anuncio (el "📢 Anunciar" del admin escribe active_placa).
   // No entra en hasLiveLayer a propósito — el muteo del DJ no cambia por una
   // placa, solo por un juego en vivo.
@@ -435,11 +447,9 @@ export default function PantallaTV() {
             background: C.bg, overflow: "hidden",
           }}>
             <style>{BIGSCREEN_CSS}</style>
-            {activeGame === "rey del orto" && <RaffleScreen gameState={gameState}/>}
-            {activeGame === "trivia" && <TriviaScreen gameState={gameState} sessionId={session?.id}/>}
-            {/* El Duelo cede ante un juego activo: last-write-wins del admin ya
-                los hace excluyentes, pero si coexistieran gana el juego. */}
-            {hasDuelo && !activeGame && (
+            {showRaffle && <RaffleScreen gameState={gameState}/>}
+            {showTrivia && <TriviaScreen gameState={gameState} sessionId={session?.id}/>}
+            {showDuelo && (
               <DueloBigscreen gameState={gameState} sessionId={session?.id ?? null}
                 webappUrl={window.location.origin}/>
             )}

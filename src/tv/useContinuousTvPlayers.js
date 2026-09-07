@@ -148,12 +148,25 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
 
   // Orden remota de la cabina. No cambia de tema ni toca la máquina de
   // transiciones: actúa únicamente sobre el player que está al aire.
+  //
+  // Sólo se toca al player si su estado REAL lo pide. `playVideo()` sobre un
+  // player en ENDED no lo "sigue reproduciendo": lo rebobina y lo relanza. Como
+  // este efecto también corre cuando cambia `current.id`, un final natural
+  // terminaba relanzando el tema recién terminado — el saliente volvía a sonar
+  // desde el segundo cero por debajo del entrante durante todo el cruce, con la
+  // lluvia tapando la imagen. Ese era el doble audio de la transición.
   useEffect(() => {
     const player = playersRef.current[activeIndexRef.current];
     if (!player || !current) return;
+    const state = safeState(player);
     try {
-      if (playing) player.playVideo();
-      else player.pauseVideo();
+      if (playing) {
+        if (state === YT_STATE.PAUSED || state === YT_STATE.CUED || state === YT_STATE.UNSTARTED) {
+          player.playVideo();
+        }
+      } else if (state === YT_STATE.PLAYING || state === YT_STATE.BUFFERING) {
+        player.pauseVideo();
+      }
     } catch { /* el iframe todavía puede estar inicializando */ }
   }, [playing, current?.id, readyCount]);
 
@@ -586,8 +599,22 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
     };
 
     // ── Reacción al current_item_id de la base ──────────────────────────────
+    /**
+     * Un item que pasa a ser el actual empieza una ronda NUEVA, aunque ya haya
+     * sonado antes en la noche. La marca de idempotencia es por ronda, no por
+     * item para siempre: sin este borrado, cuando la playlist daba la vuelta y
+     * repetía un tema, `requestAdvance` lo bloqueaba con `already-advanced` y
+     * la TV se quedaba clavada en ese video hasta que alguien la reiniciaba.
+     */
+    const abrirRonda = (item) => {
+      advancedRef.current.delete(item.id);
+      unplayableRef.current.delete(item.id);
+      advanceFailRef.current.delete(item.id);
+    };
+
     const startCurrent = (item) => {
       const index = activeIndexRef.current;
+      abrirRonda(item);
       displayedItemRef.current = item;
       watchTicksRef.current = { itemId: null, hits: 0 };
       setVisiblePlayer(index);
@@ -615,8 +642,14 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       if (!readyRef.current.every(Boolean)) return;
 
       if (!item) {
-        const activePlayer = playersRef.current[activeIndexRef.current];
-        try { activePlayer?.pauseVideo(); } catch { /* noop */ }
+        // Se pausan LOS DOS. Si el evento termina o se resetea en mitad de un
+        // cruce, el entrante ya está sonando en el player standby: pausando
+        // sólo el activo, la pantalla quedaba "sin canción" y con música igual.
+        playersRef.current.forEach((player, index) => {
+          cancelFade(index);
+          clearSlotTimeout(index);
+          try { player?.pauseVideo(); } catch { /* noop */ }
+        });
         displayedItemRef.current = null;
         transitionRef.current = null;
         setRainPhase("static");
@@ -630,6 +663,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
 
       // El servidor cambió de canción: la anterior ya no puede pedir nada más.
       advancedRef.current.add(displayed.id);
+      abrirRonda(item);
       if (!transitionRef.current) beginExternalTransition(displayed.id);
       prepareNext(item);
     };

@@ -496,14 +496,20 @@ export function useAdminControls(sessionId) {
     // Espejo en game_state para que la fase también viva donde vive el resto
     // del estado del panel. La fuente de verdad del ganador sigue siendo
     // applause_sessions.winner_slot.
-    await update({ duelo_state: "revealed" });
+    const { error: e2 } = await update({ duelo_state: "revealed" });
+    if (e2) throw new Error(e2.message || String(e2));
   }, [update]);
 
-  // Reset de ronda: saca el Duelo del aire y deja la pantalla libre.
+  // Saca el Duelo del aire: es lo ÚNICO que apaga el overlay de la TV, así que
+  // no puede fallar en silencio. `update` devuelve `{ error }` en vez de tirar,
+  // y el panel sólo mira el catch: sin este throw, un cierre rechazado (RLS,
+  // red, sesión vencida) cantaba "Duelo cancelado" mientras /tv seguía con el
+  // Duelo puesto encima del DJ, sin nada que le avisara al operador.
+  //
   // La ronda de aplausos NO se borra acá — queda como histórico y la limpia
   // `openPostulacionesDuelo` al abrir la ronda siguiente.
-  const cerrarDuelo = useCallback(() =>
-    update({
+  const cerrarDuelo = useCallback(async () => {
+    const { error } = await update({
       active_escenario: null,
       active_placa: null,
       placa_custom: null,
@@ -511,8 +517,9 @@ export function useAdminControls(sessionId) {
       duelo_slot1: null,
       duelo_slot2: null,
       duelo_state: "idle",
-    }),
-  [update]);
+    });
+    if (error) throw new Error(error.message || String(error));
+  }, [update]);
 
   // ── FTL / PT / Karaoke ───────────────────────────────────────────────────
   const openEscenarioInvitation = useCallback(async (type) => {

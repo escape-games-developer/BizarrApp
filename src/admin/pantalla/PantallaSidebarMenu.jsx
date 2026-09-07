@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchLiveEvent } from "../../services/pantallaDj";
 
 /**
- * Item desplegable de «Pantalla» en el sidebar del admin.
+ * Item desplegable de «DJ Democracy» en el sidebar del admin.
  *
  * El sidebar existente (`SECS` + `.sb-btn`) sólo sabe de items planos. Esto no
  * lo rediseña: agrega un único botón padre que despliega sus hijos y reusa las
@@ -117,10 +117,10 @@ export default function PantallaSidebarMenu({ sec, setSec, collapsed }) {
         className={`sb-btn${hijoActivo ? " sb-btn-active" : ""}`}
         onClick={() => setFijado((v) => !v)}
         aria-expanded={desplegado}
-        title="Pantalla"
+        title="DJ Democracy"
         style={{ justifyContent: collapsed ? "center" : "flex-start" }}>
         <span className="sb-btn-icon">🎧</span>
-        {!collapsed && <span className="sb-btn-label">Pantalla</span>}
+        {!collapsed && <span className="sb-btn-label">DJ Democracy</span>}
         {!collapsed && (
           <span style={{
             fontSize: 9, marginLeft: 4, opacity: .55, flexShrink: 0,
@@ -148,7 +148,7 @@ export default function PantallaSidebarMenu({ sec, setSec, collapsed }) {
           <div style={{
             fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase",
             color: "#FFD600", padding: "4px 10px 5px",
-          }}>Pantalla</div>
+          }}>DJ Democracy</div>
           {listaHijos}
         </div>
       )}
