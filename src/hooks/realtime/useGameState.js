@@ -522,18 +522,90 @@ export function useAdminControls(sessionId) {
   }, [update]);
 
   // ── FTL / PT / Karaoke ───────────────────────────────────────────────────
+  // Placa de invitación (anuncio previo). No la usa Follow the Leader: su
+  // convocatoria es `active_escenario` puesto sin participante, que es lo que
+  // ya destraba la vista de inscripción del cliente.
   const openEscenarioInvitation = useCallback(async (type) => {
     await dismissActiveVideo();
     return update({ active_placa: `escenario_${type}`, active_escenario: null,
                     escenario_invite_type: type });
   }, [update, dismissActiveVideo]);
 
-  const launchEscenario = useCallback(async (type, participant, ytId, ytTitle) => {
+  // Abre la convocatoria: escenario en el aire, todavía sin líder. Limpia al
+  // participante y al video anteriores — si no, la ronda nueva arrancaba
+  // arrastrando al líder de la ronda pasada en /tv.
+  const openEscenario = useCallback(async (type) => {
     await dismissActiveVideo();
-    return update({ active_escenario: type, active_placa: null,
-                    escenario_participant: participant,
-                    escenario_video: ytId ? { ytId, ytTitle } : null });
+    const { error } = await update({
+      active_escenario:      type,
+      active_placa:          null,
+      active_game:           null,
+      placa_custom:          null,
+      escenario_invite_type: null,
+      escenario_participant: null,
+      escenario_video:       null,
+    });
+    if (error) throw new Error(error.message || String(error));
   }, [update, dismissActiveVideo]);
+
+  // Prepara al participante SIN reproducir. Es lo que hace "Llamar al
+  // escenario": lo proyecta como listo y deja la canción cargada en
+  // `escenario_video`, pero la TV sigue en la pantalla de convocatoria y el DJ
+  // sigue congelado con su canción. La reproducción la dispara "▶ Comenzar".
+  //
+  // `participant` viaja como snapshot denormalizado ({ turn_id, user_id, name,
+  // avatar_emoji, playing }), el mismo patrón que los slots del Duelo: la fila
+  // de la cola puede cambiar después y la TV tiene que seguir mostrando a quién
+  // se subió al escenario. `playing` distingue PREPARADO de EN VIVO sin ninguna
+  // columna nueva.
+  const prepararEscenario = useCallback(async (type, participant, video) => {
+    await dismissActiveVideo();
+    const { error } = await update({
+      active_escenario:      type,
+      active_placa:          null,
+      active_game:           null,
+      placa_custom:          null,
+      escenario_participant: participant ? { ...participant, playing: false } : null,
+      escenario_video:       video || null,
+    });
+    if (error) throw new Error(error.message || String(error));
+  }, [update, dismissActiveVideo]);
+
+  // ▶ Comenzar / ■ Finalizar la performance. Sólo mueven el flag `playing` del
+  // snapshot: la TV decide con él si reproduce la canción del participante o
+  // vuelve a la del DJ. No se toca la cola del evento en ningún caso.
+  const setPerformanceEscenario = useCallback(async (participant, playing) => {
+    if (!participant) throw new Error("No hay participante preparado.");
+    const { error } = await update({
+      escenario_participant: { ...participant, playing: !!playing },
+    });
+    if (error) throw new Error(error.message || String(error));
+  }, [update]);
+
+  // Termina el turno: la convocatoria sigue abierta y la TV vuelve a la
+  // pantalla del juego. El DJ retoma su canción, que nunca dejó de ser la suya.
+  const finishEscenarioTurn = useCallback(async () => {
+    const { error } = await update({
+      escenario_participant: null,
+      escenario_video:       null,
+    });
+    if (error) throw new Error(error.message || String(error));
+  }, [update]);
+
+  // Saca el escenario del aire → vuelve DJ Democracy. Es lo ÚNICO que apaga el
+  // overlay, así que no puede fallar en silencio: `update` devuelve { error }
+  // en vez de tirar, y el panel sólo mira el catch.
+  const closeEscenario = useCallback(async () => {
+    const { error } = await update({
+      active_escenario:      null,
+      active_placa:          null,
+      placa_custom:          null,
+      escenario_invite_type: null,
+      escenario_participant: null,
+      escenario_video:       null,
+    });
+    if (error) throw new Error(error.message || String(error));
+  }, [update]);
 
   // ── Minijuegos ────────────────────────────────────────────────────────────
   const launchMinijuego = useCallback(async (type, payload) => {
@@ -560,7 +632,8 @@ export function useAdminControls(sessionId) {
     openDueloInvitation, selectDueloParticipant, launchDueloVideo, closeDuelo,
     openPostulacionesDuelo, setPostulacionStatus, deletePostulacion,
     launchDuelo, finishDuelo, cerrarDuelo,
-    openEscenarioInvitation, launchEscenario,
+    openEscenarioInvitation, openEscenario, prepararEscenario,
+    setPerformanceEscenario, finishEscenarioTurn, closeEscenario,
     launchMinijuego,
     toggleZocalo, toggleScreenAudio, sendPlaca, clearPlaca,
     projectVideo,

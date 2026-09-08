@@ -2,6 +2,8 @@ import { useState, useCallback } from "react";
 import { BlockedView, VideoRow }           from "../../components/UI";
 import { useYouTubePlaylists }             from "../../hooks/useYouTubePlaylists";
 import { useEscenarioQueue }               from "../../hooks/realtime/useEscenarioQueue";
+import { usePlaylistCategoria }            from "../../hooks/usePlaylistCategoria";
+import { useFollowLeaderVotes }            from "../../hooks/realtime/useFollowLeaderVotes";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
 function EscenarioStandby() {
@@ -26,6 +28,20 @@ function EscenarioStandby() {
   );
 }
 
+// ─── Error visible para el cliente ───────────────────────────────────────────
+// Sin esto, un INSERT rechazado (sesión caída, RLS, duplicado) dejaba el botón
+// apretado y nada en pantalla.
+function ErrorNota({ texto }) {
+  if (!texto) return null;
+  return (
+    <div style={{
+      marginTop: 10, padding: "9px 11px", borderRadius: 10,
+      background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.3)",
+      color: "#FCA5A5", fontSize: 11.5, lineHeight: 1.5,
+    }}>{texto}</div>
+  );
+}
+
 // ─── Enrolled confirmation card ──────────────────────────────────────────────
 function EnrolledCard({ color, border, bg, icon, title, subtitle, video, onLeave }) {
   return (
@@ -43,8 +59,8 @@ function EnrolledCard({ color, border, bg, icon, title, subtitle, video, onLeave
           Canción: {video.title}
         </div>
       )}
-      <div style={{ fontSize: 11, color: "rgba(245,230,192,.35)", marginBottom: 14 }}>{subtitle}</div>
-      <button
+      <div style={{ fontSize: 11, color: "rgba(245,230,192,.35)", marginBottom: onLeave ? 14 : 0 }}>{subtitle}</div>
+      {onLeave && <button
         onClick={onLeave}
         style={{
           padding: "6px 16px", background: "rgba(239,68,68,.1)",
@@ -54,7 +70,7 @@ function EnrolledCard({ color, border, bg, icon, title, subtitle, video, onLeave
         }}
       >
         Salir de la cola
-      </button>
+      </button>}
     </div>
   );
 }
@@ -103,19 +119,157 @@ function DueloView() {
   );
 }
 
+// ─── Votación del público durante un turno de FTL ────────────────────────────
+// El turno es `escenario_participant.turn_id` (= escenario_queue.id). Cambiar
+// de participante cambia el turno, así que los contadores y el voto propio
+// arrancan de cero solos: no hay nada que limpiar a mano.
+//
+// El voto no se escribe nunca directo: va por el RPC cast_follow_leader_vote,
+// que es quien valida que el turno esté abierto y que no vote el protagonista.
+function VotacionFtl({ turnId, userId }) {
+  const { totals, myVote, castVote, error } = useFollowLeaderVotes(turnId, userId);
+  const [enviando, setEnviando] = useState(null);
+
+  const votar = async (voto) => {
+    setEnviando(voto);
+    await castVote(voto);
+    setEnviando(null);
+  };
+
+  const OPCIONES = [
+    { voto: "up",   icono: "👍", color: "#34D399", pct: totals.up_pct },
+    { voto: "down", icono: "👎", color: "#F87171", pct: totals.down_pct },
+  ];
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{
+        fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 13,
+        color: "rgba(255,215,0,.75)", marginBottom: 10, letterSpacing: ".04em",
+      }}>¿CÓMO LO ESTÁ HACIENDO?</div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        {OPCIONES.map((o) => {
+          const elegido = myVote === o.voto;
+          return (
+            <button key={o.voto} onClick={() => votar(o.voto)} disabled={!!enviando}
+              style={{
+                flex: 1, padding: "14px 8px", borderRadius: 14, cursor: enviando ? "wait" : "pointer",
+                background: elegido ? `${o.color}22` : "rgba(255,255,255,.03)",
+                border: `2px solid ${elegido ? o.color : "rgba(255,255,255,.08)"}`,
+                transition: "all .18s", WebkitTapHighlightColor: "transparent",
+              }}>
+              <div style={{ fontSize: 30, marginBottom: 4, opacity: enviando === o.voto ? .5 : 1 }}>
+                {o.icono}
+              </div>
+              <div style={{
+                fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 19,
+                color: elegido ? o.color : "rgba(245,230,192,.45)",
+              }}>{o.pct}%</div>
+              {elegido && (
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: o.color, marginTop: 2 }}>
+                  TU VOTO
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 11, color: "rgba(245,230,192,.32)", marginTop: 9, textAlign: "center" }}>
+        {totals.total === 0
+          ? "Sé el primero en votar. Podés cambiar de opinión cuando quieras."
+          : `${totals.total} voto${totals.total === 1 ? "" : "s"} · podés cambiar el tuyo`}
+      </div>
+
+      <ErrorNota texto={error}/>
+    </div>
+  );
+}
+
 // ─── Follow the Leader ───────────────────────────────────────────────────────
-function FollowTheLeaderView({ user, sessionId, ytConfig }) {
+// La inscripción vive en `escenario_queue`, no en un useState: por eso el hook
+// recibe el user id. Un F5 acá tiene que devolver la misma pantalla, y la
+// llamada al escenario tiene que llegar sola por Realtime.
+function FollowTheLeaderView({ user, sessionId, ytConfig, participante }) {
   const [selVideo, setSelVideo] = useState(null);
-  const { isEnrolled, enroll, leave, loading } = useEscenarioQueue(sessionId, "ftl");
-  const { playlists } = useYouTubePlaylists(ytConfig || {});
+  const { myEntry, isEnrolled, enroll, leave, loading, error } =
+    useEscenarioQueue(sessionId, "ftl", user?.id ?? null);
+
+  // Fuente de verdad: el catálogo central de Supabase (categoría 'ftl' de
+  // Admin › Playlists YouTube). Funciona con el localStorage vacío, que es el
+  // caso de todos los celulares y de cualquier PC recién abierta.
+  const { canciones, loading: cargandoLista } = usePlaylistCategoria("ftl");
+
+  // Fallback explícito y NO destructivo: el viejo camino por
+  // localStorage['bizarrapp_yt_config'].ftl → YouTube Data API. Sólo entra
+  // cuando la central no trajo nada, así una configuración válida de Supabase
+  // nunca queda pisada por lo que tenga guardado este navegador. Con el objeto
+  // vacío, useYouTubePlaylists no hace ni una llamada de red.
+  const sinCatalogo = !cargandoLista && canciones.length === 0;
+  const { playlists } = useYouTubePlaylists(sinCatalogo ? (ytConfig || {}) : {});
+  const lista = canciones.length ? canciones : (playlists.ftl || []);
+
+  // La canción la manda la fila de la base — `selVideo` es sólo lo que estoy
+  // eligiendo ahora y se pierde con el refresh.
+  const miCancion = myEntry?.yt_title ? { title: myEntry.yt_title } : selVideo;
+
+  // Hay alguien en el escenario. Se decide con el snapshot proyectado, que es
+  // la misma fuente que mira /tv: el turno que se vota es el que se ve.
+  const turnId  = participante?.turn_id || null;
+  const soyYo   = !!participante?.user_id && participante.user_id === user?.id;
+
+  // El staff me llamó: es la fase que importa mostrar, y llega por Realtime.
+  // El protagonista no vota — el RPC lo rechazaría igual, pero ni siquiera se
+  // le ofrecen los botones.
+  if (soyYo || myEntry?.status === "called") return (
+    <EnrolledCard
+      color="#FDBA74" border="rgba(255,149,0,.45)" bg="rgba(255,149,0,.12)"
+      icon="🎤" title="🎤 Estás en el escenario" video={miCancion}
+      subtitle="El bar te sigue. ¡Marcá el paso!"
+      onLeave={null}
+    />
+  );
+
+  // Turno de otro: el público vota.
+  if (turnId) return (
+    <div>
+      <div className="sec-hdr"><span style={{ fontSize: 20 }}>💃</span><h3>Follow the Leader</h3></div>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "14px 12px",
+        borderRadius: 14, background: "rgba(236,72,153,.08)",
+        border: "1px solid rgba(236,72,153,.25)",
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: "50%", flexShrink: 0, fontSize: 26,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(255,255,255,.05)", border: "2px solid rgba(236,72,153,.45)",
+        }}>{participante.avatar_emoji || "🎤"}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 10.5, color: "rgba(245,230,192,.4)", letterSpacing: ".1em", fontWeight: 700 }}>
+            EN EL ESCENARIO
+          </div>
+          <div style={{
+            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 17, color: "#F9A8D4",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{participante.name || "Participante"}</div>
+        </div>
+      </div>
+
+      <VotacionFtl turnId={turnId} userId={user?.id ?? null}/>
+    </div>
+  );
 
   if (isEnrolled) return (
-    <EnrolledCard
-      color="#F9A8D4" border="rgba(236,72,153,.4)" bg="rgba(236,72,153,.1)"
-      icon="🎟️" title="¡Inscripto!" video={selVideo}
-      subtitle="Esperá que el staff te llame al escenario 🎤"
-      onLeave={leave}
-    />
+    <>
+      {error && <ErrorNota texto={error}/>}
+      <EnrolledCard
+        color="#F9A8D4" border="rgba(236,72,153,.4)" bg="rgba(236,72,153,.1)"
+        icon="🎟️" title="¡Inscripto!" video={miCancion}
+        subtitle="Esperá que el staff te llame al escenario 🎤"
+        onLeave={leave}
+      />
+    </>
   );
 
   return (
@@ -131,15 +285,26 @@ function FollowTheLeaderView({ user, sessionId, ytConfig }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,215,0,.45)", marginBottom: 8 }}>
         Elegí tu canción
       </div>
-      {!playlists.ftl?.length && <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)"}}>No hay canciones disponibles.</div>}
-      {(playlists.ftl || []).map((v) => (
+      {cargandoLista && (
+        <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+          Cargando canciones…
+        </div>
+      )}
+      {!cargandoLista && lista.length === 0 && (
+        <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)",lineHeight:1.6}}>
+          Todavía no hay canciones cargadas.<br/>
+          <span style={{fontSize:11,opacity:.75}}>Avisale al staff.</span>
+        </div>
+      )}
+      {lista.map((v) => (
         <VideoRow key={v.id} video={v} selected={selVideo?.id === v.id} onSelect={setSelVideo} color="#EC4899" />
       ))}
       <button className="btn-primary" style={{ background: "linear-gradient(135deg,#EC4899,#8B5CF6)", marginTop: 6 }}
         disabled={!selVideo || loading}
         onClick={() => enroll(user, selVideo?.ytId, selVideo?.title)}>
-        💃 ¡Me apunto al escenario!
+        {loading ? "Anotándote…" : "💃 ¡Me apunto al escenario!"}
       </button>
+      {error && <ErrorNota texto={error}/>}
     </div>
   );
 }
@@ -213,7 +378,7 @@ function KaraokeView({ user, sessionId, ytConfig }) {
 }
 
 // ─── EscenarioView (router) ──────────────────────────────────────────────────
-export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig }) {
+export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -230,7 +395,8 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
 
   switch (activeEscenario) {
     case "duelo":   return <DueloView />;
-    case "ftl":     return <FollowTheLeaderView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
+    case "ftl":     return <FollowTheLeaderView user={user} sessionId={sessionId} ytConfig={ytConfig}
+                      participante={gameState?.escenario_participant || null} />;
     case "pt":      return <PersonalTrainerView user={user} sessionId={sessionId} />;
     case "karaoke": return <KaraokeView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
     default:        return <EscenarioStandby />;

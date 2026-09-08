@@ -83,9 +83,14 @@ export function effectiveEndOf(item, duration) {
   return real;
 }
 
-export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
+export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
   const [visiblePlayer, setVisiblePlayer] = useState(0);
   const [rainPhase, setRainPhase] = useState("idle");
+  // Qué item está realmente en pantalla, no cuál pidió el servidor. Es la señal
+  // que necesita quien tape la TV durante un cambio: la lluvia se levanta
+  // cuando el video del destino ya está puesto, no cuando cambió la fila en la
+  // base ni cuando venció un timeout a ciegas.
+  const [displayedId, setDisplayedId] = useState(null);
   const [playerError, setPlayerError] = useState(null);
   const [readyCount, setReadyCount] = useState(0);
 
@@ -113,6 +118,12 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
   const captionsEnabledRef = useRef(captionsEnabled);
 
   latestCurrentRef.current = current;
+  // Con `autoAdvance` en false lo que suena NO es la canción del evento —hoy,
+  // la performance temporal de Follow the Leader— así que la TV no puede pedirle
+  // al servidor que avance: ese item no es `current_item_id` y el avance
+  // archivaría la canción del DJ que quedó congelada detrás.
+  const autoAdvanceRef = useRef(autoAdvance);
+  autoAdvanceRef.current = autoAdvance;
   captionsEnabledRef.current = captionsEnabled;
   const rainAnticipationRef = useRef(rainAnticipationSeconds);
   const rainTailRef = useRef(rainTailSeconds);
@@ -282,6 +293,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
 
     // ── ÚNICA puerta de avance ──────────────────────────────────────────────
     const requestAdvance = async (reason, itemId, playerIndex, extra = {}) => {
+      if (!autoAdvanceRef.current)         { logBlocked(reason, itemId, playerIndex, "auto-advance-disabled", extra); return null; }
       if (!ADVANCE_REASONS.has(reason))    { logBlocked(reason, itemId, playerIndex, "reason-not-allowed", extra); return null; }
       if (!itemId)                         { logBlocked(reason, itemId, playerIndex, "no-item-id", extra); return null; }
       if (advancedRef.current.has(itemId)) { logBlocked(reason, itemId, playerIndex, "already-advanced", extra); return null; }
@@ -439,6 +451,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         const previousIndex = activeIndexRef.current;
         activeIndexRef.current   = index;
         displayedItemRef.current = item;
+        setDisplayedId(item.id);
         slotsRef.current[index].role     = "current";
         slotsRef.current[1 - index].role = "idle";
         setVisiblePlayer(index);
@@ -616,6 +629,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       const index = activeIndexRef.current;
       abrirRonda(item);
       displayedItemRef.current = item;
+      setDisplayedId(item.id);
       watchTicksRef.current = { itemId: null, hits: 0 };
       setVisiblePlayer(index);
       setRainPhase("static");
@@ -651,6 +665,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
           try { player?.pauseVideo(); } catch { /* noop */ }
         });
         displayedItemRef.current = null;
+        setDisplayedId(null);
         transitionRef.current = null;
         setRainPhase("static");
         setPhase("WAITING_NEXT");
@@ -770,5 +785,5 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
 
   useEffect(() => { controllerRef.current?.handleCurrent(current); }, [current]);
 
-  return { playerIds: TV_PLAYER_IDS, visiblePlayer, rainPhase, playerError, readyCount };
+  return { playerIds: TV_PLAYER_IDS, visiblePlayer, rainPhase, displayedId, playerError, readyCount };
 }

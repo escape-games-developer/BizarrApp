@@ -107,5 +107,16 @@ export async function iniciarJornada(sessionId = null) {
     .eq("status", "launched");
   if (eVideo) throw new Error(eVideo.message);
 
+  // La cola de escenario (FTL / PT / Karaoke) tampoco rota sola. Una fila
+  // 'called' de anoche hace que el panel abra la jornada mostrando un líder
+  // fantasma en escena. Pasan a 'done': la fila queda, sólo deja de estar en
+  // curso.
+  const { error: eCola } = await supabase
+    .from("escenario_queue")
+    .update({ status: "done" })
+    .eq("session_id", id)
+    .in("status", ["waiting", "called"]);
+  if (eCola) throw new Error(eCola.message);
+
   return { session_id: id };
 }

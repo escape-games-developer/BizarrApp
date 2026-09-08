@@ -5,6 +5,9 @@ import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
 import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
+import FtlOverlay from "./FtlOverlay";
+import FtlStandby from "./FtlStandby";
+import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig } from "../designers/lib/persistence";
@@ -139,6 +142,22 @@ function UpcomingPanel({ candidates }) {
 const fontFamily = value => ({ inter: "Inter, sans-serif", poppins: "Poppins, sans-serif", space: "'Space Grotesk', sans-serif", system: "system-ui, sans-serif" }[value] || "inherit");
 const shadow = { soft: "0 6px 18px rgba(0,0,0,.3)", medium: "0 10px 28px rgba(0,0,0,.5)", strong: "0 16px 42px rgba(0,0,0,.75)" };
 
+/**
+ * El mismo bloque, forzado a ocupar la pantalla entera y sin adornos.
+ *
+ * Durante Follow the Leader la TV es el video del participante y nada más, pero
+ * el bloque de video se sigue renderizando con `ConfiguredBlock` a propósito:
+ * los players A/B viven adentro y moverlos a otro contenedor los desmontaría,
+ * matando la reproducción. Se cambian las props, no el árbol.
+ */
+const aPantallaCompleta = (block) => ({
+  ...block,
+  visible: true, x: 0, y: 0, w: 100, h: 100, z: 1, opacity: 1, radius: 0,
+  bg:     { ...block.bg, mode: "none", image: null, opacity: 0 },
+  border: { ...block.border, enabled: false },
+  shadow: { ...block.shadow, enabled: false },
+});
+
 function ConfiguredBlock({ id, block, children, contentStyle }) {
   if (!block?.visible) return null;
   return (
@@ -162,10 +181,19 @@ function EditableOverlayText({ block }) {
   return <div style={{ bottom: block.content.textPosition === "bottom" ? "3cqh" : "auto", color: block.content.textColor, fontSize: `min(${block.content.textSize / 2}cqw,${block.content.textSize / 2}cqh)`, fontWeight: block.content.bold ? 800 : 400, left: "4cqw", position: "absolute", right: "4cqw", textAlign: "center", textShadow: "0 2px 6px #000", top: block.content.textPosition === "top" ? "3cqh" : "auto" }}>{block.content.text}</div>;
 }
 
-function TvStatic({ phase, waiting }) {
+/**
+ * `zIndex` sube la lluvia por encima de TODO durante una transición de modo de
+ * Follow the Leader. La clase la deja en z 100, que alcanza para el cruce de
+ * canciones del DJ pero no para tapar la imagen de overlay del diseñador ni un
+ * bloque al que le hayan puesto un z alto a mano: por ahí se colaba el video.
+ * Fuera de una transición de FTL no se pasa nada y el comportamiento de Trivia,
+ * Duelo y Rey del Orto queda igual que siempre.
+ */
+function TvStatic({ phase, waiting, zIndex }) {
   if (phase === "idle" && !waiting) return null;
   return (
-    <div className={`tv-static tv-static-${phase === "idle" ? "static" : phase}`} aria-hidden="true">
+    <div className={`tv-static tv-static-${phase === "idle" ? "static" : phase}`} aria-hidden="true"
+      style={zIndex ? { zIndex } : undefined}>
       <div className="tv-static-noise" />
       <div className="tv-static-scanlines" />
       <div className="tv-static-band" />
@@ -183,6 +211,8 @@ export default function PantallaTV() {
   const [authErr,  setAuthErr]  = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [canvasConfig, setCanvasConfig] = useState(() => loadTvConfig("default"));
+  const [transicion, setTransicion] = useState(null);   // { destino, desde } — sólo visual
+  const [modoPrevio, setModoPrevio] = useState("dj");   // para detectar el cambio de modo
   const { gameState, session } = useGameState();
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
 
@@ -207,7 +237,49 @@ export default function PantallaTV() {
   // El Duelo cede ante un juego activo: el last-write-wins del admin ya los
   // hace excluyentes, pero si coexistieran gana el juego.
   const showDuelo  = activeEscenario === "duelo" && !activeGame;
+  // Follow the Leader NO es una capa opaca: el contenido del juego ES el video
+  // que se está reproduciendo como fuente temporal sobre los players del DJ
+  // (la canción del evento queda congelada). El overlay va aparte, encima de
+  // los players, con el avatar del líder. Por eso no entra en `hasLiveLayer`:
+  // ese contenedor pinta un fondo opaco que taparía justo lo que hay que ver.
+  //
+  // Se muestra desde que se abre la convocatoria: sin líder es un cartelito
+  // de "anotate", y con líder pasa a avatar + porcentajes. En los dos casos el
+  // video del DJ sigue a la vista debajo.
+  // Follow the Leader tiene tres estados y cada uno pinta algo distinto:
+  //   A/C · convocatoria (sin participante) → pantalla propia del juego, que
+  //         tapa al DJ. Es también el estado al que se vuelve entre turnos.
+  //   B   · performance (con participante)  → el video del DJ a pantalla
+  //         completa y encima el avatar con los porcentajes.
+  // En los dos casos la interfaz del DJ se apaga: su canción, sus próximas y
+  // su QR musical no pertenecen a este juego.
+  const showFtl = activeEscenario === "ftl" && !activeGame;
+  const participanteFtl = showFtl ? gameState?.escenario_participant || null : null;
+  // Modo visual de la TV. PREPARADO no es EN VIVO: el admin llama al
+  // participante, la TV lo muestra listo, y recién con "▶ Comenzar" arranca el
+  // video. Los cuatro modos son excluyentes y salen todos de la base, así que
+  // un F5 reconstruye el mismo.
+  const modoFtl = !showFtl ? "dj"
+    : participanteFtl?.playing ? "performance"
+    : participanteFtl ? "candidato"
+    : "convocatoria";
+  const ftlPerformance  = modoFtl === "performance";
+  const ftlCandidato    = modoFtl === "candidato";
+  const ftlConvocatoria = modoFtl === "convocatoria";
+  // `soloTotales`: /tv entra por token, sin sesión de auth. Lee los totales
+  // públicos con el cliente anónimo y nunca toca follow_leader_votes.
+  const { totals: votosFtl } = useFollowLeaderVotes(
+    participanteFtl?.turn_id || null, null, { soloTotales: true });
+
+  // Con FTL en el aire la TV deja de ser la pantalla del DJ: se reusa su MOTOR
+  // (players, audio, recortes, avance) pero se apaga toda su INTERFAZ — título,
+  // portada, QR musical, próximas, header, logo, reacciones.
+  const soloVideoFtl = showFtl;
   const hasLiveLayer = showRaffle || showTrivia || showDuelo;
+  // Mutear el DJ es una decisión aparte de montar un overlay. En FTL la música
+  // del DJ ES el juego: el líder baila y el bar lo sigue. Si entrara en el
+  // muteo, lanzar el juego apagaba la única salida de audio del bar.
+  const muteDj = hasLiveLayer;
   // Placas de anuncio (el "📢 Anunciar" del admin escribe active_placa).
   // No entra en hasLiveLayer a propósito — el muteo del DJ no cambia por una
   // placa, solo por un juego en vivo.
@@ -217,15 +289,130 @@ export default function PantallaTV() {
   // quedar seteadas casi siempre. En /pantalla eso es inofensivo porque el
   // video las tapa, pero acá el reposo es el canvas del DJ: si no se
   // excluyeran, la TV quedaría permanentemente cubierta por el logo.
+  // ── Reproducción temporal de Follow the Leader ──────────────────────────
+  // La canción del participante NO es la canción del evento: `current_item_id`
+  // sigue siendo la del DJ, congelada, y vuelve intacta al terminar. Lo único
+  // que cambia es qué se le da de comer a los players A/B — el mismo motor, sin
+  // un segundo reproductor y sin tocar la cola, el ranking ni el historial.
+  //
+  // El item sintético lleva el prefijo 'ftl:' en el id justamente para que no
+  // pueda confundirse con una fila real de pantalla_playlist_items.
+  const videoFtl = ftlPerformance ? gameState?.escenario_video : null;
+  const itemFtl = videoFtl?.ytId ? {
+    id:                 `ftl:${participanteFtl?.turn_id || videoFtl.ytId}`,
+    youtube_id:         videoFtl.ytId,
+    title:              videoFtl.ytTitle || "Follow the Leader",
+    trim_start_seconds: Number(videoFtl.trimStart) || 0,
+    trim_end_seconds:   videoFtl.trimEnd ?? null,
+    youtube_volume:     100,
+  } : null;
+
+  // Lo que suena. Al soltar el escenario vuelve a ser `current` y el motor hace
+  // su transición de siempre.
+  const fuente = itemFtl || current;
+
+  // ── Lluvia de cambio de modo ────────────────────────────────────────────
+  // El motor sólo llueve cuando cambia la CANCIÓN. Los cambios de MODO que no
+  // tocan la fuente (entrar a la convocatoria, volver a ella) no dispararían
+  // nada y se vería el corte seco. Este estado es puramente visual — no se
+  // persiste — y además dice hacia dónde vamos, que es lo que decide cuándo
+  // levantarla.
+  //
+  // Convocatoria y candidato son las dos pantallas estáticas del juego: pasar
+  // de una a la otra no lleva lluvia, es el mismo modo visual con más datos.
+  // La lluvia tiene que entrar EN EL MISMO commit que el cambio de modo.
+  //
+  // Con la detección en un useEffect, React pintaba primero el modo nuevo —sin
+  // la pantalla del juego, que ya se había desmontado— y recién en el commit
+  // siguiente aparecía la lluvia. Ese hueco de un frame es el que dejaba ver el
+  // video del DJ entre el candidato y la performance, y entre la convocatoria y
+  // la vuelta al DJ.
+  //
+  // Actualizar estado durante el render del propio componente es el patrón que
+  // React documenta para derivar estado de props: re-renderiza antes de pintar,
+  // así que la lluvia y el modo nuevo llegan juntos a la pantalla. Va guardado
+  // por la comparación, que es lo que evita el bucle.
+  // El modo anterior va en ESTADO, no en un ref: la app corre bajo StrictMode y
+  // el doble render de desarrollo haría que una mutación de ref se aplicara en
+  // la pasada que React descarta, perdiendo transiciones. Comparar contra
+  // estado es el patrón que React documenta para esto y es idempotente.
+  if (modoPrevio !== modoFtl) {
+    setModoPrevio(modoFtl);
+    // Convocatoria y candidato son la misma pantalla con más datos: entre ellas
+    // no hay nada que tapar.
+    const ESTATICOS = new Set(["convocatoria", "candidato"]);
+    if (!(ESTATICOS.has(modoPrevio) && ESTATICOS.has(modoFtl))) {
+      setTransicion({ destino: modoFtl, desde: Date.now() });
+    }
+  }
+
+  const enTransicion = !!transicion;
+
+  // Se corta la fuente mientras la TV no está mostrando un video:
+  //   * convocatoria y candidato → el DJ queda pausado en su canción; no tiene
+  //     sentido que suene música debajo de un QR.
+  //   * saliendo hacia el DJ → la performance tiene que callarse YA, no seguir
+  //     sonando detrás de la lluvia hasta que el motor termine el cruce. El
+  //     tema nuevo arranca cuando se levanta la lluvia.
+  // Durante CUALQUIER transición la fuente vieja se calla: el DJ no puede
+  // volver a sonar detrás de la lluvia mientras se prepara la performance, ni
+  // la performance seguir sonando mientras se prepara la salida. El destino
+  // arranca cuando se levanta la lluvia.
+  const cortarFuente = ftlConvocatoria || ftlCandidato || enTransicion;
+  const reproduciendo = cortarFuente ? false : event?.is_playing !== false;
+
   const PLACAS_NO_TV = ["escenario_karaoke", "logo", "logo_animado"];
   const activePlaca = sharesSession ? gameState?.active_placa : null;
   const hasPlaca = !!activePlaca && !PLACAS_NO_TV.includes(activePlaca);
-  const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
-    useContinuousTvPlayers({ current, eventId, token, unlocked, muted: !screenAudioOn || hasLiveLayer,
-      playing: event?.is_playing !== false,
+  const { playerIds, visiblePlayer, rainPhase, displayedId, playerError, readyCount } =
+    useContinuousTvPlayers({ current: fuente, eventId, token, unlocked,
+      muted: !screenAudioOn || muteDj,
+      playing: reproduciendo,
+      // La performance no es la canción del evento: si la TV pidiera avanzar
+      // al terminarla, el servidor archivaría la canción del DJ que está
+      // congelada detrás.
+      autoAdvance: !itemFtl,
       captionsEnabled: event?.youtube_captions_enabled === true,
       rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6,
       rainTailSeconds: event?.rain_tail_seconds ?? 0 });
+
+  // Cuándo se levanta la lluvia. Hacia una pantalla estática alcanza un mínimo:
+  // ya está lista. Hacia un video (performance o vuelta al DJ) se espera a que
+  // el motor termine su propio cruce — `rainPhase` vuelve a 'idle' recién
+  // cuando el video nuevo ya está sonando. El tope es el seguro: si el motor se
+  // cuelga, la TV no se queda con la lluvia puesta para siempre.
+  //
+  // Va DESPUÉS de useContinuousTvPlayers a propósito: lee `rainPhase`, que ese
+  // hook declara con const. Arriba caía en la zona muerta temporal y /tv no
+  // llegaba a renderizar.
+  // Hacia una pantalla estática alcanza un mínimo: ya está lista.
+  //
+  // Hacia un video se espera la señal REAL del motor: `displayedId` es el item
+  // que los players tienen puesto, no el que pidió el servidor. Que el RPC de
+  // avance haya vuelto no significa que YouTube ya esté mostrando la canción
+  // nueva; por eso la lluvia se levanta contra `displayedId === fuente.id` y no
+  // contra un timeout ciego. Se acepta `leaving` porque en esa fase el motor ya
+  // hizo el swap y el video nuevo está sonando: es su propia salida en fundido.
+  //
+  // TOPE es el seguro, no el camino normal: si YouTube no carga (video privado,
+  // API caída), la TV no se queda tapada para siempre. 9 s es holgado contra los
+  // 12 s de LOAD_TIMEOUT_MS del motor, así que la lluvia se va antes de que el
+  // propio motor declare el fallo y muestre su cartel.
+  useEffect(() => {
+    if (!transicion) return;
+    const esperaMotor = transicion.destino === "performance" || transicion.destino === "dj";
+    const MIN = esperaMotor ? 900 : 800;
+    const TOPE = 9000;
+    const id = setInterval(() => {
+      const dt = Date.now() - transicion.desde;
+      if (dt < MIN) return;
+      if (dt >= TOPE) { setTransicion(null); return; }
+      if (!esperaMotor) { setTransicion(null); return; }
+      const destinoListo = fuente ? displayedId === fuente.id : true;
+      if (destinoListo && (rainPhase === "leaving" || rainPhase === "idle")) setTransicion(null);
+    }, 120);
+    return () => clearInterval(id);
+  }, [transicion, rainPhase, displayedId, fuente]);
 
   // 1. Validar el acceso contra el servidor.
   useEffect(() => {
@@ -255,7 +442,7 @@ export default function PantallaTV() {
     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=Space+Grotesk:wght@400;600;700&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:${C.bg};color:${C.white};font-family:'Space Grotesk',sans-serif;overflow:hidden}
-    #${playerIds[0]},#${playerIds[1]}{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important}
+    #${playerIds[0]},#${playerIds[1]}{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important;pointer-events:none!important}
     .tv-player-layer{position:absolute;inset:0;background:#000;transition:opacity .35s ease;pointer-events:none}
     .tv-static{position:fixed;inset:0;z-index:100;overflow:hidden;background:#111;opacity:1;transition:opacity .7s ease;pointer-events:none}
     .tv-static-entering{animation:tvStaticEnter .45s ease both}
@@ -341,7 +528,8 @@ export default function PantallaTV() {
         backgroundImage: canvasConfig.screen.backgroundMode === "image" && canvasConfig.screen.backgroundImage ? `url(${canvasConfig.screen.backgroundImage})` : "none",
         backgroundSize: "cover", backgroundPosition: "center",
       }}>
-        <ConfiguredBlock id="video" block={canvasConfig.blocks.video}>
+        <ConfiguredBlock id="video"
+          block={soloVideoFtl ? aPantallaCompleta(canvasConfig.blocks.video) : canvasConfig.blocks.video}>
           {/* Players A/B permanentes: el standby nunca usa display:none. */}
           {playerIds.map((playerId, index) => (
             <div key={playerId} className="tv-player-layer" style={{
@@ -352,7 +540,7 @@ export default function PantallaTV() {
             </div>
           ))}
 
-          {!current && (
+          {!fuente && !soloVideoFtl && (
             <div style={{ ...pantallaCentro, position: "absolute", inset: 0, zIndex: 5 }}>
               <div style={{ fontSize: 52, marginBottom: 14, opacity: .35 }}>🎧</div>
               <div style={{ fontSize: 17, color: "rgba(240,232,255,.4)" }}>
@@ -380,6 +568,7 @@ export default function PantallaTV() {
           )}
         </ConfiguredBlock>
 
+        {!soloVideoFtl && <>
         <ConfiguredBlock id="logo" block={canvasConfig.blocks.logo}>
           <EditableOverlayText block={canvasConfig.blocks.logo}/>
         </ConfiguredBlock>
@@ -423,8 +612,9 @@ export default function PantallaTV() {
         {Object.entries(canvasConfig.customBlocks || {}).map(([id, block]) => <ConfiguredBlock key={id} id={id} block={block}>
           <span role="img" aria-label={block.title} style={{ position: "absolute", inset: 0 }}/><EditableOverlayText block={block}/>
         </ConfiguredBlock>)}
+        </>}
 
-        {canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>} 
+        {!soloVideoFtl && !enTransicion && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
 
         {/* Placa de anuncio. Reusa el PlacaScreen de /pantalla — mismo catálogo,
             mismos assets de /placas — en vez de duplicar el diseño. Va debajo
@@ -455,11 +645,33 @@ export default function PantallaTV() {
             )}
           </div>
         )}
+
+        {/* Follow the Leader: sólo el avatar y (cuando exista el backend de
+            votación) los porcentajes. Transparente y sin reproductor propio —
+            el video de abajo es el del DJ, con su recorte de inicio/fin. */}
+        {(ftlConvocatoria || ftlCandidato) && !hasLiveLayer && !hasPlaca && (
+          <FtlStandby webappUrl={window.location.origin}
+            participante={ftlCandidato ? participanteFtl : null}/>
+        )}
+
+        {ftlPerformance && !hasLiveLayer && !hasPlaca && (
+          <FtlOverlay participante={participanteFtl} votos={votosFtl}/>
+        )}
       </div>
 
-      <TvStatic phase={rainPhase} waiting={!current || readyCount < 2}/>
+      {/* La lluvia SÍ va durante FTL: es la transición del motor y es lo que
+          se ve al cortar la canción del participante para volver al DJ. Fuera
+          de una transición no dibuja nada (phase 'idle' y sin espera), así que
+          no puede taparle la performance a nadie.
+          Las reacciones flotantes, en cambio, son del público del DJ. */}
+      {/* La lluvia cubre la espera, no sólo la anima: mientras esté puesta, el
+          destino se prepara detrás. Va por encima de las pantallas de FTL
+          (z 50) para que el cambio de modo no se vea a medio armar. */}
+      <TvStatic phase={enTransicion && rainPhase === "idle" ? "static" : rainPhase}
+        waiting={enTransicion || (!soloVideoFtl && (!fuente || readyCount < 2))}
+        zIndex={enTransicion ? 2147483647 : undefined}/>
 
-      <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>
+      {!soloVideoFtl && <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>}
     </>
   );
 }

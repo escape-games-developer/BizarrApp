@@ -22,6 +22,9 @@ import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import PantallaSidebarMenu from "./pantalla/PantallaSidebarMenu";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { getTvLink, tvUrl } from "../services/pantallaDj";
+import { avanzarDjAlSiguiente, recorteDeEscenario } from "../services/escenarioDj";
+import { usePlaylistCategoria } from "../hooks/usePlaylistCategoria";
+import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { iniciarJornada } from "../services/jornada";
 import {
   RaffleScreen,
@@ -825,6 +828,350 @@ function EscenarioPanel({sec, type}) {
 // ══════════════════════════════════════════════════════════════════════════
 // KARAOKE
 // ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+// FOLLOW THE LEADER
+// ══════════════════════════════════════════════════════════════════════════
+// Un solo protagonista por turno: el líder sube, elige canción y el bar lo
+// sigue. No hay aplausómetro ni ganador — ese modelo es del Duelo, no de acá.
+//
+// Fuentes de verdad, sin estado local que se pierda con un F5:
+//   escenario_queue          → quién está anotado y quién fue llamado (admin)
+//   game_state.active_escenario / escenario_participant / escenario_video
+//                            → qué proyecta /tv y qué vista abre el cliente
+// Las dos se escriben en la misma acción; el panel las lee de la base.
+function FollowLeaderPanel({sec, controls, sessionId, gameState, goTo}){
+  const COL = "#FF9500";
+  const { queue, error: errCola, call, finish } = useEscenarioQueue(sessionId, "ftl");
+  // Mismo catálogo central que ve el cliente: categoría 'ftl' de Playlists
+  // YouTube. Se muestra acá para que el operador no descubra recién en el
+  // celular de un cliente que la lista está vacía.
+  const { canciones: catalogo, loading: cargandoCatalogo } = usePlaylistCategoria("ftl");
+
+  // Totales de la votación del público. El turno es la fila de la cola que
+  // está `called`; el Admin sólo mira — no vota nunca.
+  const turnoActivo = queue.find(q => q.status === "called")?.id || null;
+  const { totals: votos } = useFollowLeaderVotes(turnoActivo, null, { soloTotales: true });
+  const [busy, setBusy] = useState(false);
+  const [err,  setErr]  = useState(null);
+  const [nota, setNota] = useState(null);   // qué canción quedó sonando en el DJ
+  // El cierre avanza el DJ UNA vez. Si el avance sale bien pero el UPDATE de
+  // game_state falla, el reintento no puede volver a avanzar: saltearía otra
+  // canción. `expected_current_id` sólo cubre carreras entre operadores.
+  const avanceHechoRef = useRef(false);
+
+  const enElAire   = gameState?.active_escenario === "ftl";
+  const waiting    = queue.filter(q => q.status === "waiting");
+  const active     = queue.find(q => q.status === "called") || null;
+  const proyectado = gameState?.escenario_participant || null;
+  const enVivo     = !!proyectado?.playing;
+
+  // Toda acción pasa por acá: nada canta éxito si el backend devolvió error.
+  const correr = async (fn) => {
+    setBusy(true); setErr(null); setNota(null);
+    try { await fn(); }
+    catch (e) { setErr(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+  const oTirar = async (promesa) => {
+    const { error } = await promesa;
+    if (error) throw new Error(error);
+  };
+
+  // Llamar al escenario PREPARA, no reproduce. Deja al participante proyectado
+  // y su canción cargada con el recorte del catálogo, pero la TV sigue en la
+  // pantalla de convocatoria y el DJ sigue con su tema. Nada de esto toca la
+  // cola del evento: la canción del juego es una reproducción temporal.
+  const llamar = (entry) => correr(async () => {
+    const { trimStart, trimEnd } = await recorteDeEscenario(entry.yt_id);
+    await controls?.prepararEscenario("ftl", {
+      turn_id:      entry.id,
+      user_id:      entry.user_id,
+      name:         entry.user_name,
+      avatar_emoji: entry.avatar_emoji || null,
+    }, entry.yt_id ? { ytId: entry.yt_id, ytTitle: entry.yt_title || null, trimStart, trimEnd } : null);
+    await oTirar(call(entry.id));
+    setNota(entry.yt_id
+      ? "👤 Participante preparado. Cuando esté listo, tocá ▶ Comenzar."
+      : "⚠ El participante no eligió canción: podés subirlo igual, pero no hay video para pasar.");
+  });
+
+  // ▶ Comenzar: recién acá suena la canción del participante, sobre los mismos
+  // players del DJ. La canción del evento queda congelada y vuelve al terminar.
+  const comenzar = () => correr(async () => {
+    if (!proyectado) throw new Error("No hay participante preparado.");
+    if (!gameState?.escenario_video?.ytId) {
+      throw new Error("El participante no tiene canción elegida: no hay nada que reproducir.");
+    }
+    await controls?.setPerformanceEscenario(proyectado, true);
+    setNota("▶ En vivo. El DJ quedó congelado con su canción.");
+  });
+
+  // ■ Finalizar: corta la performance y vuelve la pantalla de convocatoria. La
+  // votación de este turno se cierra sola al pasar la fila a 'done' — el RPC
+  // sólo acepta votos con status 'called'. Los votos quedan como histórico.
+  const finalizar = () => correr(async () => {
+    if (active) await oTirar(finish(active.id));
+    await controls?.finishEscenarioTurn();
+    setNota("■ Performance terminada. El DJ retoma su canción; la convocatoria sigue abierta.");
+  });
+
+  // Reproyectar: válvula para el caso raro de "llamado en la cola pero la TV no
+  // lo tiene". Vuelve a dejarlo preparado, sin reproducir.
+  const reproyectar = () => correr(async () => {
+    if (!active) return;
+    const { trimStart, trimEnd } = await recorteDeEscenario(active.yt_id);
+    await controls?.prepararEscenario("ftl", {
+      turn_id:      active.id,
+      user_id:      active.user_id,
+      name:         active.user_name,
+      avatar_emoji: active.avatar_emoji || null,
+    }, active.yt_id ? { ytId: active.yt_id, ytTitle: active.yt_title || null, trimStart, trimEnd } : null);
+  });
+
+  // Abrir convocatoria = escenario en el aire sin participante. Es también el
+  // reset de ronda: baja al líder anterior de la cola.
+  const abrirConvocatoria = () => correr(async () => {
+    if (active) await oTirar(finish(active.id));
+    await controls?.openEscenario("ftl");
+    avanceHechoRef.current = false;
+  });
+
+  // 🎵 Volver a DJ Democracy. Como la canción del evento nunca dejó de ser la
+  // suya, alcanza con soltar el escenario: la TV vuelve sola a esa canción. No
+  // hay ningún avance que hacer y por eso no se saltea ningún tema.
+  const cerrarJuego = () => correr(async () => {
+    // 1. Cortar la performance ES lo primero. Es un UPDATE de un solo campo, y
+    //    en cuanto llega por Realtime la TV entra en lluvia y pausa el video del
+    //    participante. Sin este paso, la canción del juego seguía sonando el
+    //    ida y vuelta que tarda el avance del DJ.
+    //    Si el avance de abajo falla, el juego queda abierto con el candidato
+    //    preparado: recuperable, y el mismo botón reintenta.
+    if (proyectado?.playing) await controls?.setPerformanceEscenario(proyectado, false);
+
+    // 2. El DJ pasa a su canción siguiente. Va antes de soltar el escenario: la
+    //    UI del DJ tiene que reaparecer con la canción nueva ya elegida, nunca
+    //    con la vieja ni con la del juego.
+    let corte = { avanzado: false, motivo: "el avance ya se había hecho" };
+    if (!avanceHechoRef.current) {
+      corte = await avanzarDjAlSiguiente();
+      avanceHechoRef.current = true;
+    }
+
+    // 3. Recién ahora se suelta el escenario. La lluvia sigue puesta hasta que
+    //    el motor confirma que la canción nueva está sonando.
+    if (active) await oTirar(finish(active.id));
+    await controls?.closeEscenario();
+    avanceHechoRef.current = false;
+    setNota(corte.avanzado
+      ? "🎵 De vuelta en DJ Democracy, en la canción siguiente."
+      : `🎵 De vuelta en DJ Democracy — ${corte.motivo}.`);
+  });
+
+  if (!sessionId) return (
+    <div style={{"--sg": sec.grad, "--gw": sec.glow}}>
+      <div className="card">
+        <div className="ctitle">💃 Follow the Leader</div>
+        <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)"}}>Esperando sesión activa…</p>
+      </div>
+    </div>
+  );
+
+  const aviso = err || errCola;
+
+  return (
+    <div style={{"--sg": sec.grad, "--gw": sec.glow}}>
+      {aviso && (
+        <div className="card" style={{borderColor:"rgba(255,45,120,.4)", marginBottom:10}}>
+          <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700}}>✕ {aviso}</div>
+        </div>
+      )}
+
+      {!aviso && nota && (
+        <div className="card" style={{borderColor:"rgba(0,245,160,.3)", marginBottom:10}}>
+          <div style={{fontSize:11.5, color:"#00F5A0", fontWeight:700}}>{nota}</div>
+        </div>
+      )}
+
+      {/* Estado + salida directa desde cualquier fase */}
+      <div className="card">
+        <div style={{display:"flex", alignItems:"center", gap:8, marginBottom: enElAire ? 10 : 0}}>
+          <div className="dot-live" style={{background: enVivo ? "#EF4444" : enElAire ? "#FF9500" : "rgba(240,232,255,.2)",
+            animation: enVivo ? "blink 1.2s infinite" : "none"}}/>
+          <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:12.5, flex:1,
+            color: enElAire ? "#00F5A0" : "rgba(240,232,255,.3)"}}>
+            {!enElAire ? "Fuera del aire — la TV está en DJ Democracy"
+              : enVivo ? "EN VIVO: " + (proyectado.name || "líder en escenario")
+              : proyectado ? "PREPARADO: " + (proyectado.name || "líder listo para comenzar")
+              : "Convocatoria abierta — esperando líder"}
+          </div>
+        </div>
+        {enElAire && (
+          <button className="btn btn-g btn-full" disabled={busy} onClick={cerrarJuego}>
+            🎵 Cerrar y volver a DJ Democracy
+          </button>
+        )}
+      </div>
+
+      {/* Catálogo de canciones — lo que el cliente va a poder elegir */}
+      {!cargandoCatalogo && (
+        <div className="card" style={{
+          marginBottom: 10,
+          borderColor: catalogo.length ? "rgba(240,232,255,.08)" : "rgba(255,149,0,.4)",
+        }}>
+          <div style={{display:"flex", alignItems:"center", gap:8}}>
+            <div style={{flex:1, fontSize:11.5, color: catalogo.length ? "rgba(240,232,255,.5)" : "#FF9500"}}>
+              {catalogo.length
+                ? `🎵 Catálogo: ${catalogo.length} canción${catalogo.length === 1 ? "" : "es"} para elegir.`
+                : "⚠ No hay canciones cargadas: el cliente no va a poder anotarse."}
+            </div>
+            <button className="btn btn-p" style={{padding:"5px 11px", fontSize:10, whiteSpace:"nowrap"}}
+              onClick={() => goTo?.("playlists")}>
+              {catalogo.length ? "Ver playlists" : "Cargar canciones"}
+            </button>
+          </div>
+          {!catalogo.length && (
+            <div style={{fontSize:10.5, color:"rgba(240,232,255,.35)", marginTop:7, lineHeight:1.5}}>
+              En Playlists YouTube: creá una playlist, cargale temas y asignale la categoría
+              <strong> FTL</strong>. Queda guardado en Supabase y lo ven todas las PC y celulares.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fuera del aire: abrir convocatoria */}
+      {!enElAire && (
+        <div className="card">
+          <div className="ctitle" style={{marginBottom:4}}>💃 Follow the Leader</div>
+          <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
+            El líder sube al escenario y el bar lo sigue al ritmo de la música. La música sigue
+            saliendo por DJ Democracy: la TV no corta el audio durante este juego.
+          </p>
+          <button className="btn btn-p btn-full" disabled={busy} onClick={abrirConvocatoria}>
+            📣 Abrir convocatoria
+          </button>
+        </div>
+      )}
+
+      {/* Convocatoria abierta, nadie en escenario: la cola */}
+      {enElAire && !active && (
+        <div className="card">
+          <div className="ctitle" style={{marginBottom:4}}>Inscriptos</div>
+          <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", marginBottom:10}}>
+            {waiting.length} inscripto{waiting.length === 1 ? "" : "s"} en espera
+          </div>
+          {waiting.length === 0 && (
+            <div style={{fontSize:12, color:"rgba(240,232,255,.35)", padding:"12px 0"}}>
+              Todavía no hay postulantes. Los usuarios se anotan desde su celular,
+              en 🎤 Escenario.
+            </div>
+          )}
+          {waiting.map((p, i) => (
+            <div key={p.id} className="qrow" style={{animationDelay: (i * .05) + "s"}}>
+              <div className="qavatar">{p.avatar_emoji || "👤"}</div>
+              <div className="qname">
+                {p.user_name}
+                {p.yt_title && (
+                  <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", fontWeight:400}}>
+                    🎵 {p.yt_title}
+                  </div>
+                )}
+              </div>
+              <button className="btn btn-p" style={{padding:"5px 12px", fontSize:10}}
+                disabled={busy} onClick={() => llamar(p)}>
+                Llamar al escenario
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Alguien en escenario */}
+      {enElAire && active && (
+        <div className="card" style={{borderColor:"rgba(255,149,0,.27)"}}>
+          <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
+            <div className="chip chip-live"><div className="dot-live"/>En vivo</div>
+          </div>
+          <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12,
+            padding:"10px", background:"rgba(255,149,0,.06)",
+            border:"1px solid rgba(255,149,0,.2)", borderRadius:11}}>
+            <div style={{fontSize:28}}>{active.avatar_emoji || "👤"}</div>
+            <div>
+              <div style={{fontSize:13, fontWeight:700, color:COL}}>{active.user_name}</div>
+              {active.yt_title && (
+                <div style={{fontSize:10, color:"rgba(240,232,255,.35)"}}>🎵 {active.yt_title}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Votación del público — misma fuente que /tv y que el celular:
+              follow_leader_vote_totals. Los porcentajes los calcula la base.
+              Sólo mientras suena: preparado todavía no hay nada que votar. */}
+          {enVivo && <>
+          <div style={{display:"flex", gap:8, marginBottom:12}}>
+            {[
+              {ico:"👍", n:votos.up,   pct:votos.up_pct,   col:"#00F5A0"},
+              {ico:"👎", n:votos.down, pct:votos.down_pct, col:"#FF2D78"},
+            ].map((v) => (
+              <div key={v.ico} style={{
+                flex:1, textAlign:"center", padding:"9px 6px", borderRadius:10,
+                background:`${v.col}0F`, border:`1px solid ${v.col}33`,
+              }}>
+                <div style={{fontSize:18, marginBottom:2}}>{v.ico}</div>
+                <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20, color:v.col}}>
+                  {v.pct}%
+                </div>
+                <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)"}}>
+                  {v.n} voto{v.n === 1 ? "" : "s"}
+                </div>
+              </div>
+            ))}
+          </div>
+          {votos.total === 0 && (
+            <div style={{fontSize:10.5, color:"rgba(240,232,255,.3)", marginBottom:10, textAlign:"center"}}>
+              Todavía no votó nadie.
+            </div>
+          )}
+          </>}
+
+          {!proyectado && (
+            <div style={{marginBottom:10, padding:"9px 10px", borderRadius:10,
+              background:"rgba(255,45,120,.07)", border:"1px solid rgba(255,45,120,.3)"}}>
+              <div style={{fontSize:11, color:"#FCA5A5", fontWeight:700, marginBottom:7}}>
+                ⚠ Está llamado en la cola pero la TV no lo tiene proyectado.
+              </div>
+              <button className="btn btn-p" style={{padding:"5px 12px", fontSize:10}}
+                disabled={busy} onClick={reproyectar}>
+                Reproyectar en la TV
+              </button>
+            </div>
+          )}
+
+          {!enVivo ? (
+            <>
+              <button className="btn btn-p btn-full" style={{marginBottom:8}}
+                disabled={busy || !gameState?.escenario_video?.ytId} onClick={comenzar}>
+                ▶ Comenzar
+              </button>
+              <div style={{fontSize:10.5, color:"rgba(240,232,255,.35)", textAlign:"center", marginBottom:8}}>
+                {gameState?.escenario_video?.ytId
+                  ? "Está preparado. La TV sigue en la pantalla del juego y el DJ, con su canción."
+                  : "Sin canción elegida no hay video para pasar."}
+              </div>
+              <button className="btn btn-g btn-full" disabled={busy} onClick={finalizar}>
+                👤 Bajar del escenario — sigue la convocatoria
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-r btn-full" disabled={busy} onClick={finalizar}>
+              ■ Finalizar — vuelve la convocatoria
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KaraokePanel({sec}){
   const [queue,  setQueue]  = useState([]);
   const [active, setActive] = useState(null);
@@ -2711,7 +3058,7 @@ export default function AdminPanel(){
                                  zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
                                  msgCount={msgCount} vidCount={vidCount} goTo={goTo} controls={controls}/>;
       case "duelo":     return <DueloPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
-      case "ftl":       return <EscenarioPanel sec={curSec} type="ftl"/>;
+      case "ftl":       return <FollowLeaderPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo}/>;
       case "pt":        return <EscenarioPanel sec={curSec} type="pt"/>;
       case "karaoke":   return <KaraokePanel sec={curSec}/>;
       case "rey":       return <ReyPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;

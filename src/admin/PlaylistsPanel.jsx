@@ -1,6 +1,98 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
-import { searchYouTube } from "../hooks/useYouTubePlaylists";
+import { searchYouTube, fetchYoutubePlaylist } from "../hooks/useYouTubePlaylists";
+
+/**
+ * Recorte de un tema: desde qué segundo arranca y en cuál se da por terminado.
+ *
+ * Es la misma configuración que ya tenía DJ Democracy por tema (el ⚙ del
+ * editor), ahora también en el catálogo central — de acá la toma Follow the
+ * Leader cuando manda la canción al DJ.
+ *
+ * Fin vacío = suena hasta el final del video. El error se muestra acá mismo:
+ * la base tiene los CHECK, pero el operador tiene que leer algo entendible.
+ */
+function FilaRecorte({ item, onGuardar }) {
+  const [abierto, setAbierto] = React.useState(false);
+  const [ini, setIni] = React.useState(item.trim_start_seconds ?? 0);
+  const [fin, setFin] = React.useState(item.trim_end_seconds ?? "");
+  const [estado, setEstado] = React.useState(null);
+  const [guardando, setGuardando] = React.useState(false);
+
+  React.useEffect(() => {
+    setIni(item.trim_start_seconds ?? 0);
+    setFin(item.trim_end_seconds ?? "");
+    setEstado(null);
+  }, [item.id, item.trim_start_seconds, item.trim_end_seconds]);
+
+  const tieneRecorte = (item.trim_start_seconds ?? 0) > 0 || item.trim_end_seconds != null;
+
+  const guardar = async () => {
+    setGuardando(true); setEstado(null);
+    const { error } = await onGuardar(item.id, { start: ini, end: fin });
+    setGuardando(false);
+    setEstado(error ? { tipo: "error", texto: error } : { tipo: "ok", texto: "✓ Recorte guardado" });
+    if (!error) setTimeout(() => setEstado(null), 2200);
+  };
+
+  const inputStyle = {
+    width: 72, background: "#1A0D2E", border: "1px solid #9B2FFF44", color: "#F0E8FF",
+    padding: "5px 8px", borderRadius: 5, fontSize: 12, outline: "none",
+  };
+
+  return (
+    <>
+      <button onClick={() => setAbierto(a => !a)}
+        title="Recorte de inicio y fin"
+        style={{
+          background: abierto || tieneRecorte ? "#9B2FFF22" : "transparent",
+          border: `1px solid ${tieneRecorte ? "#9B2FFF" : "#9B2FFF33"}`,
+          color: tieneRecorte ? "#C4A5FF" : "#7A6E8A",
+          fontSize: 11, padding: "4px 8px", borderRadius: 6, cursor: "pointer", flexShrink: 0,
+        }}>
+        ✂{tieneRecorte ? ` ${item.trim_start_seconds ?? 0}-${item.trim_end_seconds ?? "fin"}` : ""}
+      </button>
+
+      {abierto && (
+        <div style={{
+          flexBasis: "100%", marginTop: 8, padding: "9px 10px", borderRadius: 8,
+          background: "#08040F", border: "1px solid #9B2FFF33",
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        }}>
+          <label style={{ fontSize: 10.5, color: "#7A6E8A" }}>
+            Inicio (s)
+            <input type="number" min={0} value={ini}
+              onChange={e => setIni(e.target.value)}
+              style={{ ...inputStyle, marginLeft: 6 }}/>
+          </label>
+          <label style={{ fontSize: 10.5, color: "#7A6E8A" }}>
+            Fin (s)
+            <input type="number" min={0} value={fin} placeholder="—"
+              onChange={e => setFin(e.target.value)}
+              style={{ ...inputStyle, marginLeft: 6 }}/>
+          </label>
+          <button onClick={guardar} disabled={guardando}
+            style={{
+              background: "#00F5A0", border: "none", color: "#08040F", fontSize: 11,
+              fontWeight: 800, padding: "6px 12px", borderRadius: 6,
+              cursor: guardando ? "wait" : "pointer",
+            }}>
+            {guardando ? "Guardando…" : "Guardar"}
+          </button>
+          <span style={{ fontSize: 10, color: "#7A6E8A", flexBasis: "100%" }}>
+            Segundo absoluto del video. Fin vacío = hasta el final.
+          </span>
+          {estado && (
+            <span style={{
+              flexBasis: "100%", fontSize: 11, fontWeight: 600,
+              color: estado.tipo === "error" ? "#FF2D78" : "#00F5A0",
+            }}>{estado.texto}</span>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 // Paleta de colores predefinidos para categorías nuevas
 const COLOR_PALETTE = [
@@ -18,6 +110,8 @@ export default function PlaylistsPanel() {
     renamePlaylist,
     setPlaylistCategories,
     addItemToPlaylist,
+    importItemsToPlaylist,
+    setItemTrims,
     removeItemFromPlaylist,
     addByUrl,
     createCategory,
@@ -54,6 +148,13 @@ export default function PlaylistsPanel() {
   const [urlInput, setUrlInput] = useState("");
   const [urlStatus, setUrlStatus] = useState(null);
   const searchTimerRef = useRef(null);
+
+  // Importador de playlist de YouTube (pestaña "Playlist")
+  const [plInput,     setPlInput]     = useState("");
+  const [plLoading,   setPlLoading]   = useState(false);
+  const [plPreview,   setPlPreview]   = useState([]);   // [{ytId,title,artist,thumb}]
+  const [plElegidos,  setPlElegidos]  = useState(() => new Set());
+  const [plImporting, setPlImporting] = useState(false);
 
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -122,6 +223,58 @@ export default function PlaylistsPanel() {
     if (result?.duplicate) {
       setUrlStatus({type:"error", text:"Este tema ya está en la playlist"});
       setTimeout(()=>setUrlStatus(null), 2500);
+    }
+  };
+
+  // Paso 1 del import: leer la playlist de YouTube y mostrarla.
+  // Reusa fetchYoutubePlaylist — el mismo lector paginado que ya alimentaba las
+  // playlists del cliente. No hay una segunda implementación del paginado.
+  const handleFetchPlaylist = async () => {
+    if (!plInput.trim()) return;
+    setPlLoading(true);
+    setUrlStatus(null);
+    setPlPreview([]);
+    setPlElegidos(new Set());
+    const { videos, error } = await fetchYoutubePlaylist(plInput);
+    setPlLoading(false);
+    if (error) { setUrlStatus({type:"error", text:error}); return; }
+    setPlPreview(videos);
+    // Vienen todos tildados menos los que la playlist ya tiene.
+    const playlist = playlists.find(pl => pl.id === addingTo);
+    const yaEstan = new Set((playlist?.items || []).map(i => i.yt_id));
+    setPlElegidos(new Set(videos.filter(v => !yaEstan.has(v.ytId)).map(v => v.ytId)));
+    setUrlStatus({type:"info", text:`Se encontraron ${videos.length} temas. Revisá y confirmá.`});
+  };
+
+  const togglePlElegido = (ytId) => {
+    setPlElegidos(prev => {
+      const next = new Set(prev);
+      if (next.has(ytId)) next.delete(ytId); else next.add(ytId);
+      return next;
+    });
+  };
+
+  // Paso 2: importar los tildados, en el orden de YouTube.
+  const handleImportPlaylist = async () => {
+    if (!addingTo || !plElegidos.size) return;
+    setPlImporting(true);
+    setUrlStatus({type:"info", text:"Importando…"});
+    try {
+      const elegidos = plPreview.filter(v => plElegidos.has(v.ytId));
+      const r = await importItemsToPlaylist(addingTo, elegidos);
+      const partes = [`${r.agregadas} agregada${r.agregadas === 1 ? "" : "s"}`];
+      if (r.omitidas) partes.push(`${r.omitidas} omitida${r.omitidas === 1 ? "" : "s"} (ya estaban)`);
+      if (r.errores)  partes.push(`${r.errores} con error`);
+      setUrlStatus({
+        type: r.errores ? "error" : "success",
+        text: (r.errores ? "⚠ " : "✓ ") + partes.join(" · ") +
+              (r.detalleErrores?.length ? " — " + r.detalleErrores.join("; ") : ""),
+      });
+      if (!r.errores) { setPlPreview([]); setPlElegidos(new Set()); setPlInput(""); }
+    } catch (err) {
+      setUrlStatus({type:"error", text: err?.message || String(err)});
+    } finally {
+      setPlImporting(false);
     }
   };
 
@@ -614,6 +767,9 @@ export default function PlaylistsPanel() {
                     setSearchResults([]);
                     setUrlInput("");
                     setUrlStatus(null);
+                    setPlInput("");
+                    setPlPreview([]);
+                    setPlElegidos(new Set());
                   }}
                   style={{
                     width:"100%",padding:"10px",
@@ -646,7 +802,17 @@ export default function PlaylistsPanel() {
                           color:addTab==="url"?"#F0E8FF":"#7A6E8A",
                           fontSize:11,fontWeight:600,cursor:"pointer",
                         }}>
-                        🔗 URL
+                        🔗 Video
+                      </button>
+                      <button onClick={()=>setAddTab("playlist")}
+                        style={{
+                          flex:1,padding:"6px 10px",borderRadius:6,
+                          border:`1px solid ${addTab==="playlist"?"#9B2FFF":"#9B2FFF33"}`,
+                          background:addTab==="playlist"?"#9B2FFF22":"transparent",
+                          color:addTab==="playlist"?"#F0E8FF":"#7A6E8A",
+                          fontSize:11,fontWeight:600,cursor:"pointer",
+                        }}>
+                        📋 Playlist
                       </button>
                       <button onClick={()=>{setAddingTo(null);setUrlStatus(null);}}
                         style={{padding:"6px 10px",borderRadius:6,border:"1px solid #FF2D7844",background:"transparent",color:"#FF2D78",fontSize:11,fontWeight:600,cursor:"pointer"}}>
@@ -726,6 +892,79 @@ export default function PlaylistsPanel() {
                       </div>
                     )}
 
+                    {addTab === "playlist" && (
+                      <div>
+                        <div style={{display:"flex",gap:6,marginBottom:8}}>
+                          <input
+                            type="text"
+                            value={plInput}
+                            onChange={e=>setPlInput(e.target.value)}
+                            onKeyDown={e=>e.key==="Enter"&&handleFetchPlaylist()}
+                            placeholder="https://youtube.com/playlist?list=... o el ID de la lista"
+                            style={{flex:1,background:"#1A0D2E",border:"1px solid #9B2FFF44",color:"#F0E8FF",padding:"8px 12px",borderRadius:6,fontSize:13,outline:"none"}}
+                          />
+                          <button onClick={handleFetchPlaylist} disabled={!plInput.trim()||plLoading}
+                            style={{background:"#9B2FFF",border:"none",color:"white",padding:"8px 14px",borderRadius:6,cursor:plInput.trim()&&!plLoading?"pointer":"not-allowed",fontSize:12,fontWeight:700,opacity:plInput.trim()&&!plLoading?1:.5,whiteSpace:"nowrap"}}>
+                            {plLoading ? "Leyendo…" : "Traer temas"}
+                          </button>
+                        </div>
+                        <div style={{fontSize:10,color:"#7A6E8A",lineHeight:1.4,marginBottom:8}}>
+                          Se importan hasta 150 temas, en el orden de YouTube. Los que ya están en
+                          esta playlist se destildan solos.
+                        </div>
+
+                        {plPreview.length > 0 && (
+                          <>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                              <div style={{flex:1,fontSize:11,color:"#F0E8FF",fontWeight:700}}>
+                                {plElegidos.size} de {plPreview.length} seleccionados
+                              </div>
+                              <button onClick={()=>setPlElegidos(new Set(plPreview.map(v=>v.ytId)))}
+                                style={{background:"transparent",border:"1px solid #9B2FFF44",color:"#9B2FFF",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:5,cursor:"pointer"}}>
+                                Todos
+                              </button>
+                              <button onClick={()=>setPlElegidos(new Set())}
+                                style={{background:"transparent",border:"1px solid #9B2FFF44",color:"#7A6E8A",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:5,cursor:"pointer"}}>
+                                Ninguno
+                              </button>
+                            </div>
+                            <div className="pl-scroll" style={{maxHeight:280,overflowY:"auto",marginBottom:8}}>
+                              {plPreview.map((v,idx) => {
+                                const yaEsta = playlist.items?.some(i => i.yt_id === v.ytId);
+                                const tildado = plElegidos.has(v.ytId);
+                                return (
+                                  <div key={v.ytId} onClick={()=>togglePlElegido(v.ytId)}
+                                    style={{
+                                      display:"flex",alignItems:"center",gap:9,padding:6,
+                                      borderRadius:6,marginBottom:4,cursor:"pointer",
+                                      background:tildado?"#9B2FFF18":"transparent",
+                                      opacity:yaEsta&&!tildado?.55:1,
+                                    }}>
+                                    <input type="checkbox" readOnly checked={tildado}
+                                      style={{accentColor:"#9B2FFF",flexShrink:0,pointerEvents:"none"}}/>
+                                    <span style={{fontSize:10,color:"#7A6E8A",width:22,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
+                                    <img src={v.thumb} alt="" style={{width:54,height:34,borderRadius:4,objectFit:"cover",flexShrink:0}}/>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:12,color:"#F0E8FF",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                                        {v.title}
+                                      </div>
+                                      <div style={{fontSize:10,color:"#7A6E8A"}}>
+                                        {yaEsta ? "Ya está en la playlist" : (v.artist || "—")}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <button onClick={handleImportPlaylist} disabled={!plElegidos.size||plImporting}
+                              style={{width:"100%",background:"#00F5A0",border:"none",color:"#08040F",padding:"9px 14px",borderRadius:6,cursor:plElegidos.size&&!plImporting?"pointer":"not-allowed",fontSize:12,fontWeight:800,opacity:plElegidos.size&&!plImporting?1:.5}}>
+                              {plImporting ? "Importando…" : `Importar ${plElegidos.size} tema${plElegidos.size===1?"":"s"}`}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     {urlStatus && (
                       <div style={{
                         marginTop:8,padding:"6px 10px",borderRadius:6,
@@ -748,7 +987,7 @@ export default function PlaylistsPanel() {
 
                 {playlist.items?.map(item => (
                   <div key={item.id} style={{
-                    display:"flex",alignItems:"center",gap:10,
+                    display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",
                     padding:8,borderRadius:8,marginBottom:4,
                     background:"#08040F66",
                   }}>
@@ -766,6 +1005,7 @@ export default function PlaylistsPanel() {
                         </div>
                       )}
                     </div>
+                    <FilaRecorte item={item} onGuardar={setItemTrims}/>
                     <button onClick={()=>removeItemFromPlaylist(item.id)}
                       title="Quitar de la playlist"
                       style={{background:"transparent",border:"1px solid #FF2D7844",color:"#FF2D78",fontSize:11,padding:"4px 9px",borderRadius:6,cursor:"pointer",flexShrink:0}}>

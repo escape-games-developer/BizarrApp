@@ -235,6 +235,104 @@ export function useInternalPlaylists() {
     return data;
   }, [playlists]);
 
+  /**
+   * Alta en lote — el import de una playlist de YouTube entra por acá.
+   *
+   * Devuelve { agregadas, omitidas, errores, detalleErrores } para que el panel
+   * pueda cantar el resultado real: sin esto, una importación parcial se vería
+   * igual que una completa.
+   *
+   * Los duplicados se filtran ANTES de escribir (por yt_id, contra lo que ya
+   * tiene la playlist y contra el propio lote, que puede traer repetidos de
+   * YouTube). La base igual los rechazaría — existe UNIQUE (playlist_id, yt_id)
+   * —, pero entonces caería el INSERT entero y no habría forma de decir cuáles
+   * eran nuevos. El orden de llegada se respeta: es el de YouTube.
+   */
+  const importItemsToPlaylist = useCallback(async (playlistId, entrantes) => {
+    const vacio = { agregadas: 0, omitidas: 0, errores: 0, detalleErrores: [] };
+    if (!playlistId || !Array.isArray(entrantes) || !entrantes.length) return vacio;
+
+    // Estado real de la playlist, leído de la base y no del cache local: entre
+    // el preview y el import pudo entrar otro tema desde otra pestaña.
+    const { data: actuales, error: eLeer } = await supabase
+      .from("playlist_items")
+      .select("yt_id, position")
+      .eq("playlist_id", playlistId);
+    if (eLeer) return { ...vacio, errores: entrantes.length, detalleErrores: [eLeer.message] };
+
+    const yaEstan = new Set((actuales || []).map((i) => i.yt_id));
+    let pos = (actuales || []).reduce((m, i) => Math.max(m, i.position || 0), 0);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const filas = [];
+    let omitidas = 0;
+    for (const v of entrantes) {
+      if (!v?.ytId) { omitidas += 1; continue; }
+      if (yaEstan.has(v.ytId)) { omitidas += 1; continue; }
+      yaEstan.add(v.ytId);
+      pos += 1;
+      filas.push({
+        playlist_id: playlistId,
+        yt_id:       v.ytId,
+        title:       v.title || "Sin título",
+        artist:      v.artist || null,
+        thumb_url:   v.thumb || null,
+        position:    pos,
+        added_by:    user?.id || null,
+      });
+    }
+    if (!filas.length) { await fetchAll(); return { ...vacio, omitidas }; }
+
+    // Un solo INSERT en el caso normal. Si algo lo rechaza (una carrera contra
+    // otra pestaña, un título imposible), se reintenta fila por fila para saber
+    // exactamente cuáles entraron en vez de perder el lote entero.
+    const { data, error } = await supabase.from("playlist_items").insert(filas).select("id");
+    if (!error) {
+      await fetchAll();
+      return { agregadas: data?.length ?? filas.length, omitidas, errores: 0, detalleErrores: [] };
+    }
+
+    let agregadas = 0, errores = 0;
+    const detalleErrores = [];
+    for (const fila of filas) {
+      const { error: eUna } = await supabase.from("playlist_items").insert(fila);
+      if (!eUna) { agregadas += 1; continue; }
+      if (eUna.code === "23505") { omitidas += 1; continue; }
+      errores += 1;
+      if (detalleErrores.length < 3) detalleErrores.push(`${fila.title}: ${eUna.message}`);
+    }
+    await fetchAll();
+    return { agregadas, omitidas, errores, detalleErrores };
+  }, [fetchAll]);
+
+  /**
+   * Recorte de un tema del catálogo: desde qué segundo arranca y en cuál se da
+   * por terminado. Son los mismos nombres que usa `pantalla_playlist_items`,
+   * así el puente de FTL los copia sin traducir y el motor de la TV los honra.
+   *
+   * La base tiene los CHECK (inicio >= 0, fin > inicio), pero se valida acá
+   * también para devolver un mensaje legible en vez del texto del constraint.
+   */
+  const setItemTrims = useCallback(async (itemId, { start, end }) => {
+    const ini = Number(start) || 0;
+    const fin = end === "" || end === null || end === undefined ? null : Number(end);
+    if (!Number.isFinite(ini) || ini < 0) return { error: "El inicio no puede ser negativo." };
+    if (fin !== null && (!Number.isFinite(fin) || fin <= ini)) {
+      return { error: "El fin tiene que ser mayor que el inicio." };
+    }
+    const { data, error } = await supabase
+      .from("playlist_items")
+      .update({ trim_start_seconds: ini, trim_end_seconds: fin })
+      .eq("id", itemId)
+      .select("id");
+    if (error) return { error: error.message };
+    // La RLS filtra sin devolver error: 0 filas no es un guardado exitoso.
+    if (!data?.length) return { error: "No se pudo guardar (sin permisos sobre este tema)." };
+    await fetchAll();
+    return { error: null };
+  }, [fetchAll]);
+
   const removeItemFromPlaylist = useCallback(async (itemId) => {
     setPlaylists(prev => prev.map(p => ({
       ...p,
@@ -384,6 +482,8 @@ export function useInternalPlaylists() {
     setPlaylistCategories,
     // Items CRUD
     addItemToPlaylist,
+    importItemsToPlaylist,
+    setItemTrims,
     removeItemFromPlaylist,
     addByUrl,
     // Categorías CRUD

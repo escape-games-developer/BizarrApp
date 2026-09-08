@@ -364,8 +364,14 @@ export function EscenarioScreen({ gameState, sessionId }) {
     karaoke: { label:"SI LO SABE CANTE",    col:C.purple, glow:"rgba(155,47,255,.4)",  sub:"El micrófono es tuyo" },
   };
   const info     = INFO[type] || INFO.duelo;
-  const name     = gameState?.escenario_participant || null;
-  const avatar   = gameState?.escenario_avatar     || "🎤";
+  // `escenario_participant` es jsonb: hoy llega como snapshot
+  // { user_id, name, avatar_emoji } desde launchEscenario. Se acepta también
+  // el string suelto de las versiones viejas — un objeto renderizado directo
+  // como hijo de React reventaba la pantalla entera.
+  const part     = gameState?.escenario_participant ?? null;
+  const name     = typeof part === "string" ? part : part?.name || null;
+  const avatar   = (typeof part === "object" ? part?.avatar_emoji : null) || "🎤";
+  const cancion  = gameState?.escenario_video?.ytTitle || null;
 
   return (
     <div className="escenario" style={{position:"relative"}}>
@@ -388,6 +394,7 @@ export function EscenarioScreen({ gameState, sessionId }) {
           fontSize:"clamp(60px,10vw,130px)",animation:"float 4s ease-in-out infinite"
         }}>{avatar}</div>
       )}
+      {cancion && <div className="esc-sub" style={{opacity:.72}}>🎵 {cancion}</div>}
       <div className="esc-sub">{info.sub}</div>
     </div>
   );
