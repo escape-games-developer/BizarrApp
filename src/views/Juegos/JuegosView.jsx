@@ -5,6 +5,7 @@ import { TEAMS }             from "../../constants/theme";
 import DueloCard             from "./DueloCard";
 import DueloVistaCompleta    from "./DueloVistaCompleta";
 import { useSumateRound }    from "../../hooks/realtime/useSumateRound";
+import { useArmaPalabraRound } from "../../hooks/realtime/useArmaPalabraRound";
 
 // ─── Standby ──────────────────────────────────────────────────────────────────
 function GameStandby() {
@@ -334,51 +335,106 @@ function SumaElNumero({ user, sessionId }) {
 }
 
 // ─── Formá la Palabra ──────────────────────────────────────────────────────
-function FormaLaPalabra({ user, gameState }) {
-  const word = gameState?.minijuego_payload?.target_word;
-  const assignedLetter = gameState?.minijuego_payload?.assigned_letter;
+function FormaLaPalabra({ user, sessionId }) {
+  // La ronda y la letra vienen de la base, no de game_state: antes la letra
+  // salía de `minijuego_payload.assigned_letter`, que es UNA para toda la
+  // sesión — todos los celulares mostraban la misma. Ahora es por persona.
+  //
+  // La letra se asigna SOLA: no hay ningún botón que tocar. El que entra con la
+  // ronda ya empezada recibe un señuelo, sin alterar la palabra ni las letras
+  // que ya están repartidas.
+  const { round, miLetra, loading } = useArmaPalabraRound(sessionId, { userId: user?.id ?? null });
 
-  if (!word || !assignedLetter) return (
-    <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
-      No hay datos del juego disponibles.
+  const header = (
+    <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Arma la palabra</h3></div>
+  );
+
+  if (loading) return (
+    <div>{header}
+      <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+        Cargando la ronda…
+      </div>
     </div>
   );
 
-  const letters = word.split("");
-  const myLetter = assignedLetter;
+  if (!round) return (
+    <div>{header}
+      <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+        Todavía no arrancó ninguna ronda.
+      </div>
+    </div>
+  );
 
-  return (
-    <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Arma la palabra</h3></div>
-      <div style={{ textAlign: "center", marginBottom: 12, fontSize: 11, color: "rgba(245,230,192,.4)" }}>
-        Encontrá a los que tienen las otras letras
-      </div>
-      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 }}>
-        {letters.map((l, i) => (
-          <div key={i} style={{
-            width: 40, height: 44, borderRadius: 8,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 900,
-            background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)",
-            color: "rgba(245,230,192,.2)",
-          }}>_</div>
-        ))}
-      </div>
-      <div style={{
-        textAlign: "center", padding: "14px", marginBottom: 12,
-        background: "rgba(168,85,247,.1)", border: "1px solid rgba(168,85,247,.3)", borderRadius: 14,
-      }}>
-        <div style={{ fontSize: 11, color: "rgba(168,85,247,.7)", marginBottom: 4 }}>Tu letra</div>
-        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 52, fontWeight: 900, color: "#A855F7", lineHeight: 1 }}>
-          {myLetter}
+  // ── Ronda cerrada ─────────────────────────────────────────────────────────
+  if (round.status !== "playing") {
+    const grupo = round.winner_group || [];
+    const gane  = grupo.some((g) => g.user_id === user?.id);
+    if (round.status === "finished" && gane) return (
+      <div>{header}
+        <div style={{
+          textAlign:"center", padding:"34px 20px", borderRadius:20,
+          background:"linear-gradient(135deg, rgba(0,245,160,.16), rgba(168,85,247,.08))",
+          border:"1px solid rgba(0,245,160,.4)",
+        }}>
+          <div style={{fontSize:48,marginBottom:8}}>🏆</div>
+          <div style={{fontFamily:"Syne, sans-serif",fontWeight:900,fontSize:22,color:"#00F5A0",marginBottom:6}}>
+            ¡GANARON!
+          </div>
+          <div style={{fontSize:13,color:"rgba(245,230,192,.6)"}}>
+            Armaron la palabra correctamente.
+          </div>
         </div>
       </div>
+    );
+    return (
+      <div>{header}
+        <div style={{
+          textAlign:"center", padding:"34px 20px", borderRadius:18,
+          background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)",
+        }}>
+          <div style={{fontSize:40,marginBottom:10}}>🏁</div>
+          <div style={{fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:16,color:"rgba(245,230,192,.6)",marginBottom:6}}>
+            Ronda terminada
+          </div>
+          <div style={{fontSize:12.5,color:"rgba(245,230,192,.4)"}}>
+            {round.status === "finished"
+              ? "Armaron la palabra correctamente."
+              : "El staff cerró la ronda."}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ronda en curso ────────────────────────────────────────────────────────
+  // La PALABRA no se dibuja acá: vive sólo en la pantalla gigante, igual que el
+  // objetivo de Sumate. `round.target_word` llega en el estado de la ronda
+  // (lo necesitan /tv y el panel) pero esta vista no lo renderiza nunca.
+  return (
+    <div>
+      {header}
       <div style={{
-        padding: "12px 14px", background: "rgba(168,85,247,.06)",
-        border: "1px solid rgba(168,85,247,.14)", borderRadius: 10,
-        fontSize: 12, color: "rgba(168,85,247,.5)", textAlign: "center",
+        textAlign:"center", padding:"22px 16px", marginBottom:12, borderRadius:16,
+        background:"rgba(168,85,247,.1)", border:"1px solid rgba(168,85,247,.3)",
       }}>
-        Mostrá tu letra a otros jugadores y armá la palabra para ganar 🔤
+        <div style={{fontSize:11,color:"rgba(168,85,247,.8)",letterSpacing:".14em",fontWeight:700,marginBottom:6}}>
+          TU LETRA
+        </div>
+        <div style={{fontFamily:"Syne, sans-serif",fontSize:96,fontWeight:900,color:"#A855F7",lineHeight:1}}>
+          {miLetra ?? "…"}
+        </div>
+      </div>
+
+      {/* Ni la palabra, ni letras ajenas, ni nombres, ni la solución: hay que
+          mirar la TV y encontrarse en el bar. */}
+      <div style={{
+        padding:"14px", borderRadius:12, textAlign:"center", lineHeight:1.6,
+        background:"rgba(255,215,0,.06)", border:"1px solid rgba(255,215,0,.14)",
+        fontSize:12.5, color:"rgba(255,215,0,.6)",
+      }}>
+        Mirá la pantalla gigante.<br/>
+        Buscá a los jugadores que tengan las letras que necesitás, y
+        preséntense al staff en orden.
       </div>
     </div>
   );
@@ -417,7 +473,7 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
     case "rey del orto": gameContent = <ReyDelOrto user={user} gameState={gameState} />; break;
     case "trivia":       gameContent = <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} />; break;
     case "suma":         gameContent = <SumaElNumero user={user} sessionId={sessionId} />; break;
-    case "palabra":      gameContent = <FormaLaPalabra user={user} gameState={gameState} />; break;
+    case "palabra":      gameContent = <FormaLaPalabra user={user} sessionId={sessionId} />; break;
     default:             gameContent = <GameStandby />;
   }
 

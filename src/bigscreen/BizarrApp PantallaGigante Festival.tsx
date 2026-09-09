@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
+import { useArmaPalabraRound } from "../hooks/realtime/useArmaPalabraRound";
 import { supabase } from "../lib/supabase";
 import { useGameState } from "../hooks/realtime/useGameState";
 import { useMessages }  from "../hooks/realtime/useMessages";
@@ -309,6 +310,20 @@ export function TriviaScreen({ gameState, sessionId }) {
   const membPct = pcts?.membrillo ?? 50;
   const winner = gameState?.trivia_winner_team;
 
+  // Reposo CON el juego en el aire: es donde queda la TV después de "🔁 Nueva
+  // partida", mientras el operador carga las preguntas de la siguiente. Sin
+  // esta rama caía en la de pregunta y mostraba "PREGUNTA 1 · VOTACIÓN
+  // ABIERTA" con el enunciado vacío.
+  if (phase === "idle" || !roundId) return (
+    <div className="trivia" style={{position:"relative"}}>
+      <Orbs colors={["rgba(155,47,255,.15)","rgba(255,45,120,.1)","rgba(0,229,255,.06)"]}/>
+      <div className="trivia-title">🧠 DESAFÍO DEMENTE!</div>
+      <div style={{fontSize:"clamp(16px,2vw,34px)",opacity:.55,letterSpacing:".08em"}}>
+        PREPARANDO NUEVO DESAFÍO…
+      </div>
+    </div>
+  );
+
   return (
     <div className="trivia" style={{position:"relative"}}>
       <Orbs colors={["rgba(155,47,255,.15)","rgba(255,45,120,.1)","rgba(0,229,255,.06)"]}/>
@@ -430,6 +445,110 @@ export function SumaScreen({ sessionId }) {
       <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
         fontSize:"clamp(13px,1.5vw,26px)",color:"rgba(240,232,255,.55)",letterSpacing:".05em",zIndex:2}}>
         MIRÁ TU NÚMERO EN EL CELULAR
+      </div>
+    </div>
+  );
+}
+
+
+// Arma la Palabra — pantalla gigante.
+//
+// Todo sale de `arma_palabra_rounds`: la palabra objetivo y, cuando el operador
+// valida, el grupo ganador EN ORDEN. Las letras individuales no se proyectan
+// mientras la ronda vive — el juego es encontrarse en el bar, no leer la
+// pantalla. La palabra es el elemento visual principal.
+export function PalabraScreen({ sessionId }) {
+  const { round } = useArmaPalabraRound(sessionId, { admin: false, userId: null });
+
+  if (!round) return (
+    <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
+      Preparando la ronda…
+    </div>
+  );
+
+  // Casillero de letra reutilizado por las dos fases.
+  const Ficha = ({ letra, color, borde, fondo }) => (
+    <div style={{
+      minWidth:"7vh", height:"9.5vh", padding:"0 1.4vh", borderRadius:"1.2vh",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:"6vh",
+      background:fondo, border:`0.4vh solid ${borde}`, color,
+    }}>{letra}</div>
+  );
+
+  // ── Ganador ──
+  if (round.status === "finished" && round.winner_group?.length) {
+    const grupo = round.winner_group;
+    return (
+      <div style={{position:"absolute",inset:0,
+        background:"radial-gradient(ellipse at center,rgba(0,245,160,.14),#08040F 70%)",
+        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2.4vh",
+        padding:"4vh 4vw",overflow:"hidden"}}>
+        <Orbs colors={["rgba(0,245,160,.2)","rgba(168,85,247,.12)","rgba(255,214,0,.08)"]}/>
+        <Confetti/>
+        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+          fontSize:"clamp(28px,4.4vw,82px)",color:"#00F5A0",textAlign:"center",zIndex:2}}>
+          🏆 ¡ARMARON LA PALABRA!
+        </div>
+        <div style={{display:"flex",gap:"0.8vw",flexWrap:"wrap",justifyContent:"center",zIndex:2}}>
+          {grupo.map((g) => (
+            <Ficha key={g.user_id} letra={g.assigned_letter}
+              color="#00F5A0" borde="rgba(0,245,160,.5)" fondo="rgba(0,245,160,.1)"/>
+          ))}
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:"1vw",zIndex:2,marginTop:"1vh"}}>
+          {grupo.map((g) => (
+            <div key={g.user_id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"0.5vh",
+              padding:"1.2vh 1.4vw",borderRadius:"1.2vh",background:"rgba(240,232,255,.05)",
+              border:"1px solid rgba(0,245,160,.3)"}}>
+              <div style={{fontSize:"3vh"}}>{g.avatar_emoji || "👤"}</div>
+              <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
+                fontSize:"clamp(12px,1.3vw,22px)",color:"#F0E8FF",textTransform:"uppercase"}}>{g.name}</div>
+              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+                fontSize:"clamp(16px,1.8vw,32px)",color:"#00F5A0",lineHeight:1}}>{g.assigned_letter}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
+          fontSize:"clamp(16px,2vw,34px)",color:"#F0E8FF",opacity:.85,zIndex:2}}>
+          🎉 GANADORES 🎉
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ronda en curso: la palabra manda la pantalla ──
+  return (
+    <div style={{position:"absolute",inset:0,
+      background:"radial-gradient(ellipse at center,rgba(168,85,247,.14),#08040F 70%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2vh",
+      padding:"4vh 4vw",overflow:"hidden"}}>
+      <Orbs colors={["rgba(168,85,247,.18)","rgba(255,45,120,.1)","rgba(0,229,255,.06)"]}/>
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+        fontSize:"clamp(22px,3.4vw,62px)",color:"#A855F7",letterSpacing:".04em",zIndex:2}}>
+        🔤 ARMA LA PALABRA
+      </div>
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
+        fontSize:"clamp(14px,1.8vw,32px)",color:"#FFD600",letterSpacing:".12em",zIndex:2}}>
+        FORMEN:
+      </div>
+      {/* La palabra es lo dominante. Se dibuja letra por letra para que se lea
+          de lejos y quede claro cuántas personas hacen falta. */}
+      <div style={{display:"flex",gap:"1vw",flexWrap:"wrap",justifyContent:"center",zIndex:2,
+        margin:"1vh 0 2vh"}}>
+        {round.target_word.split("").map((l, i) => (
+          <div key={i} style={{
+            minWidth:"11vh", height:"15vh", padding:"0 1.6vh", borderRadius:"1.6vh",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:"10vh",
+            background:"rgba(168,85,247,.12)", border:"0.5vh solid rgba(168,85,247,.5)",
+            color:"#C77DFF", textShadow:"0 0 40px rgba(168,85,247,.7)",
+          }}>{l}</div>
+        ))}
+      </div>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
+        fontSize:"clamp(13px,1.5vw,26px)",color:"rgba(240,232,255,.55)",letterSpacing:".05em",zIndex:2}}>
+        MIRÁ TU LETRA EN EL CELULAR
       </div>
     </div>
   );
@@ -820,6 +939,8 @@ export default function PantallaGigante() {
     content = <TriviaScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (gameState?.active_game === "suma") {
     content = <SumaScreen sessionId={session?.id ?? null}/>;
+  } else if (gameState?.active_game === "palabra") {
+    content = <PalabraScreen sessionId={session?.id ?? null}/>;
   } else if (hasEscenario) {
     content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (liveVideo && !hasGame) {

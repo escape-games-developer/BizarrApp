@@ -13,7 +13,7 @@ import { NotificationBell }     from "./components/NotificationBell";
 import { DueloTeaserBanner }    from "./components/DueloTeaserBanner";
 
 import { useYouTubePlaylistAdmin } from "./hooks/useYouTubePlaylists";
-import CartaView     from "./views/Carta/CartaView";
+import MenuFrame     from "./views/Carta/MenuFrame";
 import NovedadesView from "./views/Novedades/NovedadesView";
 import JuegosView    from "./views/Juegos/JuegosView";
 import EscenarioView from "./views/Escenario/EscenarioView";
@@ -114,7 +114,7 @@ export default function BizarrApp() {
 
   const renderContent = () => {
     switch (view) {
-      case "menu":       return <CartaView />;
+      case "menu":       return <MenuFrame />;
       case "novedades":  return <NovedadesView banners={banners} loading={bannersLoading} />;
       case "games":
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
@@ -145,7 +145,7 @@ export default function BizarrApp() {
         }
         return <ProfileView user={user} onSave={updateUser} onRegister={register}
                  regStep={regStep} setRegStep={setRegStep}/>;
-      default: return <CartaView />;
+      default: return <MenuFrame />;
     }
   };
 

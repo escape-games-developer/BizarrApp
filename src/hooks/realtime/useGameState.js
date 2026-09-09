@@ -331,13 +331,38 @@ export function useAdminControls(sessionId) {
     update({ trivia_state: "finished", trivia_winner_team: winnerTeam }),
   [update]);
 
+  // Cierra el juego: limpia el estado vivo del desafío y lo saca del aire, así
+  // la TV vuelve sola a su capa base (DJ Democracy). Mismo contrato que
+  // `resetRaffle` — soltar `active_game` y nada más: no se avanza la canción
+  // del DJ, que sigue sonando donde estaba.
+  //
+  // `trivia_coupon` también se limpia: es el premio DE ESA partida y, sin esto,
+  // el cupón viejo sobrevivía a la ronda y aparecía como premio de la
+  // siguiente sin que nadie lo hubiera configurado.
   const resetTrivia = useCallback(() =>
     update({
       trivia_state:       "idle",
       trivia_question:    0,
       trivia_winner_team: null,
       trivia_round_id:    null,
+      trivia_coupon:      null,
       active_game:        null,
+    }),
+  [update]);
+
+  // Otra partida del MISMO juego: limpia la ronda terminada pero deja el
+  // Desafío en el aire (`active_game` intacto), así la TV se queda en el
+  // standby del juego mientras el operador carga las preguntas siguientes, en
+  // vez de rebotar a DJ Democracy y volver. Es la diferencia con `resetTrivia`,
+  // que ABANDONA el juego.
+  const newTriviaRound = useCallback(() =>
+    update({
+      trivia_state:       "idle",
+      trivia_question:    0,
+      trivia_winner_team: null,
+      trivia_round_id:    null,
+      trivia_coupon:      null,
+      active_game:        "trivia",
     }),
   [update]);
 
@@ -690,7 +715,7 @@ export function useAdminControls(sessionId) {
   return {
     announceGame, activateGame, deactivateGame,
     launchRaffle, drawRaffleWinner, resetRaffle, nuevaRondaRaffle,
-    startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia,
+    startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia, newTriviaRound,
     activateEscenario, deactivateEscenario,
     startDuelo, revealDuelo,
     openDueloInvitation, selectDueloParticipant, launchDueloVideo, closeDuelo,

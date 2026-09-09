@@ -24,10 +24,13 @@ import { supabase } from "../lib/supabase";
  * Vuelven al valor con el que nace la fila (ver `supabase/schema.sql`).
  *
  * Quedan deliberadamente afuera:
- *  - `raffle_prize` y `trivia_coupon`: configuración de la casa, no overlay.
+ *  - `raffle_prize`: configuración de la casa, no overlay.
  *  - `zocalo_active` y `screen_audio_enabled`: modos de operación de la
  *    pantalla, no un juego anterior.
  *  - `webapp_banner`: columna sin uso en el código.
+ *
+ * `trivia_coupon` SÍ entra (antes no): es el premio de una partida concreta,
+ * y el de la noche anterior aparecía como premio de la jornada nueva.
  */
 export const CAMPOS_NEUTROS_JORNADA = Object.freeze({
   // Capas principales
@@ -44,6 +47,9 @@ export const CAMPOS_NEUTROS_JORNADA = Object.freeze({
   trivia_question:       0,
   trivia_round_id:       null,
   trivia_winner_team:    null,
+  // El cupón es el premio DE UNA partida, no configuración de la casa: sin
+  // limpiarlo, el de anoche aparecía como premio de la jornada nueva.
+  trivia_coupon:         null,
   // Duelo de Talentos
   duelo_state:           "idle",
   duelo_slot1:           null,

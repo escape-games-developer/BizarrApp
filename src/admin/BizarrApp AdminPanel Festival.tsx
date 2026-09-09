@@ -28,6 +28,7 @@ import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { iniciarJornada } from "../services/jornada";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
+import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInvalida, MAX_PALABRAS } from "../hooks/realtime/useArmaPalabraRound";
 import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
 import {
   RaffleScreen,
@@ -1920,74 +1921,383 @@ function SumaPanel({sec, controls, sessionId, gameState}){
 // ══════════════════════════════════════════════════════════════════════════
 // FORMÁ LA PALABRA
 // ══════════════════════════════════════════════════════════════════════════
-function PalabraPanel({sec}){
-  const WORDS = [];
-  const [phase, setPhase] = useState("idle");
-  const [word,  setWord]  = useState("");
-  const [cd,    setCd]    = useState(90);
-  const cdRef = useRef(null);
+// Arma la Palabra — ronda multiusuario.
+//
+// Mismo contrato operativo que Sumate que Sumamos. La diferencia de fondo es
+// que acá IMPORTA EL ORDEN: el operador selecciona a la gente en el orden en
+// que se paró y eso es lo que forma la palabra. Por eso `seleccion` es un
+// ARRAY ordenado y no un set.
+//
+// La palabra la escribe el operador; las letras las reparte el servidor.
+function PalabraPanel({sec, controls, sessionId, gameState}){
+  const COL = "#A855F7";
+  const { round, assignments, lanzarRonda, validarGrupo, cancelarRonda } =
+    useArmaPalabraRound(sessionId, { admin: true });
 
-  const launch = () => {
-    setPhase("active"); setCd(90);
-    cdRef.current = setInterval(()=>setCd(c=>{ if(c<=1){clearInterval(cdRef.current);setPhase("finished");return 0;}return c-1;}),1000);
+  const [palabra,   setPalabra]   = useState("");   // input en curso
+  const [palabras,  setPalabras]  = useState([]);   // lista de la partida (máx 10)
+  const [usadas,    setUsadas]    = useState([]);   // ya lanzadas en esta partida
+  const [seleccion, setSeleccion] = useState([]);   // user_ids EN ORDEN
+  const [conectados, setConectados] = useState(null);
+  const [busy,  setBusy]  = useState(false);
+  const [err,   setErr]   = useState(null);
+  const [nota,  setNota]  = useState(null);
+
+  const enElAire = gameState?.active_game === "palabra";
+  const enJuego  = round?.status === "playing";
+  const conGanador = round?.status === "finished" && !!round?.winner_group;
+
+  // Presencia: misma ventana de 2 minutos y misma tabla que Rey del Orto y
+  // Sumate. No se inventa una fuente nueva de "tiene la app abierta".
+  const leerConectados = useCallback(async () => {
+    if (!sessionId) { setConectados(null); return; }
+    const { data, error } = await supabase
+      .from("connected_users").select("user_id,last_seen").eq("session_id", sessionId);
+    if (error) { setErr("No pudimos leer los conectados."); return; }
+    setConectados(data || []);
+  }, [sessionId]);
+  useEffect(() => { leerConectados(); }, [leerConectados, round?.id]);
+  const activos = (conectados || []).filter(reyActivo).length;
+
+  // Al cambiar de ronda se suelta la selección: los user_id de la anterior no
+  // valen nada en la nueva.
+  useEffect(() => { setSeleccion([]); }, [round?.id]);
+
+  const correr = async (fn) => {
+    if (busy) return;
+    setBusy(true); setErr(null); setNota(null);
+    try { await fn(); }
+    catch (e) { setErr(e?.message || String(e)); }
+    finally { setBusy(false); }
   };
-  useEffect(()=>()=>clearInterval(cdRef.current),[]);
+
+  // Lo que va a quedar realmente: el RPC normaliza igual del otro lado.
+  // ── Lista de la partida (UI local, no se persiste) ────────────────────────
+  // El operador prepara hasta 10 palabras y después elige cuál lanzar. No hay
+  // catálogo global: es la lista de ESTA partida.
+  const palabraNorm  = normalizarPalabra(palabra);
+  const motivo       = palabra.trim() ? motivoPalabraInvalida(palabraNorm) : null;
+  const yaEsta       = palabras.includes(palabraNorm);
+  const puedeAgregar = palabraValida(palabraNorm) && !yaEsta && palabras.length < MAX_PALABRAS;
+
+  const agregarPalabra = () => {
+    if (!puedeAgregar) return;
+    setPalabras((ps) => [...ps, palabraNorm]);
+    setPalabra("");
+  };
+  const quitarPalabra = (w) => setPalabras((ps) => ps.filter((x) => x !== w));
+
+  // Cuánta gente hace falta para una palabra: uno por letra, porque el reparto
+  // entrega cada letra al menos una vez.
+  const alcanzaGente = (w) => activos >= w.length;
+
+  const lanzar = (w) => correr(async () => {
+    const r = await lanzarRonda(w);
+    const e = await controls?.activateGame("palabra");
+    if (e?.error) throw new Error(e.error.message || String(e.error));
+    setUsadas((u) => (u.includes(w) ? u : [...u, w]));
+    setNota(`🚀 Ronda lanzada — ${r?.target_word} (${r?.letters} letras) entre ${r?.participants} jugadores.`);
+  });
+
+  // Toggle que CONSERVA EL ORDEN: al agregar, va al final; al sacar, se cierra
+  // el hueco y los que siguen suben una posición.
+  const toggle = (userId) => setSeleccion((s) =>
+    s.includes(userId) ? s.filter((x) => x !== userId) : [...s, userId]);
+
+  const validar = () => correr(async () => {
+    const res = await validarGrupo(seleccion);
+    if (res?.ok) setNota(`🎯 ¡Armaron ${res.target}!`);
+    else setErr(`Formaron "${res?.formed}" y la palabra es "${res?.target}".`);
+  });
+
+  // Vuelve a la pantalla de selección SIN salir del juego: la TV queda en el
+  // standby y el operador elige la palabra siguiente de la lista.
+  const nuevaPalabra = () => correr(async () => {
+    if (enJuego) await cancelarRonda();
+    setSeleccion([]);
+    setNota("🔁 Elegí la palabra siguiente.");
+  });
+
+  // Cierra el juego: cancela la ronda viva (si la hay) y lo saca del aire. La
+  // TV vuelve sola a DJ Democracy — mismo contrato que Sumate y Trivia, sin
+  // avanzar la canción del DJ.
+  const finalizarJuego = () => correr(async () => {
+    if (enJuego) await cancelarRonda();
+    const e = await controls?.deactivateGame();
+    if (e?.error) throw new Error(e.error.message || String(e.error));
+    setSeleccion([]);
+    setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
+  });
+
+  const objetivo = round?.target_word || "";
+  const porId = new Map(assignments.map((a) => [a.user_id, a]));
+  // La palabra que se está formando, en el orden de selección.
+  const formada = seleccion.map((id) => porId.get(id)?.assigned_letter || "?").join("");
+  const completa = formada.length === objetivo.length;
+  const coincide = completa && formada === objetivo;
+  const puedeValidar = coincide && enJuego && !busy;
+
+  const salida = (
+    <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
+      🎵 Finalizar juego y volver a DJ Democracy
+    </button>
+  );
+
+  // Casilleros de la palabra: se van llenando con lo que el operador arma.
+  const casilleros = (
+    <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginBottom:10}}>
+      {objetivo.split("").map((letraObj, i) => {
+        const puesta = formada[i];
+        const bien = puesta === letraObj;
+        return (
+          <div key={i} style={{width:34,height:42,borderRadius:9,display:"flex",
+            alignItems:"center",justifyContent:"center",
+            fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,
+            background: puesta ? (bien ? "rgba(0,245,160,.14)" : "rgba(255,45,120,.12)") : "rgba(240,232,255,.04)",
+            border: `1.5px solid ${puesta ? (bien ? "#00F5A0" : "#FF2D78") : "rgba(240,232,255,.12)"}`,
+            color: puesta ? (bien ? "#00F5A0" : "#FF2D78") : "rgba(240,232,255,.2)"}}>
+            {puesta || "_"}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {phase==="idle"&&(
-        <div className="card">
-          <div className="ctitle">Palabra objetivo</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-            {WORDS.map(w=>(
-              <button key={w} onClick={()=>setWord(w)} style={{
-                padding:"6px 12px",borderRadius:9,border:`1.5px solid ${w===word?"rgba(168,85,247,.5)":"rgba(240,232,255,.1)"}`,
-                background:w===word?"rgba(168,85,247,.12)":"rgba(240,232,255,.04)",
-                color:w===word?"#A855F7":"rgba(240,232,255,.45)",
-                fontFamily:"Syne,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                {w}
+      {err && (
+        <div className="card" style={{borderColor:"rgba(255,45,120,.4)", marginBottom:10}}>
+          <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700}}>✕ {err}</div>
+        </div>
+      )}
+      {!err && nota && (
+        <div className="card" style={{borderColor:"rgba(0,245,160,.3)", marginBottom:10}}>
+          <div style={{fontSize:11.5, color:"#00F5A0", fontWeight:700}}>{nota}</div>
+        </div>
+      )}
+
+      {/* ── Sin ronda viva: lista de palabras + elegir cuál lanzar ── */}
+      {!enJuego && !conGanador && (
+        <>
+          <div className="card" style={{marginBottom:10}}>
+            <div className="ctitle">🔤 Arma la palabra</div>
+            <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
+              Preparás hasta {MAX_PALABRAS} palabras y elegís cuál lanzar. El servidor
+              reparte SÓLO letras de esa palabra, lo más parejo posible: todas salen
+              al menos una vez, así siempre hay una combinación posible.
+            </p>
+
+            <div style={{display:"flex", gap:6, marginBottom:6}}>
+              <input className="inp" value={palabra} maxLength={8}
+                style={{flex:1, margin:0, textTransform:"uppercase", letterSpacing:2, fontWeight:700}}
+                onChange={e=>setPalabra(e.target.value)}
+                onKeyDown={e=>{ if(e.key === "Enter") agregarPalabra(); }}
+                placeholder="Nueva palabra (ej: DISCO)"/>
+              <button className="btn btn-p" style={{padding:"0 14px", whiteSpace:"nowrap"}}
+                disabled={!puedeAgregar} onClick={agregarPalabra}>➕</button>
+            </div>
+
+            {/* Por qué no se puede agregar. Un botón gris sin motivo es lo que
+                hace que el operador se quede mirando la pantalla. */}
+            {motivo && (
+              <div style={{fontSize:10.5, color:"#FCA5A5", marginBottom:8, lineHeight:1.5}}>{motivo}</div>
+            )}
+            {!motivo && yaEsta && (
+              <div style={{fontSize:10.5, color:"#FFD600", marginBottom:8}}>Esa palabra ya está en la lista.</div>
+            )}
+            {palabras.length >= MAX_PALABRAS && (
+              <div style={{fontSize:10.5, color:"#FFD600", marginBottom:8}}>Llegaste al máximo de {MAX_PALABRAS}.</div>
+            )}
+
+            <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", marginBottom:8}}>
+              {palabras.length} / {MAX_PALABRAS} palabras · 3 a 6 letras, sin repetir ninguna
+            </div>
+
+            {palabras.length === 0 && (
+              <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"10px 0"}}>
+                Todavía no cargaste ninguna palabra.
+              </div>
+            )}
+
+            {/* Cada palabra es su propio botón de lanzamiento: no hay un paso
+                intermedio de 'seleccionar' que se pueda desincronizar. */}
+            {palabras.map((w) => {
+              const usada = usadas.includes(w);
+              const alcanza = alcanzaGente(w);
+              return (
+                <div key={w} style={{display:"flex", alignItems:"center", gap:7, marginBottom:6,
+                  padding:"7px 8px", borderRadius:10, background:"rgba(240,232,255,.03)",
+                  border:"1px solid rgba(240,232,255,.08)", opacity: usada ? .55 : 1}}>
+                  <div style={{display:"flex", gap:3, flex:1, flexWrap:"wrap"}}>
+                    {w.split("").map((l,i2)=>(
+                      <div key={i2} style={{width:24,height:30,borderRadius:6,
+                        background:"rgba(168,85,247,.12)", border:"1px solid rgba(168,85,247,.3)",
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:13,color:COL}}>{l}</div>
+                    ))}
+                  </div>
+                  {usada && (
+                    <span style={{fontSize:9, color:"rgba(240,232,255,.35)"}}>ya jugada</span>
+                  )}
+                  <button className="btn btn-p" style={{padding:"5px 11px", fontSize:10, whiteSpace:"nowrap"}}
+                    disabled={busy || !alcanza} onClick={()=>lanzar(w)}>
+                    🚀 Lanzar
+                  </button>
+                  <button className="btn" style={{padding:"5px 8px", fontSize:10,
+                    background:"rgba(255,45,120,.06)", border:"1px solid rgba(255,45,120,.2)",
+                    color:"rgba(255,45,120,.7)"}}
+                    disabled={busy} onClick={()=>quitarPalabra(w)}>✕</button>
+                </div>
+              );
+            })}
+
+            {/* Aviso por palabra: con 4 conectados, DISCO (5) no se puede jugar
+                pero SOL (3) sí. */}
+            {palabras.some((w)=>!alcanzaGente(w)) && (
+              <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:4, lineHeight:1.5}}>
+                Con {activos} conectados no alcanza para:{" "}
+                {palabras.filter((w)=>!alcanzaGente(w)).join(", ")}.
+                {" "}Hace falta un participante por letra.
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div style={{display:"flex", alignItems:"center", gap:8}}>
+              <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
+                Participantes conectados
+              </div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22, color:COL}}>{activos}</div>
+              <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                onClick={leerConectados}>↻</button>
+            </div>
+            {enElAire && (
+              <>
+                <div style={{fontSize:10, color:"rgba(240,232,255,.3)", margin:"10px 0 6px", textAlign:"center"}}>
+                  Arma la Palabra sigue en el aire, esperando la palabra siguiente.
+                </div>
+                {salida}
+              </>
+            )}
+          </div>
+        </>
+      )}
+      {/* ── Ronda en curso: seleccionar EN ORDEN y validar ── */}
+      {enJuego && (
+        <>
+          <div className="card" style={{marginBottom:10, borderColor:"rgba(168,85,247,.3)"}}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
+              <div className="chip chip-live"><div className="dot-live"/>Ronda activa</div>
+              <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
+                {assignments.length} con letra
+              </div>
+            </div>
+            <div style={{textAlign:"center", padding:"4px 0 8px"}}>
+              <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>PALABRA OBJETIVO</div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:30, color:COL,
+                letterSpacing:3, lineHeight:1.3}}>
+                {objetivo}
+              </div>
+            </div>
+
+            {casilleros}
+
+            <div style={{padding:"9px", borderRadius:11, textAlign:"center",
+              background: coincide ? "rgba(0,245,160,.1)" : "rgba(240,232,255,.04)",
+              border: `1px solid ${coincide ? "#00F5A0" : "rgba(240,232,255,.1)"}`}}>
+              <div style={{fontSize:10.5,
+                color: coincide ? "#00F5A0" : completa ? "#FF2D78" : "rgba(240,232,255,.4)"}}>
+                {seleccion.length === 0 ? "Tocá a los jugadores EN EL ORDEN de la palabra"
+                  : coincide ? "🎯 ¡PALABRA CORRECTA!"
+                  : completa ? "Las letras no coinciden — revisá el orden"
+                  : `${formada.length} de ${objetivo.length} letras`}
+              </div>
+            </div>
+            {seleccion.length > 0 && (
+              <button className="btn btn-g btn-full" style={{marginTop:8, fontSize:10, padding:"5px"}}
+                disabled={busy} onClick={()=>setSeleccion([])}>
+                ✕ Limpiar selección
               </button>
-            ))}
+            )}
           </div>
-          <div style={{display:"flex",gap:5,justifyContent:"center",marginBottom:14}}>
-            {word.split("").map((l,i)=>(
-              <div key={i} style={{width:36,height:42,borderRadius:9,background:"rgba(168,85,247,.12)",
-                border:"1.5px solid rgba(168,85,247,.3)",display:"flex",alignItems:"center",
-                justifyContent:"center",fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,color:"#A855F7"}}>
-                {l}
+
+          <div className="card" style={{marginBottom:10}}>
+            <div className="ctitle">Participantes</div>
+            {assignments.length === 0 && (
+              <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"12px 0"}}>
+                Todavía nadie tiene letra. Los celulares la reciben solos al abrir el juego.
               </div>
-            ))}
+            )}
+            <div style={{maxHeight:280, overflowY:"auto"}}>
+              {assignments.map((a) => {
+                const pos = seleccion.indexOf(a.user_id);
+                const marcado = pos >= 0;
+                return (
+                  <button key={a.user_id} onClick={() => toggle(a.user_id)} disabled={busy}
+                    style={{display:"flex", alignItems:"center", gap:9, width:"100%", textAlign:"left",
+                      padding:"8px 9px", marginBottom:5, borderRadius:10, cursor: busy?"wait":"pointer",
+                      background: marcado ? "rgba(168,85,247,.14)" : "rgba(240,232,255,.03)",
+                      border: `1px solid ${marcado ? COL : "rgba(240,232,255,.08)"}`}}>
+                    {/* El número es la POSICIÓN en la palabra, no un check: es lo
+                        que le dice al operador en qué orden los fue tomando. */}
+                    <div style={{width:20, height:20, borderRadius:"50%", flexShrink:0,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      fontSize:10, fontWeight:900,
+                      background: marcado ? COL : "rgba(240,232,255,.06)",
+                      color: marcado ? "#fff" : "rgba(240,232,255,.25)"}}>
+                      {marcado ? pos + 1 : "·"}
+                    </div>
+                    <div style={{fontSize:17, flexShrink:0}}>{a.avatar_emoji || "👤"}</div>
+                    <div style={{flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"#F0E8FF",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{a.name}</div>
+                    <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20,
+                      color: marcado ? COL : "rgba(240,232,255,.45)"}}>{a.assigned_letter}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div style={{fontSize:11,color:"rgba(240,232,255,.4)",lineHeight:1.5,marginBottom:12}}>
-            Cada celular recibe una letra distinta. Los usuarios deben encontrarse
-            y llegar al escenario con la palabra completa.
+
+          <button className="btn btn-p btn-full" style={{marginBottom:8}}
+            disabled={!puedeValidar} onClick={validar}>
+            🏆 Validar grupo ganador
+          </button>
+          <div style={{fontSize:10, color:"rgba(240,232,255,.3)", textAlign:"center", marginBottom:10, lineHeight:1.5}}>
+            La palabra la vuelve a armar el servidor con las letras reales, en este orden.
           </div>
-          <button className="btn btn-p btn-full" onClick={launch}>▶ Lanzar</button>
-        </div>
+          {salida}
+        </>
       )}
-      {phase==="active"&&(
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-            <div className="chip chip-live"><div className="dot-live"/>En vivo</div>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#A855F7"}}>{cd}s</div>
+
+      {/* ── Ganador ── */}
+      {conGanador && (
+        <div className="card" style={{borderColor:"rgba(0,245,160,.3)"}}>
+          <div style={{textAlign:"center", marginBottom:12}}>
+            <div style={{fontSize:34, lineHeight:1}}>🏆</div>
+            <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:17, color:"#00F5A0", marginTop:6}}>
+              ¡Armaron {round.target_word}!
+            </div>
           </div>
-          <div style={{display:"flex",gap:5,justifyContent:"center",marginBottom:14}}>
-            {word.split("").map((l,i)=>(
-              <div key={i} style={{width:42,height:50,borderRadius:10,background:"rgba(168,85,247,.12)",
-                border:"1.5px solid rgba(168,85,247,.35)",display:"flex",alignItems:"center",
-                justifyContent:"center",fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#A855F7"}}>
-                {l}
+          {(round.winner_group || []).map((g) => (
+            <div key={g.user_id} className="qrow">
+              <div className="qavatar">{g.avatar_emoji || "👤"}</div>
+              <div className="qname" style={{flex:1}}>{g.name}</div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:18, color:"#00F5A0"}}>
+                {g.assigned_letter}
               </div>
-            ))}
+            </div>
+          ))}
+          <div style={{marginTop:12}}>
+            <button className="btn btn-g btn-full" style={{marginBottom:4}}
+              disabled={busy} onClick={nuevaPalabra}>
+              🔁 Nueva palabra
+            </button>
+            <div style={{fontSize:9.5, color:"rgba(240,232,255,.28)", margin:"0 0 10px", textAlign:"center", lineHeight:1.5}}>
+              Vuelve a la lista para elegir la siguiente. Sigue en Arma la Palabra:
+              la TV queda en la pantalla del juego. La ronda anterior queda en el histórico.
+            </div>
           </div>
-          <button className="btn btn-r btn-full" onClick={()=>{clearInterval(cdRef.current);setPhase("idle");}}>⏹ Detener</button>
-        </div>
-      )}
-      {phase==="finished"&&(
-        <div className="card" style={{textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:8}}>🏁</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:16,color:"#A855F7",marginBottom:12}}>Tiempo terminado</div>
-          <button className="btn btn-g btn-full" onClick={()=>setPhase("idle")}>↻ Nuevo juego</button>
+          {salida}
         </div>
       )}
     </div>
@@ -2008,7 +2318,9 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
   const [newOpts,  setNewOpts]  = useState(["","","",""]);
   const [newCorr,  setNewCorr]  = useState(0);
   const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
   const phase = gameState?.active_game === "trivia" ? gameState?.trivia_state || "idle" : "idle";
+  const enElAire = gameState?.active_game === "trivia";
   const curQ = gameState?.trivia_question ?? 0;
   const roundId = gameState?.trivia_round_id ?? null;
   const revealed = phase === "revealed";
@@ -2033,9 +2345,18 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
     setNewQ(""); setNewOpts(["","","",""]); setNewCorr(0);
   };
 
-  const launch = async () => {
+  // Toda acción pasa por acá: un solo vuelo a la vez y el error queda visible.
+  // Sin esto, un doble click en Lanzar insertaba las preguntas dos veces y uno
+  // en Siguiente salteaba una pregunta.
+  const correr = async (fn) => {
+    if (busy) return;
+    setBusy(true); setActionError(null);
+    try { await fn(); }
+    finally { setBusy(false); }
+  };
+
+  const launch = () => correr(async () => {
     if (!sessionId || !qs.length) return;
-    setActionError(null);
     const nextRound = crypto.randomUUID();
     const { error } = await supabase.from("trivia_questions").insert(qs.slice(0, MAX_TRIVIA_Q).map((q, question_idx) => ({
       session_id: sessionId, round_id: nextRound, question_idx,
@@ -2044,12 +2365,36 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
     if (error) { setActionError("No se pudieron guardar las preguntas."); return; }
     const result = await controls?.startTrivia(coupon, nextRound);
     if (result?.error) setActionError("No se pudo iniciar el desafío.");
-  };
+  });
 
-  const reveal = async () => { const r=await controls?.revealTriviaAnswer(); if(r?.error)setActionError("No se pudo revelar."); };
-  const next = async () => { const r=await controls?.nextTriviaQuestion(curQ); if(r?.error)setActionError("No se pudo avanzar."); };
-  const finish = async () => { const r=await controls?.finishTrivia(leader); if(r?.error)setActionError("No se pudo finalizar."); };
-  const reset = async () => { const r=await controls?.resetTrivia(); if(!r?.error){setQs([]);setCoupon("BEER50");}else setActionError("No se pudo resetear."); };
+  const reveal = () => correr(async () => { const r=await controls?.revealTriviaAnswer(); if(r?.error)setActionError("No se pudo revelar."); });
+  const next   = () => correr(async () => { const r=await controls?.nextTriviaQuestion(curQ); if(r?.error)setActionError("No se pudo avanzar."); });
+  const finish = () => correr(async () => { const r=await controls?.finishTrivia(leader); if(r?.error)setActionError("No se pudo finalizar."); });
+
+  // ── Las DOS salidas, que no son la misma cosa ─────────────────────────────
+  // · nuevaPartida  → sigue en Desafío Demente, listo para cargar otra ronda.
+  // · finalizarJuego→ abandona el juego; la TV vuelve a DJ Democracy.
+  // Las dos reutilizan controles de useAdminControls: acá no se arma ni un
+  // UPDATE a mano.
+  const nuevaPartida = () => correr(async () => {
+    const r = await controls?.newTriviaRound();
+    if (r?.error) setActionError("No se pudo preparar la partida nueva.");
+    else { setQs([]); setCoupon("BEER50"); }
+  });
+
+  const finalizarJuego = () => correr(async () => {
+    const r = await controls?.resetTrivia();
+    if (r?.error) setActionError("No se pudo cerrar el Desafío.");
+    else { setQs([]); setCoupon("BEER50"); }
+  });
+
+  // Botón de salida único, reutilizado en TODAS las fases: durante la partida,
+  // con el ganador en pantalla y en reposo con el juego al aire.
+  const salida = (
+    <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
+      🎵 Finalizar juego y volver a DJ Democracy
+    </button>
+  );
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
@@ -2118,9 +2463,20 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             </button>
           </div>
 
-          <button className="btn btn-p btn-full" onClick={launch} disabled={!qs.length}>
+          <button className="btn btn-p btn-full" onClick={launch} disabled={busy || !qs.length}>
             🧠 Lanzar Desafío Demente!
           </button>
+          {/* Reposo CON el juego en el aire — es donde deja "🔁 Nueva partida".
+              Sin esta salida, la única forma de bajar el Desafío de la TV era
+              lanzar otra partida y cerrarla. */}
+          {enElAire && (
+            <div className="card" style={{marginTop:10}}>
+              <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:6,textAlign:"center"}}>
+                Desafío Demente sigue en el aire, preparando la partida.
+              </div>
+              {salida}
+            </div>
+          )}
         </>
       )}
 
@@ -2164,20 +2520,20 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
           </div>
 
           <div style={{display:"flex",gap:7}}>
-            {!revealed&&<button className="btn btn-p" style={{flex:1}} onClick={reveal}>👁 Revelar</button>}
+            {!revealed&&<button className="btn btn-p" style={{flex:1}} disabled={busy} onClick={reveal}>👁 Revelar</button>}
             {revealed&&curQ<qs.length-1&&(
-              <button className="btn btn-p" style={{flex:1}} onClick={next}>
+              <button className="btn btn-p" style={{flex:1}} disabled={busy} onClick={next}>
                 ▶ Siguiente
               </button>
             )}
             {revealed&&curQ===qs.length-1&&(
               <button className="btn btn-p" style={{flex:1,background:"linear-gradient(135deg,#00F5A0,#00E5FF)",color:"#08040F"}}
-                onClick={finish}>
+                disabled={busy} onClick={finish}>
                 🏆 Ver ganador
               </button>
             )}
-            <button className="btn btn-r" onClick={reset}>⏹</button>
           </div>
+          <div style={{marginTop:8}}>{salida}</div>
         </div>
       )}
 
@@ -2192,9 +2548,14 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             Premio configurado: <strong style={{color:"#FFD600"}}>{coupon}</strong>. La entrega se gestiona por separado.
           </div>
            <div style={{fontSize:11,color:"rgba(240,232,255,.45)",marginBottom:10}}>Aciertos: Batata {accumulated.batata} · Membrillo {accumulated.membrillo}</div>
-           <button className="btn btn-g btn-full" onClick={reset}>
-            ↻ Nueva partida
+          <button className="btn btn-g btn-full" disabled={busy} onClick={nuevaPartida}>
+            🔁 Nueva partida
           </button>
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",margin:"6px 0 12px",lineHeight:1.5}}>
+            Sigue en Desafío Demente: la TV queda en la pantalla del juego y
+            podés cargar las preguntas de la partida siguiente.
+          </div>
+          {salida}
         </div>
       )}
       {actionError&&<div style={{marginTop:10,color:"#FCA5A5",fontSize:11,textAlign:"center"}}>{actionError}</div>}
@@ -3370,7 +3731,7 @@ export default function AdminPanel(){
       case "karaoke":   return <KaraokePanel sec={curSec}/>;
       case "rey":       return <ReyPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "suma":      return <SumaPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
-      case "palabra":   return <PalabraPanel sec={curSec}/>;
+      case "palabra":   return <PalabraPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "trivia":    return <TriviaPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "mensajes":  return <MensajesPanel sec={curSec} zocaloOn={zocaloOn} setZocaloOn={setZocaloOn} pending={pending} approved={approved} approve={approve} reject={reject}/>;
       case "videos":    return <VideosPanel

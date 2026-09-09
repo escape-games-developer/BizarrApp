@@ -3,7 +3,7 @@ import QRCode from "react-qr-code";
 import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
-import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
+import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen, PalabraScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
 import FtlOverlay from "./FtlOverlay";
 import FtlStandby from "./FtlStandby";
@@ -231,6 +231,7 @@ export default function PantallaTV() {
   const showRaffle = activeGame === "rey del orto";
   const showTrivia = activeGame === "trivia";
   const showSuma   = activeGame === "suma";
+  const showPalabra = activeGame === "palabra";
   // El Duelo cede ante un juego activo: el last-write-wins del admin ya los
   // hace excluyentes, pero si coexistieran gana el juego.
   const showDuelo  = activeEscenario === "duelo" && !activeGame;
@@ -277,7 +278,7 @@ export default function PantallaTV() {
   // (players, audio, recortes, avance) pero se apaga toda su INTERFAZ — título,
   // portada, QR musical, próximas, header, logo, reacciones.
   const soloVideoFtl = showFtl;
-  const hasLiveLayer = showRaffle || showTrivia || showSuma || showDuelo;
+  const hasLiveLayer = showRaffle || showTrivia || showSuma || showPalabra || showDuelo;
   // Mutear el DJ es una decisión aparte de montar un overlay. En FTL la música
   // del DJ ES el juego: el líder baila y el bar lo sigue. Si entrara en el
   // muteo, lanzar el juego apagaba la única salida de audio del bar.
@@ -570,6 +571,7 @@ export default function PantallaTV() {
             {showRaffle && <RaffleScreen gameState={gameState}/>}
             {showTrivia && <TriviaScreen gameState={gameState} sessionId={session?.id}/>}
             {showSuma && <SumaScreen sessionId={session?.id ?? null}/>}
+            {showPalabra && <PalabraScreen sessionId={session?.id ?? null}/>}
             {showDuelo && (
               <DueloBigscreen gameState={gameState} sessionId={session?.id ?? null}
                 webappUrl={window.location.origin}/>
