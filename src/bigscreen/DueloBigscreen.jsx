@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import QRCode from "react-qr-code";
-import { supabase } from "../lib/supabase";
-import { useApplauseRound, resolveDueloWinner } from "../hooks/realtime/useApplauseRound";
+import { useApplauseRound, resolveDueloWinner, dueloPercentages } from "../hooks/realtime/useApplauseRound";
 import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
 
 const P1_COLOR = "#ff1688"; // Marcelo — fucsia
@@ -33,6 +32,7 @@ const YouTubeVideoPlayer = memo(function YouTubeVideoPlayer({ video }) {
   }
   return null;
 }, (prev, next) =>
+  prev.video?.source === next.video?.source &&
   prev.video?.yt_id === next.video?.yt_id &&
   prev.video?.video_url === next.video?.video_url
 );
@@ -110,8 +110,11 @@ function CircularAvatar({ avatar, color, pulse, avatarRef }) {
   );
 }
 
-// ── LikeCounter — "👍 128", pulso al cambiar sin layout shift ──────────────────
-function LikeCounter({ value, color, numberColor }) {
+// ── LikeCounter — "👍 58%", pulso al cambiar sin layout shift ──────────────────
+// Muestra el REPARTO, no el acumulado: el número puede subir y bajar, y el
+// pulso salta con cualquier cambio (no es monotónico).
+function LikeCounter({ percent, color, numberColor }) {
+  const value    = `${percent}%`;
   const numRef   = useRef(null);
   const firstRef = useRef(true);
   useEffect(() => {
@@ -134,7 +137,7 @@ function LikeCounter({ value, color, numberColor }) {
 }
 
 // ── ContestantInfo — avatar + nombre + contador, SIN tarjeta (por encima de partículas) ──
-function ContestantInfo({ name, color, avatar, votes, side, leader, avatarRef, pulse, popups }) {
+function ContestantInfo({ name, color, avatar, percent, side, leader, avatarRef, pulse, popups }) {
   const isLeft = side === "left";
   return (
     <div className="contestant-info">
@@ -158,7 +161,7 @@ function ContestantInfo({ name, color, avatar, votes, side, leader, avatarRef, p
         fontSize: "clamp(24px, 1.8vw, 33px)", fontWeight: 700, color: "#fff",
         textTransform: "uppercase", letterSpacing: 0.5, textShadow: "0 2px 10px rgba(0,0,0,.7)",
       }}>{name}</div>
-      <LikeCounter value={votes} color={color} numberColor={isLeft ? "#ff258e" : "#ff9100"} />
+      <LikeCounter percent={percent} color={color} numberColor={isLeft ? "#ff258e" : "#ff9100"} />
     </div>
   );
 }
@@ -320,7 +323,7 @@ function makeAmbient() {
 }
 
 // ── ContestantColumn — columna lateral por capas (fondo · energía · ambient · votos · info · glow) ──
-function ContestantColumn({ side, name, color, avatar, votes, leader, avatarRef, pulse, popups, particles, onParticleDone }) {
+function ContestantColumn({ side, name, color, avatar, percent, leader, avatarRef, pulse, popups, particles, onParticleDone }) {
   const [ambient] = useState(makeAmbient); // generadas una sola vez al montar
   const glowRef = useRef(null);
 
@@ -368,57 +371,9 @@ function ContestantColumn({ side, name, color, avatar, votes, leader, avatarRef,
         ))}
       </div>
       <VoteParticleLayer particles={particles} avatarRef={avatarRef} color={color} onDone={onParticleDone} />
-      <ContestantInfo name={name} color={color} avatar={avatar} votes={votes} side={side}
+      <ContestantInfo name={name} color={color} avatar={avatar} percent={percent} side={side}
         leader={leader} avatarRef={avatarRef} pulse={pulse} popups={popups} />
       <div ref={glowRef} className="column-bottom-glow" />
-    </div>
-  );
-}
-
-// ── DevPanel — solo dev; dispara votos reales por la MISMA RPC applause_add ────
-function DevPanel({ roundId, counts }) {
-  const [auto, setAuto] = useState(false);
-  // applause_add exige auth.uid(): con el cliente anónimo el RPC salía sin
-  // hacer nada y el panel de dev parecía roto. Usa la sesión de la pestaña.
-  const add = useCallback((slot, delta) => {
-    if (!roundId) return;
-    supabase.rpc("applause_add", { p_round: roundId, p_slot: slot, p_delta: delta });
-  }, [roundId]);
-
-  useEffect(() => {
-    if (!auto || !roundId) return;
-    let s = 1;
-    const id = setInterval(() => { add(s, 1); s = s === 1 ? 2 : 1; }, 700);
-    return () => clearInterval(id);
-  }, [auto, roundId, add]);
-
-  const flipLeader = () => {
-    const c1 = counts?.p1 ?? 0, c2 = counts?.p2 ?? 0;
-    if (c1 === c2) { add(1, 3); return; }
-    const trailing = c1 < c2 ? 1 : 2;
-    add(trailing, Math.abs(c1 - c2) + 3);
-  };
-
-  const btn = {
-    padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,.25)",
-    background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 12, cursor: "pointer",
-  };
-  return (
-    <div style={{
-      position: "fixed", left: 12, bottom: 12, zIndex: 9999, pointerEvents: "auto",
-      display: "flex", flexWrap: "wrap", gap: 6, maxWidth: 280,
-      padding: 8, borderRadius: 10, background: "rgba(0,0,0,.4)", backdropFilter: "blur(6px)",
-    }}>
-      <button style={btn} onClick={() => add(1, 1)}>+1 participante 1</button>
-      <button style={btn} onClick={() => add(2, 1)}>+1 participante 2</button>
-      <button style={btn} onClick={() => { add(1, 5); }}>+5 M</button>
-      <button style={btn} onClick={() => { add(2, 5); }}>+5 J</button>
-      <button style={btn} onClick={() => add(1, 20)}>+20 M</button>
-      <button style={btn} onClick={() => add(2, 20)}>+20 J</button>
-      <button style={{ ...btn, borderColor: auto ? "#00F5A0" : undefined }} onClick={() => setAuto((a) => !a)}>
-        {auto ? "⏸ auto" : "▶ auto alt."}
-      </button>
-      <button style={btn} onClick={flipLeader}>↔ cambiar líder</button>
     </div>
   );
 }
@@ -616,6 +571,23 @@ const duelStyles = (
       display: flex; flex-direction: column; align-items: center; gap: 6px;
       padding-top: clamp(18px, 2vh, 32px); pointer-events: none;
     }
+
+    /* ── Barra del reparto 100% ──
+       Absoluta sobre el grid (no es una celda más): no toca las 3 columnas ni
+       el área del video. Fucsia = P1, naranja = P2; la división se mueve en
+       realtime y la transition la lleva suave en los dos sentidos. */
+    .duel-split {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 30;
+      height: clamp(8px, 1.1vh, 14px);
+      background: var(--right-color);
+      box-shadow: 0 -2px 14px rgba(0,0,0,.55);
+      pointer-events: none;
+    }
+    .duel-split-fill {
+      height: 100%; background: var(--left-color);
+      box-shadow: 2px 0 10px rgba(0,0,0,.5);
+      transition: width .45s cubic-bezier(.4, 0, .2, 1);
+    }
   `}</style>
 );
 
@@ -722,8 +694,12 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
   }, []);
 
   // Cambio de líder → glow breve en el nuevo líder (sin popup).
+  // c1/c2 son los votos ABSOLUTOS: alimentan partículas, pulsos e intensidad, y
+  // deciden el líder sin errores de redondeo (101 vs 100 es líder P1 aunque las
+  // dos se muestren 50%). El porcentaje es sólo lo que se dibuja en el marcador.
   const c1 = counts?.p1 ?? 0, c2 = counts?.p2 ?? 0;
   const leader = c1 > c2 ? 1 : (c2 > c1 ? 2 : 0);
+  const pct = dueloPercentages(counts);
   const prevLeaderRef = useRef(0);
   useEffect(() => {
     if (fase !== "voting") { prevLeaderRef.current = leader; return; }
@@ -797,6 +773,9 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
     const s1 = gameState?.duelo_slot1, s2 = gameState?.duelo_slot2;
     const result = resolveDueloWinner(currentRound, counts);
     const ganador = result.slot === 1 ? s1 : result.slot === 2 ? s2 : null;
+    // El ganador ya salió de los votos absolutos; el porcentaje es sólo cómo se
+    // cuenta el reparto final en pantalla.
+    const finalPct = dueloPercentages(counts);
     return (
       <div style={{
         position: "absolute", inset: 0,
@@ -817,7 +796,7 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
           fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: "clamp(20px,2.4vw,38px)",
           color: "#F0E8FF", opacity: .8,
         }}>
-          👍 {result.p1} · {s1?.name || "—"} &nbsp;|&nbsp; {s2?.name || "—"} · {result.p2} 👍
+          👍 {finalPct.p1}% · {s1?.name || "—"} &nbsp;|&nbsp; {s2?.name || "—"} · {finalPct.p2}% 👍
         </div>
       </div>
     );
@@ -827,32 +806,44 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
   const video = gameState?.duelo_video;
   const s1 = gameState?.duelo_slot1, s2 = gameState?.duelo_slot2;
 
+  // El video es OPCIONAL. Sin video reproducible no montamos el contenedor:
+  // `.youtube-player-container` tiene fondo negro y 82vh de alto, así que
+  // dibujarlo vacío dejaba un rectángulo negro enorme en el centro de la TV.
+  // Sin él, la columna central queda con el fondo del duelo y sus logos, y las
+  // dos columnas de participantes ocupan la pantalla como siempre.
+  const hasVideo = (video?.source === "youtube" && !!video?.yt_id)
+                || (video?.source === "url"     && !!video?.video_url);
+
   return (
     <div className="duel-screen">
       {keyframes}
       {duelStyles}
 
-      <ContestantColumn side="left" name={s1?.name || "—"} color={P1_COLOR} avatar={s1} votes={c1}
+      <ContestantColumn side="left" name={s1?.name || "—"} color={P1_COLOR} avatar={s1} percent={pct.p1}
         leader={c1 > c2} avatarRef={avatarRefs[1]} pulse={pulse1}
         popups={popups.filter((p) => p.slot === 1)}
         particles={particles.filter((p) => p.slot === 1)} onParticleDone={onParticleDone} />
 
       <main className="video-zone">
         <DuelHeader />
-        <div className="video-wrapper">
-          <div className="youtube-player-container">
-            <YouTubeVideoPlayer video={video} />
+        {hasVideo && (
+          <div className="video-wrapper">
+            <div className="youtube-player-container">
+              <YouTubeVideoPlayer video={video} />
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
-      <ContestantColumn side="right" name={s2?.name || "—"} color={P2_COLOR} avatar={s2} votes={c2}
+      <ContestantColumn side="right" name={s2?.name || "—"} color={P2_COLOR} avatar={s2} percent={pct.p2}
         leader={c2 > c1} avatarRef={avatarRefs[2]} pulse={pulse2}
         popups={popups.filter((p) => p.slot === 2)}
         particles={particles.filter((p) => p.slot === 2)} onParticleDone={onParticleDone} />
 
-      {/* Panel de pruebas — solo dev */}
-      {import.meta.env.DEV && <DevPanel roundId={currentRound?.id} counts={counts} />}
+      {/* Reparto del 100% — la división se mueve con cada voto. */}
+      <div className="duel-split">
+        <div className="duel-split-fill" style={{ width: `${pct.p1}%` }} />
+      </div>
     </div>
   );
 }

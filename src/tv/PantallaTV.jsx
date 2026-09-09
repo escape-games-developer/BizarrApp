@@ -3,7 +3,7 @@ import QRCode from "react-qr-code";
 import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
-import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
+import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
 import FtlOverlay from "./FtlOverlay";
 import FtlStandby from "./FtlStandby";
@@ -11,6 +11,7 @@ import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig } from "../designers/lib/persistence";
+import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 
 /**
  * MODO TV — el motor de reproducción del módulo Pantalla/Escenario.
@@ -182,18 +183,15 @@ function EditableOverlayText({ block }) {
 }
 
 /**
- * `zIndex` sube la lluvia por encima de TODO durante una transición de modo de
- * Follow the Leader. La clase la deja en z 100, que alcanza para el cruce de
- * canciones del DJ pero no para tapar la imagen de overlay del diseñador ni un
- * bloque al que le hayan puesto un z alto a mano: por ahí se colaba el video.
- * Fuera de una transición de FTL no se pasa nada y el comportamiento de Trivia,
- * Duelo y Rey del Orto queda igual que siempre.
+ * Lluvia del motor del DJ: el cruce entre SUS canciones y la espera de arranque
+ * mientras los players todavía no están listos. Follow the Leader ya no la usa
+ * — sus cambios de modo son cortes directos — así que tampoco existe el z-index
+ * especial que la subía por encima de todo durante una transición del juego.
  */
-function TvStatic({ phase, waiting, zIndex }) {
+function TvStatic({ phase, waiting }) {
   if (phase === "idle" && !waiting) return null;
   return (
-    <div className={`tv-static tv-static-${phase === "idle" ? "static" : phase}`} aria-hidden="true"
-      style={zIndex ? { zIndex } : undefined}>
+    <div className={`tv-static tv-static-${phase === "idle" ? "static" : phase}`} aria-hidden="true">
       <div className="tv-static-noise" />
       <div className="tv-static-scanlines" />
       <div className="tv-static-band" />
@@ -211,8 +209,6 @@ export default function PantallaTV() {
   const [authErr,  setAuthErr]  = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [canvasConfig, setCanvasConfig] = useState(() => loadTvConfig("default"));
-  const [transicion, setTransicion] = useState(null);   // { destino, desde } — sólo visual
-  const [modoPrevio, setModoPrevio] = useState("dj");   // para detectar el cambio de modo
   const { gameState, session } = useGameState();
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
 
@@ -234,6 +230,7 @@ export default function PantallaTV() {
   // opaco tapaba el DJ — pantalla negra que ninguna acción del admin sacaba.
   const showRaffle = activeGame === "rey del orto";
   const showTrivia = activeGame === "trivia";
+  const showSuma   = activeGame === "suma";
   // El Duelo cede ante un juego activo: el last-write-wins del admin ya los
   // hace excluyentes, pero si coexistieran gana el juego.
   const showDuelo  = activeEscenario === "duelo" && !activeGame;
@@ -253,7 +250,10 @@ export default function PantallaTV() {
   //         completa y encima el avatar con los porcentajes.
   // En los dos casos la interfaz del DJ se apaga: su canción, sus próximas y
   // su QR musical no pertenecen a este juego.
-  const showFtl = activeEscenario === "ftl" && !activeGame;
+  // FTL y Personal Trainer son el MISMO contrato de escenario: los dos
+  // proyectan igual y sólo cambian su copy/imagen, que sale de ESCENARIO_JUEGOS.
+  const juegoEsc = (activeEscenario && !activeGame) ? ESCENARIO_JUEGOS[activeEscenario] || null : null;
+  const showFtl = !!juegoEsc;
   const participanteFtl = showFtl ? gameState?.escenario_participant || null : null;
   // Modo visual de la TV. PREPARADO no es EN VIVO: el admin llama al
   // participante, la TV lo muestra listo, y recién con "▶ Comenzar" arranca el
@@ -268,14 +268,16 @@ export default function PantallaTV() {
   const ftlConvocatoria = modoFtl === "convocatoria";
   // `soloTotales`: /tv entra por token, sin sesión de auth. Lee los totales
   // públicos con el cliente anónimo y nunca toca follow_leader_votes.
+  // Sólo se piden totales si el juego tiene votación: el RPC de votos es de
+  // Follow the Leader y en Personal Trainer no hay nada que leer.
   const { totals: votosFtl } = useFollowLeaderVotes(
-    participanteFtl?.turn_id || null, null, { soloTotales: true });
+    (juegoEsc?.votacion && participanteFtl?.turn_id) || null, null, { soloTotales: true });
 
   // Con FTL en el aire la TV deja de ser la pantalla del DJ: se reusa su MOTOR
   // (players, audio, recortes, avance) pero se apaga toda su INTERFAZ — título,
   // portada, QR musical, próximas, header, logo, reacciones.
   const soloVideoFtl = showFtl;
-  const hasLiveLayer = showRaffle || showTrivia || showDuelo;
+  const hasLiveLayer = showRaffle || showTrivia || showSuma || showDuelo;
   // Mutear el DJ es una decisión aparte de montar un overlay. En FTL la música
   // del DJ ES el juego: el líder baila y el bar lo sigue. Si entrara en el
   // muteo, lanzar el juego apagaba la única salida de audio del bar.
@@ -295,11 +297,12 @@ export default function PantallaTV() {
   // que cambia es qué se le da de comer a los players A/B — el mismo motor, sin
   // un segundo reproductor y sin tocar la cola, el ranking ni el historial.
   //
-  // El item sintético lleva el prefijo 'ftl:' en el id justamente para que no
+  // El item sintético lleva el prefijo del juego ('ftl:' / 'pt:') en el id
+  // justamente para que no
   // pueda confundirse con una fila real de pantalla_playlist_items.
   const videoFtl = ftlPerformance ? gameState?.escenario_video : null;
   const itemFtl = videoFtl?.ytId ? {
-    id:                 `ftl:${participanteFtl?.turn_id || videoFtl.ytId}`,
+    id:                 `${juegoEsc.type}:${participanteFtl?.turn_id || videoFtl.ytId}`,
     youtube_id:         videoFtl.ytId,
     title:              videoFtl.ytTitle || "Follow the Leader",
     trim_start_seconds: Number(videoFtl.trimStart) || 0,
@@ -311,60 +314,25 @@ export default function PantallaTV() {
   // su transición de siempre.
   const fuente = itemFtl || current;
 
-  // ── Lluvia de cambio de modo ────────────────────────────────────────────
-  // El motor sólo llueve cuando cambia la CANCIÓN. Los cambios de MODO que no
-  // tocan la fuente (entrar a la convocatoria, volver a ella) no dispararían
-  // nada y se vería el corte seco. Este estado es puramente visual — no se
-  // persiste — y además dice hacia dónde vamos, que es lo que decide cuándo
-  // levantarla.
-  //
-  // Convocatoria y candidato son las dos pantallas estáticas del juego: pasar
-  // de una a la otra no lleva lluvia, es el mismo modo visual con más datos.
-  // La lluvia tiene que entrar EN EL MISMO commit que el cambio de modo.
-  //
-  // Con la detección en un useEffect, React pintaba primero el modo nuevo —sin
-  // la pantalla del juego, que ya se había desmontado— y recién en el commit
-  // siguiente aparecía la lluvia. Ese hueco de un frame es el que dejaba ver el
-  // video del DJ entre el candidato y la performance, y entre la convocatoria y
-  // la vuelta al DJ.
-  //
-  // Actualizar estado durante el render del propio componente es el patrón que
-  // React documenta para derivar estado de props: re-renderiza antes de pintar,
-  // así que la lluvia y el modo nuevo llegan juntos a la pantalla. Va guardado
-  // por la comparación, que es lo que evita el bucle.
-  // El modo anterior va en ESTADO, no en un ref: la app corre bajo StrictMode y
-  // el doble render de desarrollo haría que una mutación de ref se aplicara en
-  // la pasada que React descarta, perdiendo transiciones. Comparar contra
-  // estado es el patrón que React documenta para esto y es idempotente.
-  if (modoPrevio !== modoFtl) {
-    setModoPrevio(modoFtl);
-    // Convocatoria y candidato son la misma pantalla con más datos: entre ellas
-    // no hay nada que tapar.
-    const ESTATICOS = new Set(["convocatoria", "candidato"]);
-    if (!(ESTATICOS.has(modoPrevio) && ESTATICOS.has(modoFtl))) {
-      setTransicion({ destino: modoFtl, desde: Date.now() });
-    }
-  }
+  // Los cambios de MODO de Follow the Leader son CORTES DIRECTOS: convocatoria
+  // → participante preparado → video → convocatoria. Acá vivía una transición
+  // propia del juego (estado `transicion`/`modoPrevio`, lluvia forzada, z-index
+  // especial) que ya no existe. La lluvia del motor del DJ sigue intacta para
+  // sus propios cambios de canción.
 
-  const enTransicion = !!transicion;
-
-  // Se corta la fuente mientras la TV no está mostrando un video:
-  //   * convocatoria y candidato → el DJ queda pausado en su canción; no tiene
-  //     sentido que suene música debajo de un QR.
-  //   * saliendo hacia el DJ → la performance tiene que callarse YA, no seguir
-  //     sonando detrás de la lluvia hasta que el motor termine el cruce. El
-  //     tema nuevo arranca cuando se levanta la lluvia.
-  // Durante CUALQUIER transición la fuente vieja se calla: el DJ no puede
-  // volver a sonar detrás de la lluvia mientras se prepara la performance, ni
-  // la performance seguir sonando mientras se prepara la salida. El destino
-  // arranca cuando se levanta la lluvia.
-  const cortarFuente = ftlConvocatoria || ftlCandidato || enTransicion;
+  // Se corta la fuente mientras la TV no está mostrando un video: en
+  // convocatoria y con el participante preparado el DJ queda pausado en su
+  // canción — no tiene sentido que suene música debajo de un QR ni detrás del
+  // avatar de alguien que todavía no arrancó.
+  const cortarFuente = ftlConvocatoria || ftlCandidato;
   const reproduciendo = cortarFuente ? false : event?.is_playing !== false;
 
   const PLACAS_NO_TV = ["escenario_karaoke", "logo", "logo_animado"];
   const activePlaca = sharesSession ? gameState?.active_placa : null;
   const hasPlaca = !!activePlaca && !PLACAS_NO_TV.includes(activePlaca);
-  const { playerIds, visiblePlayer, rainPhase, displayedId, playerError, readyCount } =
+  // `displayedId` lo consumía la transición de FTL, que ya no existe: el motor
+  // lo sigue exponiendo para quien lo necesite, pero acá no hay nada que esperar.
+  const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
     useContinuousTvPlayers({ current: fuente, eventId, token, unlocked,
       muted: !screenAudioOn || muteDj,
       playing: reproduciendo,
@@ -375,44 +343,6 @@ export default function PantallaTV() {
       captionsEnabled: event?.youtube_captions_enabled === true,
       rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6,
       rainTailSeconds: event?.rain_tail_seconds ?? 0 });
-
-  // Cuándo se levanta la lluvia. Hacia una pantalla estática alcanza un mínimo:
-  // ya está lista. Hacia un video (performance o vuelta al DJ) se espera a que
-  // el motor termine su propio cruce — `rainPhase` vuelve a 'idle' recién
-  // cuando el video nuevo ya está sonando. El tope es el seguro: si el motor se
-  // cuelga, la TV no se queda con la lluvia puesta para siempre.
-  //
-  // Va DESPUÉS de useContinuousTvPlayers a propósito: lee `rainPhase`, que ese
-  // hook declara con const. Arriba caía en la zona muerta temporal y /tv no
-  // llegaba a renderizar.
-  // Hacia una pantalla estática alcanza un mínimo: ya está lista.
-  //
-  // Hacia un video se espera la señal REAL del motor: `displayedId` es el item
-  // que los players tienen puesto, no el que pidió el servidor. Que el RPC de
-  // avance haya vuelto no significa que YouTube ya esté mostrando la canción
-  // nueva; por eso la lluvia se levanta contra `displayedId === fuente.id` y no
-  // contra un timeout ciego. Se acepta `leaving` porque en esa fase el motor ya
-  // hizo el swap y el video nuevo está sonando: es su propia salida en fundido.
-  //
-  // TOPE es el seguro, no el camino normal: si YouTube no carga (video privado,
-  // API caída), la TV no se queda tapada para siempre. 9 s es holgado contra los
-  // 12 s de LOAD_TIMEOUT_MS del motor, así que la lluvia se va antes de que el
-  // propio motor declare el fallo y muestre su cartel.
-  useEffect(() => {
-    if (!transicion) return;
-    const esperaMotor = transicion.destino === "performance" || transicion.destino === "dj";
-    const MIN = esperaMotor ? 900 : 800;
-    const TOPE = 9000;
-    const id = setInterval(() => {
-      const dt = Date.now() - transicion.desde;
-      if (dt < MIN) return;
-      if (dt >= TOPE) { setTransicion(null); return; }
-      if (!esperaMotor) { setTransicion(null); return; }
-      const destinoListo = fuente ? displayedId === fuente.id : true;
-      if (destinoListo && (rainPhase === "leaving" || rainPhase === "idle")) setTransicion(null);
-    }, 120);
-    return () => clearInterval(id);
-  }, [transicion, rainPhase, displayedId, fuente]);
 
   // 1. Validar el acceso contra el servidor.
   useEffect(() => {
@@ -614,7 +544,7 @@ export default function PantallaTV() {
         </ConfiguredBlock>)}
         </>}
 
-        {!soloVideoFtl && !enTransicion && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
+        {!soloVideoFtl && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
 
         {/* Placa de anuncio. Reusa el PlacaScreen de /pantalla — mismo catálogo,
             mismos assets de /placas — en vez de duplicar el diseño. Va debajo
@@ -639,6 +569,7 @@ export default function PantallaTV() {
             <style>{BIGSCREEN_CSS}</style>
             {showRaffle && <RaffleScreen gameState={gameState}/>}
             {showTrivia && <TriviaScreen gameState={gameState} sessionId={session?.id}/>}
+            {showSuma && <SumaScreen sessionId={session?.id ?? null}/>}
             {showDuelo && (
               <DueloBigscreen gameState={gameState} sessionId={session?.id ?? null}
                 webappUrl={window.location.origin}/>
@@ -650,12 +581,13 @@ export default function PantallaTV() {
             votación) los porcentajes. Transparente y sin reproductor propio —
             el video de abajo es el del DJ, con su recorte de inicio/fin. */}
         {(ftlConvocatoria || ftlCandidato) && !hasLiveLayer && !hasPlaca && (
-          <FtlStandby webappUrl={window.location.origin}
+          <FtlStandby juego={juegoEsc} webappUrl={window.location.origin}
             participante={ftlCandidato ? participanteFtl : null}/>
         )}
 
         {ftlPerformance && !hasLiveLayer && !hasPlaca && (
-          <FtlOverlay participante={participanteFtl} votos={votosFtl}/>
+          <FtlOverlay participante={participanteFtl}
+            votos={juegoEsc?.votacion ? votosFtl : null}/>
         )}
       </div>
 
@@ -667,9 +599,8 @@ export default function PantallaTV() {
       {/* La lluvia cubre la espera, no sólo la anima: mientras esté puesta, el
           destino se prepara detrás. Va por encima de las pantallas de FTL
           (z 50) para que el cambio de modo no se vea a medio armar. */}
-      <TvStatic phase={enTransicion && rainPhase === "idle" ? "static" : rainPhase}
-        waiting={enTransicion || (!soloVideoFtl && (!fuente || readyCount < 2))}
-        zIndex={enTransicion ? 2147483647 : undefined}/>
+      <TvStatic phase={rainPhase}
+        waiting={!soloVideoFtl && (!fuente || readyCount < 2)}/>
 
       {!soloVideoFtl && <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>}
     </>

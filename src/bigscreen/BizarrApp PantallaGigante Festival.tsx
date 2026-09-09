@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useSumateRound } from "../hooks/realtime/useSumateRound";
 import { supabase } from "../lib/supabase";
 import { useGameState } from "../hooks/realtime/useGameState";
 import { useMessages }  from "../hooks/realtime/useMessages";
@@ -347,6 +348,93 @@ export function TriviaScreen({ gameState, sessionId }) {
 }
 
 // Escenario activo
+
+// Sumate que Sumamos — pantalla gigante.
+//
+// Toda la información sale de `sumate_rounds`: el objetivo y, cuando el
+// operador valida, el grupo ganador. Los números de cada persona NO se
+// proyectan mientras la ronda está viva — el juego es encontrarse en el bar,
+// no leer la pantalla.
+export function SumaScreen({ sessionId }) {
+  const { round } = useSumateRound(sessionId, { admin: false, userId: null });
+
+  if (!round) return (
+    <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
+      Preparando la ronda…
+    </div>
+  );
+
+  // ── Ganador ──
+  if (round.status === "finished" && round.winner_group?.length) {
+    const grupo = round.winner_group;
+    return (
+      <div style={{position:"absolute",inset:0,
+        background:"radial-gradient(ellipse at center,rgba(0,245,160,.14),#08040F 70%)",
+        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2.4vh",
+        padding:"4vh 4vw",overflow:"hidden"}}>
+        <Orbs colors={["rgba(0,245,160,.2)","rgba(255,214,0,.1)","rgba(0,229,255,.08)"]}/>
+        <Confetti/>
+        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+          fontSize:"clamp(30px,4.6vw,86px)",color:"#00F5A0",textAlign:"center",zIndex:2}}>
+          🏆 ¡SUMARON EXACTO!
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:"1.2vw",zIndex:2}}>
+          {grupo.map((g) => (
+            <div key={g.user_id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"0.6vh",
+              padding:"1.4vh 1.6vw",borderRadius:"1.4vh",background:"rgba(0,245,160,.1)",
+              border:"2px solid rgba(0,245,160,.45)"}}>
+              <div style={{fontSize:"3.4vh"}}>{g.avatar_emoji || "👤"}</div>
+              <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
+                fontSize:"clamp(13px,1.5vw,26px)",color:"#F0E8FF",textTransform:"uppercase"}}>{g.name}</div>
+              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+                fontSize:"clamp(24px,2.8vw,52px)",color:"#00F5A0",lineHeight:1}}>{g.assigned_number}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+          fontSize:"clamp(20px,2.6vw,46px)",color:"#FFD600",zIndex:2}}>
+          {grupo.map((g) => g.assigned_number).join(" + ")} = {round.target_number}
+        </div>
+        <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
+          fontSize:"clamp(16px,2vw,34px)",color:"#F0E8FF",opacity:.85,zIndex:2}}>
+          🎉 GANADORES 🎉
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ronda en curso: el objetivo manda la pantalla ──
+  return (
+    <div style={{position:"absolute",inset:0,
+      background:"radial-gradient(ellipse at center,rgba(255,149,0,.12),#08040F 70%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1.6vh",
+      padding:"4vh 4vw",overflow:"hidden"}}>
+      <Orbs colors={["rgba(255,149,0,.18)","rgba(168,85,247,.12)","rgba(0,229,255,.06)"]}/>
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+        fontSize:"clamp(22px,3.4vw,62px)",color:"#FF9500",letterSpacing:".04em",zIndex:2}}>
+        🔢 SUMATE QUE SUMAMOS
+      </div>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
+        fontSize:"clamp(13px,1.6vw,28px)",color:"rgba(240,232,255,.6)",letterSpacing:".08em",zIndex:2}}>
+        ENCONTRÁ A LOS QUE NECESITÁS
+      </div>
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
+        fontSize:"clamp(14px,1.8vw,32px)",color:"#FFD600",letterSpacing:".1em",marginTop:"1.4vh",zIndex:2}}>
+        SUMEN EXACTAMENTE
+      </div>
+      {/* El objetivo es el elemento dominante de la pantalla. */}
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:"min(38vh,34vw)",
+        lineHeight:.92,color:"#FF9500",textShadow:"0 0 60px rgba(255,149,0,.5)",zIndex:2}}>
+        {round.target_number}
+      </div>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
+        fontSize:"clamp(13px,1.5vw,26px)",color:"rgba(240,232,255,.55)",letterSpacing:".05em",zIndex:2}}>
+        MIRÁ TU NÚMERO EN EL CELULAR
+      </div>
+    </div>
+  );
+}
+
 export function EscenarioScreen({ gameState, sessionId }) {
   const type = gameState?.active_escenario || "duelo";
 
@@ -730,6 +818,8 @@ export default function PantallaGigante() {
     content = <RaffleScreen logo={LOGO} gameState={gameState}/>;
   } else if (gameState?.active_game === "trivia") {
     content = <TriviaScreen gameState={gameState} sessionId={session?.id ?? null}/>;
+  } else if (gameState?.active_game === "suma") {
+    content = <SumaScreen sessionId={session?.id ?? null}/>;
   } else if (hasEscenario) {
     content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (liveVideo && !hasGame) {

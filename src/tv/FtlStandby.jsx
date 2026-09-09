@@ -17,10 +17,9 @@ import QRCode from "react-qr-code";
  * mismo mecanismo de deep-link que ya usa el Duelo (`?view=games&game=duelo`).
  */
 
-const LOGO_FTL = "/placas/Follow_de_leader-removebg-preview.png";
 const C = { bg: "#08040F", gold: "#FFD600", white: "#F0E8FF" };
 
-export default function FtlStandby({ webappUrl, participante = null }) {
+export default function FtlStandby({ juego, webappUrl, participante = null }) {
   const url = `${webappUrl}/?view=escenario`;
 
   // Candidato preparado: la TV ya muestra quién va a jugar, pero el video
@@ -52,7 +51,7 @@ export default function FtlStandby({ webappUrl, participante = null }) {
           fontFamily: "Syne, sans-serif", fontWeight: 800,
           fontSize: "clamp(13px, 1.7vw, 30px)", letterSpacing: ".16em",
           color: C.gold, textAlign: "center",
-        }}>LISTO PARA FOLLOW THE LEADER</div>
+        }}>{juego.tvListo}</div>
       </div>
     );
   }
@@ -64,7 +63,7 @@ export default function FtlStandby({ webappUrl, participante = null }) {
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       gap: "3.5vh", padding: "4vh 4vw", overflow: "hidden",
     }}>
-      <img src={LOGO_FTL} alt="Follow the Leader" style={{
+      <img src={juego.placa} alt={juego.label} style={{
         maxWidth: "52vw", maxHeight: "38vh", objectFit: "contain",
         filter: "drop-shadow(0 10px 40px rgba(255,149,0,.35))",
       }}/>

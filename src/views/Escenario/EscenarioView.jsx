@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { BlockedView, VideoRow }           from "../../components/UI";
 import { useYouTubePlaylists }             from "../../hooks/useYouTubePlaylists";
 import { useEscenarioQueue }               from "../../hooks/realtime/useEscenarioQueue";
-import { usePlaylistCategoria }            from "../../hooks/usePlaylistCategoria";
 import { useFollowLeaderVotes }            from "../../hooks/realtime/useFollowLeaderVotes";
+import { ESCENARIO_JUEGOS }                from "../../constants/escenarioJuegos";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
 function EscenarioStandby() {
@@ -187,32 +187,24 @@ function VotacionFtl({ turnId, userId }) {
   );
 }
 
-// ─── Follow the Leader ───────────────────────────────────────────────────────
+// ─── Juegos de escenario con participante único (FTL y Personal Trainer) ─────
+// Mismo contrato para los dos, por eso una sola vista parametrizada: el
+// cliente SÓLO se postula, el video lo elige el operador después de llamarlo.
+//
 // La inscripción vive en `escenario_queue`, no en un useState: por eso el hook
 // recibe el user id. Un F5 acá tiene que devolver la misma pantalla, y la
 // llamada al escenario tiene que llegar sola por Realtime.
-function FollowTheLeaderView({ user, sessionId, ytConfig, participante }) {
-  const [selVideo, setSelVideo] = useState(null);
+function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido }) {
   const { myEntry, isEnrolled, enroll, leave, loading, error } =
-    useEscenarioQueue(sessionId, "ftl", user?.id ?? null);
+    useEscenarioQueue(sessionId, juego.type, user?.id ?? null);
 
-  // Fuente de verdad: el catálogo central de Supabase (categoría 'ftl' de
-  // Admin › Playlists YouTube). Funciona con el localStorage vacío, que es el
-  // caso de todos los celulares y de cualquier PC recién abierta.
-  const { canciones, loading: cargandoLista } = usePlaylistCategoria("ftl");
-
-  // Fallback explícito y NO destructivo: el viejo camino por
-  // localStorage['bizarrapp_yt_config'].ftl → YouTube Data API. Sólo entra
-  // cuando la central no trajo nada, así una configuración válida de Supabase
-  // nunca queda pisada por lo que tenga guardado este navegador. Con el objeto
-  // vacío, useYouTubePlaylists no hace ni una llamada de red.
-  const sinCatalogo = !cargandoLista && canciones.length === 0;
-  const { playlists } = useYouTubePlaylists(sinCatalogo ? (ytConfig || {}) : {});
-  const lista = canciones.length ? canciones : (playlists.ftl || []);
-
-  // La canción la manda la fila de la base — `selVideo` es sólo lo que estoy
-  // eligiendo ahora y se pierde con el refresh.
-  const miCancion = myEntry?.yt_title ? { title: myEntry.yt_title } : selVideo;
+  // El cliente NO elige video. Se postula y listo: el video del desafío lo
+  // elige el operador DESPUÉS de llamarlo al escenario, y viaja en
+  // `game_state.escenario_video`. Acá sólo se muestra —de sólo lectura— si ya
+  // está elegido. Las columnas yt_id/yt_title de `escenario_queue` siguen
+  // existiendo pero FTL dejó de usarlas: filas viejas con canción no cambian
+  // nada de este flujo.
+  const miDesafio = videoElegido?.ytTitle ? { title: videoElegido.ytTitle } : null;
 
   // Hay alguien en el escenario. Se decide con el snapshot proyectado, que es
   // la misma fuente que mira /tv: el turno que se vota es el que se ve.
@@ -225,38 +217,46 @@ function FollowTheLeaderView({ user, sessionId, ytConfig, participante }) {
   if (soyYo || myEntry?.status === "called") return (
     <EnrolledCard
       color="#FDBA74" border="rgba(255,149,0,.45)" bg="rgba(255,149,0,.12)"
-      icon="🎤" title="🎤 Estás en el escenario" video={miCancion}
-      subtitle="El bar te sigue. ¡Marcá el paso!"
+      icon="🎤" title="🎤 Estás en el escenario" video={miDesafio}
+      subtitle="Esperá las indicaciones del conductor."
       onLeave={null}
     />
   );
 
-  // Turno de otro: el público vota.
+  // Turno de otro: el público mira, y vota si el juego tiene votación.
   if (turnId) return (
     <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>💃</span><h3>Follow the Leader</h3></div>
+      <div className="sec-hdr"><span style={{ fontSize: 20 }}>{juego.icon}</span><h3>{juego.label}</h3></div>
       <div style={{
         display: "flex", alignItems: "center", gap: 12, padding: "14px 12px",
-        borderRadius: 14, background: "rgba(236,72,153,.08)",
-        border: "1px solid rgba(236,72,153,.25)",
+        borderRadius: 14, background: juego.bgCliente,
+        border: `1px solid ${juego.bordeCliente}`,
       }}>
         <div style={{
           width: 48, height: 48, borderRadius: "50%", flexShrink: 0, fontSize: 26,
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "rgba(255,255,255,.05)", border: "2px solid rgba(236,72,153,.45)",
+          background: "rgba(255,255,255,.05)", border: `2px solid ${juego.colorCliente}`,
         }}>{participante.avatar_emoji || "🎤"}</div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10.5, color: "rgba(245,230,192,.4)", letterSpacing: ".1em", fontWeight: 700 }}>
             EN EL ESCENARIO
           </div>
           <div style={{
-            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 17, color: "#F9A8D4",
+            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 17, color: juego.textoCliente,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>{participante.name || "Participante"}</div>
         </div>
       </div>
 
-      <VotacionFtl turnId={turnId} userId={user?.id ?? null}/>
+      {/* La votación 👍/👎 es por juego: el RPC sólo acepta turnos de FTL. */}
+      {juego.votacion
+        ? <VotacionFtl turnId={turnId} userId={user?.id ?? null}/>
+        : (
+          <div style={{ marginTop: 16, textAlign: "center", fontSize: 12,
+            color: "rgba(245,230,192,.35)", lineHeight: 1.6 }}>
+            ¡Seguilo desde tu lugar! 🕺
+          </div>
+        )}
     </div>
   );
 
@@ -264,78 +264,43 @@ function FollowTheLeaderView({ user, sessionId, ytConfig, participante }) {
     <>
       {error && <ErrorNota texto={error}/>}
       <EnrolledCard
-        color="#F9A8D4" border="rgba(236,72,153,.4)" bg="rgba(236,72,153,.1)"
-        icon="🎟️" title="¡Inscripto!" video={miCancion}
-        subtitle="Esperá que el staff te llame al escenario 🎤"
+        color={juego.textoCliente} border={juego.bordeCliente} bg={juego.bgCliente}
+        icon="🎟️" title="🎟️ ¡Estás anotado!" video={null}
+        subtitle="Esperá que el staff te llame al escenario."
         onLeave={leave}
       />
     </>
   );
 
+  // Postulación pura: sin catálogo, sin thumbnails, sin buscador. El desafío
+  // lo define el operador cuando llama al participante.
   return (
     <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>💃</span><h3>Follow the Leader</h3></div>
+      <div className="sec-hdr"><span style={{ fontSize: 20 }}>{juego.icon}</span><h3>{juego.label}</h3></div>
       <CostumeStrip
-        items={["🧢 Gorra de béisbol","🕺 Chaleco brillante","🥿 Sneakers blancos","🕶️ Lentes de sol"]}
-        color="rgba(236,72,153,.8)" bg="rgba(236,72,153,.08)" border="rgba(236,72,153,.2)"
+        items={juego.vestuario}
+        color={juego.textoCliente} bg={juego.bgCliente} border={juego.bordeCliente}
       />
-      <div style={{ fontSize: 12, color: "rgba(245,230,192,.5)", marginBottom: 12, lineHeight: 1.5 }}>
-        Subís al escenario, elegís una canción y liderás el baile. ¡El bar te sigue!
-      </div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,215,0,.45)", marginBottom: 8 }}>
-        Elegí tu canción
-      </div>
-      {cargandoLista && (
-        <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)"}}>
-          Cargando canciones…
+      <div style={{
+        textAlign: "center", padding: "22px 16px", borderRadius: 16, marginBottom: 14,
+        background: juego.bgCliente, border: `1px solid ${juego.bordeCliente}`,
+      }}>
+        <div style={{ fontSize: 38, marginBottom: 10 }}>{juego.icon}</div>
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 16,
+          color: juego.textoCliente, marginBottom: 6,
+        }}>
+          {juego.titulo}
         </div>
-      )}
-      {!cargandoLista && lista.length === 0 && (
-        <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:"rgba(245,230,192,.3)",lineHeight:1.6}}>
-          Todavía no hay canciones cargadas.<br/>
-          <span style={{fontSize:11,opacity:.75}}>Avisale al staff.</span>
+        <div style={{ fontSize: 12, color: "rgba(245,230,192,.5)", lineHeight: 1.5 }}>
+          {juego.bajada}
         </div>
-      )}
-      {lista.map((v) => (
-        <VideoRow key={v.id} video={v} selected={selVideo?.id === v.id} onSelect={setSelVideo} color="#EC4899" />
-      ))}
-      <button className="btn-primary" style={{ background: "linear-gradient(135deg,#EC4899,#8B5CF6)", marginTop: 6 }}
-        disabled={!selVideo || loading}
-        onClick={() => enroll(user, selVideo?.ytId, selVideo?.title)}>
-        {loading ? "Anotándote…" : "💃 ¡Me apunto al escenario!"}
+      </div>
+      <button className="btn-primary" style={{ background: juego.gradCliente }}
+        disabled={loading} onClick={() => enroll(user)}>
+        {loading ? "Anotándote…" : juego.botonPostular}
       </button>
       {error && <ErrorNota texto={error}/>}
-    </div>
-  );
-}
-
-// ─── Personal Trainer ────────────────────────────────────────────────────────
-function PersonalTrainerView({ user, sessionId }) {
-  const { isEnrolled, enroll, leave, loading } = useEscenarioQueue(sessionId, "pt");
-
-  if (isEnrolled) return (
-    <EnrolledCard
-      color="#86EFAC" border="rgba(16,185,129,.4)" bg="rgba(16,185,129,.1)"
-      icon="🏅" title="¡Inscripto!"
-      subtitle="Preparate — el escenario es tuyo pronto 💪"
-      onLeave={leave}
-    />
-  );
-
-  return (
-    <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>🏋️</span><h3>Bizarren Personal Trainer</h3></div>
-      <CostumeStrip
-        items={["🏋️ Polaina de colores","🤸 Muñequeras flúo","🎗️ Bandana en la cabeza","🩱 Body aeróbico"]}
-        color="rgba(16,185,129,.8)" bg="rgba(16,185,129,.08)" border="rgba(16,185,129,.2)"
-      />
-      <div style={{ fontSize: 12, color: "rgba(245,230,192,.5)", marginBottom: 16, lineHeight: 1.5 }}>
-        Dirigís una clase de gym dance grupal. Toda la sala te sigue desde sus lugares.
-      </div>
-      <button className="btn-primary" style={{ background: "linear-gradient(135deg,#10B981,#06B6D4)" }}
-        disabled={loading} onClick={() => enroll(user)}>
-        🏋️ ¡Quiero dirigir la clase!
-      </button>
     </div>
   );
 }
@@ -393,11 +358,18 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   // Karaoke queda congelado sin borrar su vista ni su case de enrutamiento.
   if (!activeEscenario || activeEscenario === "karaoke") return <EscenarioStandby />;
 
+  // FTL y Personal Trainer corren el MISMO contrato (postulación → el operador
+  // llama → elige video → comenzar), así que comparten vista: lo único que
+  // cambia es la configuración del juego.
+  const juego = ESCENARIO_JUEGOS[activeEscenario];
+  if (juego) return (
+    <JuegoEscenarioView juego={juego} user={user} sessionId={sessionId}
+      participante={gameState?.escenario_participant || null}
+      videoElegido={gameState?.escenario_video || null} />
+  );
+
   switch (activeEscenario) {
     case "duelo":   return <DueloView />;
-    case "ftl":     return <FollowTheLeaderView user={user} sessionId={sessionId} ytConfig={ytConfig}
-                      participante={gameState?.escenario_participant || null} />;
-    case "pt":      return <PersonalTrainerView user={user} sessionId={sessionId} />;
     case "karaoke": return <KaraokeView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
     default:        return <EscenarioStandby />;
   }

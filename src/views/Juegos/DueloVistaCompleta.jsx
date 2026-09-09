@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
-import { useApplauseRound, resolveDueloWinner } from "../../hooks/realtime/useApplauseRound";
+import { useApplauseRound, resolveDueloWinner, dueloPercentages } from "../../hooks/realtime/useApplauseRound";
 
 const DUELO_LOGO = "/placas/Duelo_de_talento-removebg-preview.png";
 const PINK = "#FF2D95";
@@ -44,6 +44,22 @@ function SlotFace({ slot, color, size = 68 }) {
     );
   }
   return <div style={base}>{slot?.avatar_emoji || "🎤"}</div>;
+}
+
+// Barra del reparto: fucsia = P1, naranja = P2. La división se mueve con cada
+// voto y la transition la lleva suave en los dos sentidos (sube y baja).
+function SplitBar({ p1 }) {
+  return (
+    <div style={{
+      marginTop: 12, height: 10, borderRadius: 999, overflow: "hidden",
+      background: ORANGE, border: "1px solid rgba(255,255,255,.1)",
+    }}>
+      <div style={{
+        width: `${p1}%`, height: "100%", background: PINK,
+        transition: "width .45s cubic-bezier(.4,0,.2,1)",
+      }} />
+    </div>
+  );
 }
 
 /**
@@ -115,16 +131,77 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   // acepta aportes mientras la ronda está en 'voting'. Cerrada la ronda, los
   // taps que lleguen tarde los descarta el servidor.
   if (round?.status === "voting") {
+    // Marcador = reparto del 100% (sube y baja). Los votos absolutos de `counts`
+    // siguen intactos: son los que se mandan al servidor y los que deciden al ganador.
+    const pct = dueloPercentages(counts);
     const soyDuelista = !!user?.id && (s1?.user_id === user.id || s2?.user_id === user.id);
     const lados = [
-      { slot: 1, s: s1, color: PINK,   votes: counts.p1 },
-      { slot: 2, s: s2, color: ORANGE, votes: counts.p2 },
+      { slot: 1, s: s1, color: PINK,   pct: pct.p1 },
+      { slot: 2, s: s2, color: ORANGE, pct: pct.p2 },
     ];
     const tap = (slot) => {
+      // Guard defensivo: si el usuario es duelista la UI ni siquiera dibuja los
+      // botones, pero dejamos el corte acá para que no exista ningún camino del
+      // cliente que mande un tap suyo. La protección real es server-side, en el
+      // RPC applause_add (ver REQUERIMIENTO PARA CLAUDE SUPABASE).
+      if (soyDuelista) return;
       sendTap(slot);
       setTaps((t) => t + 1);
       if (navigator.vibrate) navigator.vibrate(12);
     };
+
+    // ── Duelista en el escenario: no vota ────────────────────────────────────
+    // Ni a sí mismo ni al rival. Ve el marcador (divs sin onClick) para seguir
+    // su duelo, pero no hay botón de voto ni contador de aplausos aportados.
+    if (soyDuelista) {
+      return (
+        <div>
+          {header}
+          <div style={{
+            textAlign: "center", padding: "26px 18px", borderRadius: 18, marginBottom: 14,
+            background: "linear-gradient(135deg, rgba(255,45,149,.18), rgba(255,149,0,.10))",
+            border: `2px solid ${PINK}`,
+          }}>
+            <div style={{ fontSize: 44, marginBottom: 8 }}>🎤</div>
+            <div style={{
+              fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 18,
+              color: PINK, marginBottom: 6,
+            }}>
+              ESTÁS EN EL ESCENARIO
+            </div>
+            <div style={{ fontSize: 13, color: "rgba(245,230,192,.6)", lineHeight: 1.5 }}>
+              No podés votar durante tu propio duelo.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            {lados.map(({ slot, s, color, pct: valor }) => (
+              <div key={slot} style={{
+                flex: 1, padding: "16px 8px", borderRadius: 18, textAlign: "center",
+                border: `2px solid ${color}55`, background: `${color}10`,
+              }}>
+                <SlotFace slot={s} color={color} />
+                <div style={{
+                  fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14,
+                  color, marginTop: 8,
+                }}>
+                  {s?.name || `Participante ${slot}`}
+                </div>
+                <div style={{
+                  fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26,
+                  color: "#F0E8FF", marginTop: 4,
+                }}>
+                  👍 {valor}%
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <SplitBar p1={pct.p1} />
+        </div>
+      );
+    }
+
     return (
       <div>
         {header}
@@ -133,16 +210,6 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
           .duelo-tap:active { animation: dueloTapPop .18s ease-out; }
         `}</style>
 
-        {soyDuelista && (
-          <div style={{
-            textAlign: "center", padding: "10px 12px", borderRadius: 12, marginBottom: 12,
-            background: "rgba(255,45,149,.12)", border: `1px solid ${PINK}55`,
-            fontSize: 12.5, fontWeight: 700, color: PINK,
-          }}>
-            🎤 Estás en el escenario — ¡es tu duelo!
-          </div>
-        )}
-
         <div style={{
           textAlign: "center", fontSize: 13, color: "rgba(245,230,192,.6)", marginBottom: 14,
         }}>
@@ -150,7 +217,7 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
-          {lados.map(({ slot, s, color, votes }) => (
+          {lados.map(({ slot, s, color, pct: valor }) => (
             <button
               key={slot}
               className="duelo-tap"
@@ -172,11 +239,13 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
                 fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26,
                 color: "#F0E8FF", marginTop: 4,
               }}>
-                👍 {votes}
+                👍 {valor}%
               </div>
             </button>
           ))}
         </div>
+
+        <SplitBar p1={pct.p1} />
 
         <div style={{
           marginTop: 14, textAlign: "center", fontSize: 11.5, color: "rgba(245,230,192,.35)",
@@ -192,6 +261,8 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   if (round?.status === "finished") {
     const result = resolveDueloWinner(round, counts);
     const ganador = result.slot === 1 ? s1 : result.slot === 2 ? s2 : null;
+    // El ganador sale de los votos reales (result); el % es sólo el reparto.
+    const finalPct = dueloPercentages(counts);
     return (
       <div>
         {header}
@@ -209,8 +280,8 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-          {[{ slot: 1, s: s1, color: PINK, votes: result.p1 },
-            { slot: 2, s: s2, color: ORANGE, votes: result.p2 }].map(({ slot, s, color, votes }) => (
+          {[{ slot: 1, s: s1, color: PINK, valor: finalPct.p1 },
+            { slot: 2, s: s2, color: ORANGE, valor: finalPct.p2 }].map(({ slot, s, color, valor }) => (
             <div key={slot} style={{
               flex: 1, padding: "14px 8px", borderRadius: 16, textAlign: "center",
               background: `${color}10`,
@@ -223,7 +294,7 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
               <div style={{
                 fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 20,
                 color: "#F0E8FF", marginTop: 2,
-              }}>👍 {votes}</div>
+              }}>👍 {valor}%</div>
             </div>
           ))}
         </div>

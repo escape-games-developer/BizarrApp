@@ -22,9 +22,11 @@ import { advanceEvent, fetchLiveEvent } from "./pantallaDj";
 /**
  * Recorte configurado en el catálogo central para esta canción.
  *
- * `escenario_queue` guarda el yt_id pero no el id de la fila del catálogo, así
- * que se resuelve por categoría 'ftl' + youtube id, que es como está armado el
- * catálogo (playlist_categories → playlist_to_category → playlist_items).
+ * `escenario_video` guarda el yt_id pero no el id de la fila del catálogo, así
+ * que se resuelve por categoría del juego ('ftl' | 'pt') + youtube id, que es
+ * como está armado el catálogo (playlist_categories → playlist_to_category →
+ * playlist_items). Buscar siempre en 'ftl' dejaba a Personal Trainer sin
+ * recorte, en silencio.
  *
  * Si el mismo video aparece en varias playlists de FTL con recortes DISTINTOS,
  * no se elige ninguno al azar: se corta con un error que nombra el conflicto.
@@ -34,9 +36,9 @@ import { advanceEvent, fetchLiveEvent } from "./pantallaDj";
  *
  * Devuelve { trim_start_seconds, trim_end_seconds } o null si no hay recorte.
  */
-async function buscarRecorteCentral(ytId) {
+async function buscarRecorteCentral(ytId, categoria) {
   const { data: cat, error: eCat } = await supabase
-    .from("playlist_categories").select("id").eq("slug", "ftl").maybeSingle();
+    .from("playlist_categories").select("id").eq("slug", categoria).maybeSingle();
   if (eCat) throw new Error(eCat.message);
   if (!cat) return null;
 
@@ -59,7 +61,8 @@ async function buscarRecorteCentral(ytId) {
   ))];
   if (distintos.length > 1) {
     throw new Error(
-      `La canción está en varias playlists de FTL con recortes distintos (${distintos.join(" / ")}). ` +
+      `El video está en varias playlists de ${categoria.toUpperCase()} con recortes distintos ` +
+      `(${distintos.join(" / ")}). ` +
       "Dejá un solo recorte para este video en Playlists YouTube y volvé a prepararlo.",
     );
   }
@@ -77,9 +80,9 @@ async function buscarRecorteCentral(ytId) {
  * que la TV lo aplique al cargar el video. Sin recorte configurado devuelve
  * { trimStart: 0, trimEnd: null }, que es "el video entero".
  */
-export async function recorteDeEscenario(ytId) {
+export async function recorteDeEscenario(ytId, categoria = "ftl") {
   if (!ytId) return { trimStart: 0, trimEnd: null };
-  const recorte = await buscarRecorteCentral(ytId);
+  const recorte = await buscarRecorteCentral(ytId, categoria);
   return {
     trimStart: recorte?.trim_start_seconds ?? 0,
     trimEnd:   recorte?.trim_end_seconds ?? null,

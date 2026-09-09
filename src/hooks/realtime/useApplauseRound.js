@@ -23,6 +23,29 @@ export function resolveDueloWinner(round, counts) {
   return { slot: round.winner_slot ?? (p1 > p2 ? 1 : 2), tie: false, p1, p2 };
 }
 
+/**
+ * Reparto porcentual del Duelo: los dos participantes se disputan un 100%.
+ *
+ * ÚNICA fuente de cálculo — la usan /tv, el Admin y el cliente, para que las
+ * tres pantallas no puedan mostrar repartos distintos del mismo marcador.
+ *
+ * · Sin votos → 50/50: el duelo arranca empatado. Mostrar 0%/0% rompería la
+ *   idea del 100% compartido.
+ * · p2 se deriva como `100 - p1` (no se redondea por separado): así la suma da
+ *   exactamente 100 siempre, sin el 49+50=99 del doble redondeo.
+ *
+ * OJO: esto es SÓLO presentación. El ganador y las partículas se siguen
+ * calculando con los votos absolutos (ver `resolveDueloWinner`).
+ */
+export function dueloPercentages(counts) {
+  const p1 = Number(counts?.p1) || 0;
+  const p2 = Number(counts?.p2) || 0;
+  const total = p1 + p2;
+  if (!total) return { p1: 50, p2: 50 };
+  const p1Pct = Math.round((p1 / total) * 100);
+  return { p1: p1Pct, p2: 100 - p1Pct };
+}
+
 // Instance id único por montaje: previene colisión de channels cuando varias
 // vistas del mismo hook conviven (PantallaPreview + PantallaGigante).
 function makeInstanceId() {

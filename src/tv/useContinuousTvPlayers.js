@@ -64,6 +64,21 @@ const PHASES = ["IDLE", "LOADING_CURRENT", "PLAYING", "PREPARING_NEXT", "TRANSIT
 const DEV = import.meta.env.DEV;
 const debug = (...args) => { if (DEV) console.info("[TV]", ...args); };
 
+/**
+ * Los items sintéticos de los juegos de escenario llevan el prefijo del juego
+ * en el id — 'ftl:' (Follow the Leader) y 'pt:' (Personal Trainer). Los arma
+ * PantallaTV, y el prefijo existe justamente para que no puedan confundirse con
+ * una fila real de pantalla_playlist_items.
+ *
+ * Entrar o salir de uno es un CORTE SECO, no un cruce de canciones: estos
+ * juegos no llevan lluvia ni crossfade. Se pausa el saliente, se carga el
+ * entrante y se muestra. Los cambios entre canciones propias del DJ no pasan
+ * por acá y conservan su transición de siempre.
+ */
+const PREFIJOS_ESCENARIO = ["ftl:", "pt:"];
+const esItemDeEscenario = (id) =>
+  typeof id === "string" && PREFIJOS_ESCENARIO.some((p) => id.startsWith(p));
+
 const emptySlot = () => ({ itemId: null, item: null, role: "idle", timeout: null, started: false, retried: false });
 
 const videoOptions = (item) => ({
@@ -415,17 +430,33 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       }
     };
 
-    /** El servidor ya cambió de canción (skip del DJ o kick). Sólo acompañamos. */
-    const beginExternalTransition = (sourceItemId) => {
+    /**
+     * El servidor ya cambió de canción (skip del DJ o kick). Sólo acompañamos.
+     *
+     * `corteSeco` es el caso de Follow the Leader: entrar o salir del video del
+     * juego no es un cruce de canciones. Se pausa el saliente en el acto, sin
+     * lluvia ni fundido, y el entrante aparece apenas carga. Sin esto, cerrar
+     * FTL mostraba la lluvia del motor entre el video del juego y la canción
+     * siguiente del DJ.
+     */
+    const beginExternalTransition = (sourceItemId, corteSeco = false) => {
       transitionRef.current = {
         sourceId: sourceItemId, targetId: null, targetIndex: null,
-        startedAt: Date.now(), reason: REASON.EXTERNAL,
+        startedAt: Date.now(), reason: REASON.EXTERNAL, corteSeco,
       };
       setPhase("TRANSITIONING");
-      crossfadeMsRef.current = ventanaDeCruce(0);
+      crossfadeMsRef.current = corteSeco ? 0 : ventanaDeCruce(0);
       logAdvance(REASON.EXTERNAL, sourceItemId, activeIndexRef.current, {
-        source: "servidor (manual-admin | kick-threshold)",
+        source: "servidor (manual-admin | kick-threshold)", corteSeco,
       });
+      if (corteSeco) {
+        // Callar YA al saliente: sin fade y sin lluvia que lo tape.
+        const index = activeIndexRef.current;
+        cancelFade(index);
+        try { playersRef.current[index]?.pauseVideo(); } catch { /* noop */ }
+        debug("Corte seco (escenario) — sin lluvia ni crossfade", sourceItemId);
+        return;
+      }
       runOutro(displayedItemRef.current);
     };
 
@@ -443,8 +474,14 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       // El entrante sube YA, en paralelo con la bajada del saliente: eso es lo
       // que hace que sea un crossfade y no dos fades con un hueco en el medio.
       // Antes esta rampa esperaba a que terminara la ventana entera.
-      debug(`Crossfade in — player ${index === 0 ? "A" : "B"} 0 → ${volume} en ${Math.max(800, remaining)}ms`);
-      fadeVolume(index, playersRef.current[index], 0, volume, Math.max(800, remaining));
+      // En un corte seco no hay rampa: el volumen se pone entero de una.
+      if (transition.corteSeco) {
+        cancelFade(index);
+        try { playersRef.current[index]?.setVolume(volume); } catch { /* noop */ }
+      } else {
+        debug(`Crossfade in — player ${index === 0 ? "A" : "B"} 0 → ${volume} en ${Math.max(800, remaining)}ms`);
+        fadeVolume(index, playersRef.current[index], 0, volume, Math.max(800, remaining));
+      }
 
       later(() => {
         if (transitionRef.current !== transition) return;
@@ -460,7 +497,11 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         // corriendo detrás de la lluvia sería un segundo audio en silencio.
         cancelFade(previousIndex);
         try { playersRef.current[previousIndex]?.pauseVideo(); } catch { /* noop */ }
-        later(() => { setRainPhase("leaving"); later(() => setRainPhase("idle"), 700); }, rainTailRef.current * 1000);
+        // En un corte seco la lluvia nunca entró: dispararle la salida la haría
+        // aparecer justo en el cambio que se quería sin transición.
+        if (!transition.corteSeco) {
+          later(() => { setRainPhase("leaving"); later(() => setRainPhase("idle"), 700); }, rainTailRef.current * 1000);
+        }
         transitionRef.current = null;
         skipStreakRef.current = 0;
         watchTicksRef.current = { itemId: null, hits: 0 };
@@ -679,7 +720,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       // El servidor cambió de canción: la anterior ya no puede pedir nada más.
       advancedRef.current.add(displayed.id);
       abrirRonda(item);
-      if (!transitionRef.current) beginExternalTransition(displayed.id);
+      // Entrar o salir del video de un juego de escenario es un corte directo;
+      // entre dos canciones del DJ se conserva la transición de siempre.
+      const corteSeco = esItemDeEscenario(displayed.id) || esItemDeEscenario(item.id);
+      if (!transitionRef.current) beginExternalTransition(displayed.id, corteSeco);
       prepareNext(item);
     };
 

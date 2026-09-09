@@ -1,6 +1,34 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, supabaseAnon } from "../../lib/supabase";
 
+/**
+ * Normaliza lo que el operador escribió (o subió) en el campo de video del
+ * Duelo al contrato que lee DueloBigscreen:
+ *
+ *   YouTube (URL o ID pelado) → { source: "youtube", yt_id }
+ *   URL http(s) directa       → { source: "url", video_url }   (mp4/webm subido)
+ *   cualquier otra cosa       → null                            (duelo sin video)
+ *
+ * Devolver NULL —y no "" ni {}— es parte del contrato: la TV decide con
+ * `video?.source` si monta el reproductor, así que un objeto a medias le deja
+ * el rectángulo negro puesto sin nada que reproducir.
+ */
+export function parseDueloVideo(videoInput) {
+  const raw = typeof videoInput === "string" ? videoInput.trim() : "";
+  if (!raw) return null;
+
+  const ytMatch = raw.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  const ytId = ytMatch ? ytMatch[1] : (/^[a-zA-Z0-9_-]{11}$/.test(raw) ? raw : null);
+  if (ytId) return { source: "youtube", yt_id: ytId, video_url: null, title: null };
+
+  if (/^https?:\/\//i.test(raw)) {
+    return { source: "url", yt_id: null, video_url: raw, title: null };
+  }
+  return null;   // texto suelto: mejor sin video que con un <video> roto en la TV
+}
+
 export function useGameState() {
   const [session,   setSession]   = useState(null);
   const [gameState, setGameState] = useState(null);
@@ -244,12 +272,35 @@ export function useAdminControls(sessionId) {
 
   // Limpia también active_game/active_placa: si no, la TV se quedaba con la
   // capa del sorteo encima del DJ y RaffleScreen estroboscopiaba sin fin.
+  // Cierra el juego: limpia el estado vivo del sorteo y lo saca del aire, así
+  // la TV vuelve sola a su capa base (DJ Democracy). Es el mismo contrato que
+  // `resetTrivia`: soltar `active_game` y nada más — no se avanza la canción
+  // del DJ, que sigue sonando donde estaba.
+  //
+  // Toca SÓLO game_state: no roza connected_users, excluded_raffle ni el
+  // histórico de ganadores.
   const resetRaffle = useCallback(() =>
     update({
       raffle_state:       "idle",
       raffle_winner_id:   null,
       raffle_winner_name: null,
       active_game:        null,
+      active_placa:       null,
+      placa_custom:       null,
+    }),
+  [update]);
+
+  // Otra ronda del MISMO juego: borra al ganador pero deja Rey del Orto en el
+  // aire (`active_game` intacto), así la TV se queda en la pantalla de reposo
+  // del juego mientras el operador prepara el sorteo siguiente, en vez de
+  // rebotar a DJ Democracy y volver. Es la diferencia con `resetRaffle`, que
+  // ABANDONA el juego.
+  const nuevaRondaRaffle = useCallback(() =>
+    update({
+      raffle_state:       "idle",
+      raffle_winner_id:   null,
+      raffle_winner_name: null,
+      active_game:        "rey del orto",
       active_placa:       null,
       placa_custom:       null,
     }),
@@ -406,16 +457,20 @@ export function useAdminControls(sessionId) {
 
   // NOTA: no inicializamos applause_counts. La RPC applause_add hace INSERT ON CONFLICT
   // cuando llega el primer tap, y las policies actuales no permiten INSERT directo.
-  const launchDuelo = useCallback(async ({ p1, p2, videoInput }) => {
+  // `videoInput` es OPCIONAL por contrato: launchDuelo({ p1, p2 }),
+  // launchDuelo({ p1, p2, videoInput: null }) y launchDuelo({ p1, p2,
+  // videoInput: "" }) son todos lanzamientos válidos y arrancan la ronda igual.
+  // Los ÚNICOS requisitos son la sesión activa y los dos participantes.
+  const launchDuelo = useCallback(async ({ p1, p2, videoInput = null }) => {
     if (!sessionId) return { error: "Sin sesión activa" };
+    if (!p1 || !p2) throw new Error("Faltan los dos participantes del duelo");
     await dismissActiveVideo();
-    // 1. Parsear videoInput → YouTube (yt_id) o URL directa
-    const ytMatch = String(videoInput).match(
-      /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-    );
-    const dueloVideo = ytMatch
-      ? { source: "youtube", yt_id: ytMatch[1], video_url: null, title: null }
-      : { source: "url", yt_id: null, video_url: videoInput, title: null };
+    // 1. Parsear videoInput → YouTube (yt_id) o URL directa. El video es
+    //    OPCIONAL: sin input, o con un input que no es ni YouTube ni una URL
+    //    http(s), duelo_video queda en NULL limpio. Nunca "" ni {} ni "null":
+    //    la TV pregunta por `video?.source`, y un objeto vacío la dejaba con el
+    //    marco negro del reproductor puesto sin nada que reproducir.
+    const dueloVideo = parseDueloVideo(videoInput);
 
     // 2. Crear applause_session. El duelo cierra por acción manual del admin,
     //    pero `voting_ends_at` NO puede ir en null: el RPC applause_finish
@@ -571,6 +626,15 @@ export function useAdminControls(sessionId) {
     if (error) throw new Error(error.message || String(error));
   }, [update, dismissActiveVideo]);
 
+  // El OPERADOR elige (o cambia) el video que va a hacer el participante ya
+  // preparado. Es un UPDATE de un solo campo a propósito: no toca
+  // `escenario_participant`, así que cambiar de idea antes de ▶ Comenzar no
+  // crea un turno nuevo, no resetea el flag `playing` y no toca los votos.
+  const setEscenarioVideo = useCallback(async (video) => {
+    const { error } = await update({ escenario_video: video || null });
+    if (error) throw new Error(error.message || String(error));
+  }, [update]);
+
   // ▶ Comenzar / ■ Finalizar la performance. Sólo mueven el flag `playing` del
   // snapshot: la TV decide con él si reproduce la canción del participante o
   // vuelve a la del DJ. No se toca la cola del evento en ningún caso.
@@ -625,7 +689,7 @@ export function useAdminControls(sessionId) {
   // ── Return — SIN gameState (ese lo da useGameState) ───────────────────────
   return {
     announceGame, activateGame, deactivateGame,
-    launchRaffle, drawRaffleWinner, resetRaffle,
+    launchRaffle, drawRaffleWinner, resetRaffle, nuevaRondaRaffle,
     startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia,
     activateEscenario, deactivateEscenario,
     startDuelo, revealDuelo,
@@ -633,7 +697,7 @@ export function useAdminControls(sessionId) {
     openPostulacionesDuelo, setPostulacionStatus, deletePostulacion,
     launchDuelo, finishDuelo, cerrarDuelo,
     openEscenarioInvitation, openEscenario, prepararEscenario,
-    setPerformanceEscenario, finishEscenarioTurn, closeEscenario,
+    setEscenarioVideo, setPerformanceEscenario, finishEscenarioTurn, closeEscenario,
     launchMinijuego,
     toggleZocalo, toggleScreenAudio, sendPlaca, clearPlaca,
     projectVideo,
