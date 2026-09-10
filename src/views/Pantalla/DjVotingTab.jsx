@@ -14,14 +14,20 @@ import djVotingCss from "./djVotingStyles";
  * El cliente sólo vota lo que el admin curó: no busca, no pide ni agrega temas.
  */
 
-const EMOJIS = ["❤️", "🔥", "🤘", "😂", "💃", "🕺"];
-
 // ─── Reacciones ──────────────────────────────────────────────────────────────
-function Reacciones({ onReact }) {
+//
+// Los emojis salen del pack que el admin configuró para el rol de esta persona
+// («Paquetes de emojis por rol» en el editor). Antes eran una lista fija acá:
+// el panel guardaba packs que nadie leía y el VIP veía lo mismo que el invitado.
+//
+// Un pack vacío es una decisión válida del admin —«este rol no reacciona»—, así
+// que en ese caso no se dibuja la fila en vez de caer a una lista por defecto.
+function Reacciones({ onReact, emojis }) {
   const [pop, setPop] = useState(null);
+  if (!emojis?.length) return null;
   return (
     <div className="djv-reacciones">
-      {EMOJIS.map((e) => (
+      {emojis.map((e) => (
         <button key={e} aria-label={`Reaccionar con ${e}`}
           className={`djv-reaccion${pop === e ? " djv-reaccion-pop" : ""}`}
           onClick={() => { onReact(e); setPop(e); setTimeout(() => setPop(null), 420); }}>
@@ -238,7 +244,7 @@ export default function DjVotingTab({ user, isRestricted = false, isGuest = fals
         </div>
       )}
 
-      {puedeVotar && <Reacciones onReact={cli.react} />}
+      {puedeVotar && <Reacciones onReact={cli.react} emojis={cli.emojis} />}
 
       <SonandoAhora current={current} kick={cli.kick} onKick={cli.toggleKick} puedeVotar={puedeVotar} />
 

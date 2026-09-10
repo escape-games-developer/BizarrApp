@@ -39,7 +39,11 @@ export default function SeccionContactos({ event, onError }) {
 
   return (
     <PanelSection id="contactos" title="Base de contactos" icon="📇"
-      badge={cargando ? "…" : contactos.length || null}>
+      badge={cargando ? "…" : contactos.length || null}
+      status="pendiente"
+      aviso={"Leer y exportar funciona, pero hoy la tabla nunca se llena: el ingreso de "
+        + "invitados de BizarrApp no pide apodo, email ni teléfono, así que no hay nada que "
+        + "guardar. La lista se va a poblar sola cuando exista ese paso."}>
       <div className="pdj-sub">
         Lo que dejaron los invitados al unirse. El panel sólo lee: las filas las escribe el
         servidor en el momento del ingreso.

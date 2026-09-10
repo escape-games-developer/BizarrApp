@@ -145,7 +145,7 @@ export const saveAchievements = (eventId, filas) =>
 // `prize_key` está acotado por CHECK: estos ocho y ninguno más.
 export const CLAVES_PREMIO = [
   "extra_super_vote", "giant_reaction", "highlighted_nickname", "physical_prize",
-  "vip_upgrade", "gif_screen", "screen_message", "vip_badge",
+  "vip_upgrade", "throw_screen", "gif_screen", "screen_message", "vip_badge",
 ];
 
 export const fetchPrizes = (eventId) => leer("pantalla_prizes", eventId);
@@ -195,6 +195,34 @@ export const updatePhysicalPrize = (id, patch) =>
 
 export const deletePhysicalPrize = (id) =>
   borrar("pantalla_physical_prizes", supabase.from("pantalla_physical_prizes").delete().eq("id", id));
+
+// ── Revoleo a Pantalla — galería de objetos ──────────────────────────────────
+// Cada objeto tiene dos estados visuales: volando y caído. Las imágenes viven
+// en la biblioteca general `media_assets`; acá sólo guardamos sus URLs públicas.
+// El motor TV/cliente que consume el premio `throw_screen` se integra en una
+// tanda posterior, pero el editor ya puede administrar la galería real.
+
+export const fetchThrowObjects = (eventId) =>
+  leer("pantalla_throw_objects", eventId, "position");
+
+export const createThrowObject = (eventId, { name, flying_url, fallen_url, position }) =>
+  escribir(supabase.from("pantalla_throw_objects")
+    .insert({
+      event_id: eventId,
+      name,
+      flying_url,
+      fallen_url,
+      position,
+    })
+    .select("id"));
+
+export const updateThrowObject = (id, patch) =>
+  escribir(supabase.from("pantalla_throw_objects")
+    .update({ ...patch, updated_at: ahora() }).eq("id", id).select("id"));
+
+export const deleteThrowObject = (id) =>
+  borrar("pantalla_throw_objects",
+    supabase.from("pantalla_throw_objects").delete().eq("id", id));
 
 // ── Código de canje del premio físico ────────────────────────────────────────
 //
@@ -304,4 +332,36 @@ export function descargarTexto(nombre, contenido, tipo = "text/plain;charset=utf
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ── Packs de emojis: lectura del cliente ─────────────────────────────────────
+//
+// `pantalla_emoji_packs` tiene policy de SELECT pública (`USING (true)`), así que
+// el invitado puede leer su propio pack sin ser admin y la TV puede leerlo sin
+// sesión. Por eso esta función acepta el cliente: `supabase` para el invitado,
+// `supabaseAnon` para la pantalla.
+//
+// El fallback NO es decorativo: si el evento nunca pasó por el panel no hay
+// ninguna fila, y sin esta lista el invitado se quedaría sin reacciones. Es la
+// misma lista que estaba escrita a mano en `DjVotingTab`, ahora en un solo lugar.
+export const EMOJIS_POR_DEFECTO = ["❤️", "🔥", "🤘", "😂", "💃", "🕺"];
+
+export async function fetchEmojiPackForRole(eventId, role, client = supabase) {
+  if (!eventId) return EMOJIS_POR_DEFECTO;
+  const { data, error } = await client
+    .from("pantalla_emoji_packs")
+    .select("role,emojis")
+    .eq("event_id", eventId)
+    .in("role", [role || "guest", "guest"]);
+  if (error) throw new Error(error.message);
+
+  // Se pide el rol propio y `guest` en la misma consulta: si el rol no tiene
+  // pack configurado hereda el de invitado antes de caer al default. Un pack
+  // configurado y vacío a propósito («este rol no reacciona») se respeta: por
+  // eso la condición mira si la FILA existe, no si la lista tiene largo.
+  const propio = data?.find((f) => f.role === role);
+  if (propio) return propio.emojis || [];
+  const guest = data?.find((f) => f.role === "guest");
+  if (guest) return guest.emojis || [];
+  return EMOJIS_POR_DEFECTO;
 }

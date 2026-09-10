@@ -28,7 +28,7 @@ const nuevoCodigo = () => Array.from(
 const limpiar = (v) => String(v || "").toUpperCase().split("")
   .filter((c) => ALFABETO.includes(c)).join("").slice(0, 16);
 
-export default function SeccionCodigoCanje({ event, onError }) {
+export default function SeccionCodigoCanje({ event, onError, embedded = false }) {
   const [codigo,   setCodigo]   = useState("");
   const [guardado, setGuardado] = useState("");
   const [visible,  setVisible]  = useState(false);
@@ -55,7 +55,7 @@ export default function SeccionCodigoCanje({ event, onError }) {
   const cambiado = codigo.trim() !== guardado;
 
   return (
-    <PanelSection id="codigo-canje" title="Código de canje del premio" icon="🔐">
+    <PanelSection id="codigo-canje" title="Código de entrega" icon="🔐" embedded={embedded}>
       <div className="pdj-sub">
         Lo pide el personal de la barra para entregar un premio real. Sirve para todo el
         evento: alcanza con que lo sepan los que entregan.

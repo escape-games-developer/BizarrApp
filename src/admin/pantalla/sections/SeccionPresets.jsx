@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { reorderItems } from "../../../services/pantallaDj";
+import { reorderItems, resetVotes } from "../../../services/pantallaDj";
 import { fetchPresets, createPreset, deletePreset } from "../../../services/pantallaConfig";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
@@ -58,6 +58,7 @@ export default function SeccionPresets({ event, items, refresh, onError }) {
     const posiciones = new Map(ordenados.map((i) => [i.id, i.position]));
     correr(async () => {
       await reorderItems([...enPreset, ...nuevos], posiciones);
+      await resetVotes(event.id);
       await refresh();
     });
   };
@@ -65,13 +66,12 @@ export default function SeccionPresets({ event, items, refresh, onError }) {
   return (
     <PanelSection id="presets-orden" title="Presets de orden" icon="🔖" badge={presets.length || null}>
       <div className="pdj-sub">
-        Guardá el orden actual con un nombre y volvé a él cuando quieras. Útil para tener un
-        arranque tranquilo y un cierre a todo trapo sin rearmar la lista a mano.
+        Guardá el orden actual de la playlist con un nombre y volvé a él cuando quieras. Aplicar un preset reordena las canciones y reinicia los votos.
       </div>
 
       {presets.length === 0 && (
         <div className="pdj-campo-hint" style={{ marginTop: 0, marginBottom: 9 }}>
-          Todavía no guardaste ningún orden.
+          Todavía no guardaste ningún preset de orden.
         </div>
       )}
 
@@ -104,14 +104,14 @@ export default function SeccionPresets({ event, items, refresh, onError }) {
       ))}
 
       <div style={{ display: "flex", gap: 5, marginTop: 9 }}>
-        <input className="pdj-input" value={nombre} placeholder="Nombre del orden actual"
+        <input className="pdj-input" value={nombre} placeholder="Nombre del preset"
           aria-label="Nombre del preset" disabled={ocupado || items.length === 0}
           onChange={(e) => setNombre(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); guardarOrden(); } }}
           style={{ flex: 1, minWidth: 0, fontSize: 11.5 }} />
         <button type="button" className="pdj-mini pdj-mini-p"
           disabled={ocupado || !nombre.trim() || items.length === 0} onClick={guardarOrden}>
-          💾 Guardar
+          💾 Guardar orden actual como preset
         </button>
       </div>
 

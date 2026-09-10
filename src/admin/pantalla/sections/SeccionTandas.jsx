@@ -93,7 +93,10 @@ export default function SeccionTandas({ event, refresh, onError }) {
   const off = !b.ads_enabled;
 
   return (
-    <PanelSection id="tandas" title="Tandas publicitarias" icon="📣" badge={clips.length || null}>
+    <PanelSection id="tandas" title="Tandas publicitarias" icon="📣" badge={clips.length || null}
+      status="pendiente"
+      aviso={"Los clips y el «cada N canciones» se guardan, pero el motor de la TV todavía no "
+        + "sabe intercalar tandas: nunca sale una al aire."}>
       <CampoSwitch label="Tandas habilitadas" checked={b.ads_enabled}
         onChange={(v) => set("ads_enabled", v)} />
 

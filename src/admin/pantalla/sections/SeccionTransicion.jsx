@@ -6,17 +6,32 @@ import PanelSection from "../PanelSection";
 import { BotonGuardar, Campo, CampoSwitch, useBorrador, useGuardado } from "../panelControls";
 
 /**
- * Transición entre canciones: el GIF que tapa el corte.
+ * Transición entre canciones. La sección tiene DOS mitades y sólo una anda.
  *
- * La galería vive en `pantalla_gifs` con `kind='transition'`, y el elegido se
- * marca con `is_active`. Además se copia su URL a
- * `pantalla_events.transition_gif_url`, que es lo que lee la TV: así el motor no
- * tiene que consultar la galería en cada corte.
+ * ── ⛈ Lluvia (FUNCIONAL) ────────────────────────────────────────────────────
+ * `rain_anticipation_seconds` y `rain_tail_seconds` son los únicos dos campos
+ * que `/tv` lee de verdad (`PantallaTV.jsx`, al construir el motor A/B). La
+ * anticipación además define la ventana real del crossfade de audio: no es sólo
+ * "cuánto dura la lluvia", es cuándo empieza el cruce.
  *
- * Los tres tiempos suman el largo total de la transición. Se muestra la suma
- * porque un fade de 2 + hold de 1 + fade de 2 son cinco segundos de silencio,
- * y eso en una pista se nota.
+ * ── 🎞 GIF y fades (PENDIENTE) ──────────────────────────────────────────────
+ * `transition_enabled`, `transition_gif_url` y los tres `transition_fade/hold`
+ * se guardan bien y NO los lee nadie. Buscar cualquiera de esos cinco nombres en
+ * `src/tv/` no devuelve una sola coincidencia. Apagar la transición no apaga
+ * nada, y el GIF elegido no se muestra jamás.
+ *
+ * Por eso los campos siguen acá y se siguen pudiendo editar —el motor los va a
+ * necesitar tal cual están, y dejar pre-configurada la noche no molesta a
+ * nadie— pero bajo un encabezado que dice qué gobierna la TV y qué no.
  */
+
+function Bloque({ ico, titulo }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+      <span className="pdj-campo-lbl" style={{ margin: 0 }}>{ico} {titulo}</span>
+    </div>
+  );
+}
 
 const TIEMPOS = [
   { campo: "transition_fade_in_seconds",  label: "Fade in (s)" },
@@ -97,9 +112,48 @@ export default function SeccionTransicion({ event, refresh, onError }) {
 
   return (
     <PanelSection id="transicion" title="Transición entre canciones" icon="🎞">
-      <CampoSwitch label="Transición habilitada" checked={b.transition_enabled}
-        onChange={(v) => set("transition_enabled", v)} />
+      {/* ── Mitad que SÍ gobierna la TV ──────────────────────────────────── */}
+      <Bloque ico="⛈" titulo="Lluvia entre canciones" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div>
+          <label htmlFor="rain_anticipation_seconds" style={{ fontSize: 9, fontWeight: 700, letterSpacing: .4, textTransform: "uppercase", color: P.tenue2, display: "block", marginBottom: 3 }}>
+            Segundos antes del fin
+          </label>
+          <input id="rain_anticipation_seconds" className="pdj-input" type="number" min={1} max={30} step={1}
+            value={b.rain_anticipation_seconds}
+            onChange={(e) => set("rain_anticipation_seconds", e.target.value)}
+            style={{ padding: "6px 8px", fontSize: 11 }} />
+        </div>
+        <div>
+          <label htmlFor="rain_tail_seconds" style={{ fontSize: 9, fontWeight: 700, letterSpacing: .4, textTransform: "uppercase", color: P.tenue2, display: "block", marginBottom: 3 }}>
+            Segundos del tema nuevo
+          </label>
+          <input id="rain_tail_seconds" className="pdj-input" type="number" min={0} max={15} step={1}
+            value={b.rain_tail_seconds}
+            onChange={(e) => set("rain_tail_seconds", e.target.value)}
+            style={{ padding: "6px 8px", fontSize: 11 }} />
+        </div>
+      </div>
+      <div className="pdj-campo-hint">
+        La lluvia arranca N segundos antes del fin del video y se mantiene M segundos del tema
+        nuevo. <strong>«Segundos antes del fin» es además la ventana del cruce de audio</strong>:
+        el tema saliente baja y el entrante sube durante exactamente ese tiempo.
+      </div>
+      <div className="pdj-campo-hint">
+        {lluviaCola > 0
+          ? `Lluvia total por transición: ${lluviaAntes + lluviaCola} s (${lluviaAntes} s antes del corte + ${lluviaCola} s del tema nuevo)`
+          : `Lluvia total por transición: ${lluviaAntes} s`}
+      </div>
 
+      {/* ── Mitad que todavía no gobierna nada ───────────────────────────── */}
+      <div style={{ marginTop: 16, borderTop: "1px solid rgba(240,232,255,.1)", paddingTop: 13 }}>
+        <Bloque ico="🎞" titulo="GIF / fade de transición" />
+
+        <CampoSwitch label="Transición habilitada" checked={b.transition_enabled}
+          onChange={(v) => set("transition_enabled", v)} />
+
+      {/* El atenuado por `off` es la semántica original del switch y se conserva
+          tal cual para cuando el motor lo use. */}
       <div style={{ marginTop: 12, opacity: off ? .5 : 1 }}>
         <span className="pdj-campo-lbl">Galería de GIFs</span>
 
@@ -178,43 +232,10 @@ export default function SeccionTransicion({ event, refresh, onError }) {
         </div>
 
         <div className="pdj-campo-hint">
-          Transición total: <strong style={{ color: total > 6 ? P.amarillo : P.tenue }}>
-            {total.toFixed(1)}s
-          </strong>{total > 6 && " — es bastante silencio entre tema y tema."}
+          Transición total configurada: <strong style={{ color: P.amarillo }}>{total.toFixed(1)}s</strong>.
         </div>
-
-        <div style={{ marginTop: 14, borderTop: "1px solid rgba(240,232,255,.1)", paddingTop: 12 }}>
-          <span className="pdj-campo-lbl" style={{ marginBottom: 8, display: "block" }}>⛈ Lluvia entre canciones</span>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            <div>
-              <label htmlFor="rain_anticipation_seconds" style={{ fontSize: 9, fontWeight: 700, letterSpacing: .4, textTransform: "uppercase", color: P.tenue2, display: "block", marginBottom: 3 }}>
-                Segundos antes del fin
-              </label>
-              <input id="rain_anticipation_seconds" className="pdj-input" type="number" min={1} max={30} step={1}
-                value={b.rain_anticipation_seconds}
-                onChange={(e) => set("rain_anticipation_seconds", e.target.value)}
-                style={{ padding: "6px 8px", fontSize: 11 }} />
-            </div>
-            <div>
-              <label htmlFor="rain_tail_seconds" style={{ fontSize: 9, fontWeight: 700, letterSpacing: .4, textTransform: "uppercase", color: P.tenue2, display: "block", marginBottom: 3 }}>
-                Segundos del tema nuevo
-              </label>
-              <input id="rain_tail_seconds" className="pdj-input" type="number" min={0} max={15} step={1}
-                value={b.rain_tail_seconds}
-                onChange={(e) => set("rain_tail_seconds", e.target.value)}
-                style={{ padding: "6px 8px", fontSize: 11 }} />
-            </div>
-          </div>
-          <div className="pdj-campo-hint">
-            La lluvia arranca N segundos antes del fin del video y se mantiene M segundos del tema nuevo.
-          </div>
-          <div className="pdj-campo-hint">
-            {lluviaCola > 0
-              ? `Lluvia total por transición: ${lluviaAntes + lluviaCola} s (${lluviaAntes} s antes del corte + ${lluviaCola} s del tema nuevo)`
-              : `Lluvia total por transición: ${lluviaAntes} s`}
-          </div>
-        </div>
-      </div>
+      </div>{/* /galería atenuada */}
+      </div>{/* /mitad pendiente */}
 
       <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado} onClick={guardar} />
     </PanelSection>

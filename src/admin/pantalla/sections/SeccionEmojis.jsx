@@ -2,104 +2,104 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchEmojiPacks, saveEmojiPacks } from "../../../services/pantallaConfig";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
-import { BotonGuardar, useGuardado } from "../panelControls";
-
-/**
- * Qué emojis puede tirar cada rol a la pantalla.
- *
- * Una fila por (evento, rol) en `pantalla_emoji_packs`, con la lista en un
- * `text[]`. Se escriben pegados o separados por espacios; el parseo usa
- * `Intl.Segmenter` cuando está, que es lo único que agrupa bien un emoji
- * compuesto (bandera, familia, tono de piel) en vez de partirlo por code unit.
- */
 
 const ROLES = [
-  { id: "guest",    label: "Invitado",    color: P.tenue,    ico: "👤", sugeridos: "🔥 👏 ❤️ 😂 🤘" },
-  { id: "vip",      label: "VIP",         color: P.amarillo, ico: "👑", sugeridos: "👑 💎 🥂 🔥 ✨" },
-  { id: "birthday", label: "Cumpleañero", color: P.fucsia,   ico: "🎂", sugeridos: "🎂 🎉 🎈 🥳 🎁" },
-  { id: "staff",    label: "Staff",       color: P.cyan,     ico: "🛠", sugeridos: "🛠 🎧 📢 ⚡" },
+  { id: "guest", label: "Invitado", ico: "☺" },
+  { id: "vip", label: "VIP", ico: "☺" },
+  { id: "birthday", label: "Cumpleañero/a", ico: "☺" },
 ];
 
-/** Corta una cadena en emojis enteros, sin romper los compuestos. */
-function aEmojis(texto) {
-  const limpio = String(texto || "").replace(/[\s,]+/g, "");
+const DEFAULTS = ["❤️", "🔥", "🤘", "😂", "💃", "🕺"];
+
+function separarEmojis(texto) {
+  const limpio = String(texto || "").trim();
   if (!limpio) return [];
   if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const seg = new Intl.Segmenter("es", { granularity: "grapheme" });
-    return [...seg.segment(limpio)].map((s) => s.segment).filter(Boolean);
+    return [...new Intl.Segmenter("es", { granularity: "grapheme" }).segment(limpio)]
+      .map((s) => s.segment).filter((s) => s.trim());
   }
-  return [...limpio];
+  return [...limpio].filter((s) => s.trim());
 }
 
 export default function SeccionEmojis({ event, onError }) {
-  const [base, setBase] = useState({});
-  const [borr, setBorr] = useState({});
+  const [packs, setPacks] = useState({});
+  const [inputs, setInputs] = useState({});
+  const [ocupado, setOcupado] = useState(null);
 
   const cargar = useCallback(async () => {
     try {
       const filas = await fetchEmojiPacks(event.id);
-      const mapa = Object.fromEntries(ROLES.map((r) => {
-        const f = filas.find((x) => x.role === r.id);
-        return [r.id, (f?.emojis || []).join(" ")];
-      }));
-      setBase(mapa); setBorr(mapa);
+      const mapa = {};
+      for (const r of ROLES) {
+        const fila = filas.find((x) => x.role === r.id);
+        mapa[r.id] = fila ? [...(fila.emojis || [])] : [...DEFAULTS];
+      }
+      setPacks(mapa);
     } catch (err) { onError?.(err); }
   }, [event.id, onError]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  const cambiados = ROLES.filter((r) => aEmojis(borr[r.id]).join("") !== aEmojis(base[r.id]).join(""));
+  const persistir = async (role, emojis) => {
+    setOcupado(role);
+    try {
+      await saveEmojiPacks(event.id, [{ role, emojis }]);
+      setPacks((p) => ({ ...p, [role]: emojis }));
+    } catch (err) { onError?.(err); }
+    finally { setOcupado(null); }
+  };
 
-  const { estado, mensaje, guardar } = useGuardado(async () => {
-    await saveEmojiPacks(event.id,
-      cambiados.map((r) => ({ role: r.id, emojis: aEmojis(borr[r.id]) })));
-    await cargar();
-  });
+  const agregar = async (role) => {
+    const nuevos = separarEmojis(inputs[role]);
+    if (!nuevos.length) return;
+    const lista = [...(packs[role] || [])];
+    for (const em of nuevos) if (!lista.includes(em)) lista.push(em);
+    await persistir(role, lista);
+    setInputs((i) => ({ ...i, [role]: "" }));
+  };
+
+  const quitar = (role, idx) => persistir(role, (packs[role] || []).filter((_, i) => i !== idx));
 
   return (
-    <PanelSection id="packs-emojis" title="Paquetes de emojis por rol" icon="😀">
-      <div className="pdj-sub">
-        Los emojis que cada rol puede mandar a la pantalla. Se pueden pegar seguidos o separados
-        por espacios; los compuestos (banderas, familias, tonos de piel) se respetan enteros.
+    <PanelSection id="packs-emojis" title="Paquetes de emojis">
+      <div className="pdj-sub" style={{ marginBottom: 12 }}>
+        Cada rol puede tener su propia barra de reacciones. Si no configurás un rol, usa el set por defecto ❤️ 🔥 🤘 😂 💃 🕺.
       </div>
 
-      {ROLES.map((r) => {
-        const lista = aEmojis(borr[r.id]);
-        return (
-          <div key={r.id} style={{ marginBottom: 11 }}>
-            <div style={{
-              fontSize: 11, fontWeight: 800, color: r.color, marginBottom: 5,
-              display: "flex", alignItems: "center", gap: 5,
-            }}>
-              <span>{r.ico}</span>{r.label}
-              <span style={{ marginLeft: "auto", fontSize: 9, color: P.tenue2, fontWeight: 600 }}>
-                {lista.length} emoji{lista.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <input className="pdj-input" value={borr[r.id] ?? ""} placeholder={r.sugeridos}
-              aria-label={`Emojis de ${r.label}`} style={{ fontSize: 16, letterSpacing: 2 }}
-              onChange={(e) => setBorr((b) => ({ ...b, [r.id]: e.target.value }))} />
-            {lista.length > 0 && (
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
-                {lista.map((em, i) => (
-                  <span key={`${em}-${i}`} style={{
-                    fontSize: 15, lineHeight: 1, padding: "4px 6px", borderRadius: 8,
-                    background: "rgba(240,232,255,.05)", border: "1px solid rgba(240,232,255,.09)",
-                  }}>{em}</span>
-                ))}
-              </div>
-            )}
-            {lista.length === 0 && (
-              <div className="pdj-campo-hint">
-                Sin emojis propios: este rol no puede reaccionar. Sugerencia: {r.sugeridos}
-              </div>
-            )}
+      {ROLES.map((r) => (
+        <div key={r.id} style={{
+          padding: 12, borderRadius: 14, marginBottom: 10,
+          background: "rgba(240,232,255,.025)", border: "1px solid rgba(240,232,255,.09)",
+          opacity: ocupado === r.id ? .65 : 1,
+        }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: P.texto, marginBottom: 9 }}>
+            {r.ico} {r.label} <span style={{ color: P.tenue2, fontWeight: 500 }}>· set por defecto</span>
           </div>
-        );
-      })}
 
-      <BotonGuardar estado={estado} mensaje={mensaje}
-        disabled={cambiados.length === 0} onClick={guardar} />
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 10 }}>
+            {(packs[r.id] || []).map((em, idx) => (
+              <div key={`${em}-${idx}`} style={{
+                display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 9px",
+                borderRadius: 999, background: "#08080b", border: "1px solid rgba(240,232,255,.12)",
+              }}>
+                <span style={{ fontSize: 18 }}>{em}</span>
+                <button type="button" disabled={ocupado === r.id} onClick={() => quitar(r.id, idx)}
+                  title={`Quitar ${em}`} aria-label={`Quitar ${em}`}
+                  style={{ border: 0, background: "transparent", color: "#ff355d", padding: 0, cursor: "pointer" }}>🗑</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 7 }}>
+            <input className="pdj-input" value={inputs[r.id] || ""} placeholder="Pegá un emoji…"
+              disabled={ocupado === r.id} onChange={(e) => setInputs((i) => ({ ...i, [r.id]: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregar(r.id); } }}
+              style={{ maxWidth: 190 }} />
+            <button type="button" className="pdj-mini" disabled={ocupado === r.id || !(inputs[r.id] || "").trim()}
+              onClick={() => agregar(r.id)}>+ Agregar</button>
+          </div>
+        </div>
+      ))}
     </PanelSection>
   );
 }

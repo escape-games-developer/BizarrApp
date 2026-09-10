@@ -93,7 +93,10 @@ export default function SeccionEquipos({ event, refresh, onError }) {
   const off = !b.teams_enabled;
 
   return (
-    <PanelSection id="equipos" title="Equipos" icon="🏆" badge={equipos.length || null}>
+    <PanelSection id="equipos" title="Equipos" icon="🏆" badge={equipos.length || null}
+      status="pendiente"
+      aviso={"Los equipos y sus puntajes se guardan, pero el motor que suma puntos todavía no "
+        + "existe: nadie queda asignado a un equipo y el marcador nunca se mueve."}>
       <CampoSwitch label="Equipos habilitados" checked={!!b.teams_enabled}
         onChange={(v) => set("teams_enabled", v)} />
 

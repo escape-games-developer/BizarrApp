@@ -7,9 +7,14 @@ import { BotonGuardar, CampoNumero, CampoSwitch, useBorrador, useGuardado } from
  * Limpieza automática de invitados.
  *
  * La configuración se guarda de verdad en `pantalla_events`, pero **el trabajo
- * programado que la ejecuta todavía no existe**: la base no tiene `pg_cron`
- * instalado ni ninguna función de limpieza. Se avisa acá para que nadie deje el
- * evento abierto una semana creyendo que se limpia solo.
+ * programado que la ejecuta todavía no existe**: se verificó contra la base y
+ * `pg_cron` no está ni instalado. Se avisa acá para que nadie deje el evento
+ * abierto una semana creyendo que se limpia solo.
+ *
+ * La función y el job están escritos en la migración
+ * `20260909130000_pantalla_limpieza_y_reset.sql`, sin aplicar. Cuando se
+ * apliquen, esta sección funciona tal cual está: lee y escribe las dos columnas
+ * que el job consulta, así que no hay nada que cambiar acá.
  */
 export default function SeccionLimpieza({ event, refresh }) {
   const [b, set] = useBorrador(
@@ -32,16 +37,13 @@ export default function SeccionLimpieza({ event, refresh }) {
     || b.guest_max_connection_hours !== event.guest_max_connection_hours;
 
   return (
-    <PanelSection id="limpieza-invitados" title="Limpieza de invitados" icon="🧹">
-      <div className="pdj-sec-aviso">
-        <span style={{ flexShrink: 0 }}>🕓</span>
-        <span>
-          Los valores se guardan, pero el trabajo programado que borra a los invitados vencidos
-          todavía no está corriendo. Hasta que exista, sacar gente sigue siendo manual desde
-          la sección Invitados.
-        </span>
-      </div>
-
+    <PanelSection id="limpieza-invitados" title="Limpieza automática de invitados" icon="🧹"
+      status="pendiente"
+      aviso={"Los valores se guardan, pero el trabajo programado que borra a los invitados "
+        + "vencidos todavía no está corriendo: la base no tiene pg_cron instalado. La función "
+        + "y el job están en la migración 20260909130000_pantalla_limpieza_y_reset.sql, sin "
+        + "aplicar. Hasta entonces, sacar gente sigue siendo manual desde «Invitados», en la "
+        + "consola en vivo."}>
       <CampoSwitch label="Limpieza automática habilitada" checked={b.guest_cleanup_enabled}
         onChange={(v) => set("guest_cleanup_enabled", v)} />
 
@@ -55,6 +57,12 @@ export default function SeccionLimpieza({ event, refresh }) {
       <div className="pdj-campo-hint" style={{ color: P.tenue }}>
         No confundir con la ventana de actividad de Sacar Tema: esa mide quién está mirando
         ahora, esta mide hace cuánto que alguien entró.
+      </div>
+
+      <div className="pdj-campo-hint" style={{ color: P.tenue }}>
+        Los roles <strong>VIP</strong>, <strong>Staff</strong> y <strong>DJ</strong> nunca se
+        eliminan automáticamente. El cumpleañero sí: es un invitado con una etiqueta de la
+        noche, no gente del local.
       </div>
 
       <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado} onClick={guardar} />

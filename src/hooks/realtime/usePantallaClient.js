@@ -5,6 +5,7 @@ import {
   getKickStatus, toggleKickVote, sendReaction,
   fetchMyVotes, fetchVotePowers,
 } from "../../services/pantallaDj";
+import { fetchEmojiPackForRole, EMOJIS_POR_DEFECTO } from "../../services/pantallaConfig";
 
 const HEARTBEAT_MS = 30_000;   // mismo intervalo que usePresence
 
@@ -27,6 +28,7 @@ export function usePantallaClient(event, user) {
   const [myVotes,  setMyVotes]  = useState([]);
   const [powers,   setPowers]   = useState([]);
   const [kick,     setKick]     = useState(null);
+  const [emojis,   setEmojis]   = useState(EMOJIS_POR_DEFECTO);
   const [joined,   setJoined]   = useState(false);
   const [busy,     setBusy]     = useState(null);   // id del tema en curso
   const [error,    setError]    = useState(null);
@@ -58,6 +60,11 @@ export function usePantallaClient(event, user) {
         setRole(res?.role || "guest");
         setJoined(true);
         setPowers(await fetchVotePowers(eventId));
+        // El pack de emojis se pide con el rol que ACABA de devolver `joinEvent`,
+        // no con el del estado: `setRole` todavía no se aplicó en este tick y
+        // pedirlo con el rol viejo le daría al VIP los emojis de invitado.
+        try { setEmojis(await fetchEmojiPackForRole(eventId, res?.role || "guest")); }
+        catch (err) { console.error("[usePantallaClient] emojis:", err); }
         await refreshVotes();
         await refreshKick();
       } catch (err) {
@@ -135,7 +142,7 @@ export function usePantallaClient(event, user) {
   }, [eventId, userId]);
 
   return {
-    role, joined, myVotes, powers, kick, busy, error,
+    role, joined, myVotes, powers, kick, busy, error, emojis,
     powerOf, voteOn, superUsed,
     vote, superVote, toggleKick, react,
     clearError: () => setError(null),

@@ -23,7 +23,6 @@ import SeccionesConfig from "./sections/SeccionesConfig";
 const LS_KEY = "bizarrapp_pantalla_event";
 
 export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = null }) {
-  const [events,  setEvents]  = useState([]);
   const [eventId, setEventId] = useState(() => localStorage.getItem(LS_KEY) || null);
   const [error,   setError]   = useState(null);
   const [busy,    setBusy]    = useState(false);
@@ -37,11 +36,15 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
 
   const fallar = useCallback((e) => setError(e ? mensajeAmigable(e) : null), []);
 
+  /**
+   * Relee la lista de eventos y deja elegido uno válido. No se guarda la lista
+   * en estado: nadie la renderiza — lo único que se usa de ella es cuál queda
+   * seleccionado. La usan «Iniciar / Finalizar / Duplicar» (SeccionCiclo) y el
+   * cambio de código (SeccionCodigo), que necesitan que el evento se relea.
+   */
   const refreshEvents = useCallback(async () => {
     try {
       const list = await listEvents();
-      setEvents(list);
-
       const enVivo = list.find((e) => e.status === "live");
       setEventId((prev) => {
         if (prev && list.some((e) => e.id === prev)) return prev;
@@ -103,8 +106,8 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
               y ponelo en vivo. Recién ahí los clientes ven la votación en su celular.
             </div>
             <button className="pdj-mini pdj-mini-p" style={{ marginTop: 16, padding: "10px 18px" }}
-              onClick={nuevoEvento}>
-              + Crear el primer evento
+              disabled={busy} onClick={nuevoEvento}>
+              {busy ? "Creando…" : "+ Crear el primer evento"}
             </button>
           </div>
         </div>

@@ -1,58 +1,53 @@
 import { useState, useEffect } from "react";
 import { saveEventFields } from "../../../services/pantallaDj";
 import { P } from "../../../components/pantalla/pantallaUi";
-import PanelSection from "../PanelSection";
-import { BotonGuardar, CampoSelect, CampoSwitch, useGuardado } from "../panelControls";
-
-/**
- * Qué reproduce la TV: el video de YouTube o sólo el audio de un MP3 propio.
- *
- * `content_mode` acepta 'video' y 'audio' — el CHECK de la tabla no admite
- * ningún otro valor. En modo audio los temas tienen que traer `audio_path`;
- * la carga de MP3 todavía no existe en el panel, así que se avisa.
- */
+import { useGuardado } from "../panelControls";
 
 const MODOS = [
-  { value: "video", label: "🎬 Videos de YouTube" },
-  { value: "audio", label: "🎵 Música MP3" },
+  { value: "audio", ico: "♫", titulo: "Música (MP3)", texto: "Subí archivos de audio desde tu compu." },
+  { value: "video", ico: "▣", titulo: "Videos (YouTube)", texto: "Pegá links de YouTube. La reproducción llega pronto." },
 ];
 
-export default function SeccionContenido({ event, items, refresh }) {
-  const [modo, setModo] = useState(event.content_mode);
-  const [subs, setSubs] = useState(!!event.youtube_captions_enabled);
-  useEffect(() => { setModo(event.content_mode); }, [event.content_mode]);
-  useEffect(() => { setSubs(!!event.youtube_captions_enabled); }, [event.youtube_captions_enabled]);
-
-  const { estado, mensaje, guardar } = useGuardado(async () => {
-    await saveEventFields(event.id, { content_mode: modo, youtube_captions_enabled: subs });
+export default function SeccionContenido({ event, refresh }) {
+  const [modo, setModo] = useState(event.content_mode || "video");
+  const { estado, guardar } = useGuardado(async (valor) => {
+    await saveEventFields(event.id, { content_mode: valor });
     await refresh();
   });
 
-  const conAudio = items.filter((i) => i.audio_path).length;
+  useEffect(() => { setModo(event.content_mode || "video"); }, [event.content_mode]);
+
+  const elegir = async (valor) => {
+    if (valor === modo || estado === "guardando") return;
+    setModo(valor);
+    const ok = await guardar(valor);
+    if (!ok) setModo(event.content_mode || "video");
+  };
 
   return (
-    <PanelSection id="modo-contenido" title="Modo de contenido" icon="🎬" defaultOpen>
-      <CampoSelect label="Qué reproduce la TV" value={modo} options={MODOS}
-        onChange={setModo}
-        hint="En modo video la TV muestra el clip de YouTube. En modo MP3 sólo suena el audio del archivo del bar." />
-
-      {modo === "audio" && conAudio === 0 && (
-        <div className="pdj-campo-hint" style={{ color: P.amarillo, marginTop: -6, marginBottom: 8 }}>
-          Ninguno de los {items.length} temas cargados tiene archivo de audio. En modo MP3 no habría
-          nada para reproducir: la carga de archivos todavía no está en el panel.
-        </div>
-      )}
-
-      <CampoSwitch label="Subtítulos automáticos de YouTube en la TV" checked={subs}
-        disabled={modo !== "video"} onChange={setSubs} />
-      <div className="pdj-campo-hint" style={{ marginTop: 4 }}>
-        Pide la pista de subtítulos automáticos al reproductor. Sólo aplica en modo video, y
-        depende de que el video la tenga: YouTube no la genera para todos.
+    <section className="pdj-overview-card" style={{ padding: 20 }}>
+      <div className="pdj-overview-label" style={{ textAlign: "left", marginBottom: 12 }}>
+        MODO DE CONTENIDO
       </div>
-
-      <BotonGuardar estado={estado} mensaje={mensaje}
-        disabled={modo === event.content_mode && subs === !!event.youtube_captions_enabled}
-        onClick={guardar} />
-    </PanelSection>
+      <div style={{ display: "grid", gap: 8 }}>
+        {MODOS.map((m) => {
+          const activo = modo === m.value;
+          return (
+            <button key={m.value} type="button" disabled={estado === "guardando"}
+              onClick={() => elegir(m.value)} style={{
+                textAlign: "left", width: "100%", padding: "10px 12px", borderRadius: 16,
+                cursor: "pointer", color: P.texto,
+                background: activo ? "rgba(255,122,0,.12)" : "rgba(0,0,0,.18)",
+                border: `1px solid ${activo ? "#ff7a00" : "rgba(240,232,255,.16)"}`,
+              }}>
+              <div style={{ fontSize: 12, fontWeight: 800 }}>
+                <span style={{ marginRight: 7 }}>{m.ico}</span>{m.titulo}
+              </div>
+              <div style={{ fontSize: 10.5, color: P.tenue2, marginTop: 2 }}>{m.texto}</div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

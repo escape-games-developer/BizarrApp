@@ -7,6 +7,10 @@ import {
 } from "../../../services/pantallaConfig";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
+import SeccionCodigoCanje from "./SeccionCodigoCanje";
+import SeccionCartelesTv from "./SeccionCartelesTv";
+import SeccionFiltro from "./SeccionFiltro";
+import SeccionRevoleo from "./SeccionRevoleo";
 import {
   BotonGuardar, CampoSwitch, CampoTexto, useBorrador, useGuardado,
 } from "../panelControls";
@@ -26,41 +30,32 @@ import {
  */
 
 const LOGROS = [
-  { key: "first_vote",     ico: "🗳", titulo: "Primer voto",     desc: "Votó por primera vez en la noche." },
-  { key: "frequent_voter", ico: "🔁", titulo: "Votante frecuente", desc: "Vota seguido a lo largo del evento." },
-  { key: "marathoner",     ico: "🏃", titulo: "Maratonista",     desc: "Se queda conectado muchas horas." },
-  { key: "interactive",    ico: "⚡", titulo: "Interactivo",     desc: "Reacciona y participa, no sólo vota." },
-  { key: "good_vibes",     ico: "💚", titulo: "Buena onda",      desc: "Vota a favor mucho más que en contra." },
-  { key: "eternal",        ico: "♾", titulo: "Eterno",          desc: "Vuelve noche tras noche." },
+  { key: "first_vote", code: "FIRST_VOTE", ico: "🗳", titulo: "Primer Voto de la Noche", desc: "Emití tu primer voto de la noche" },
+  { key: "frequent_voter", code: "VOTANTE_FRECUENTE", ico: "🔁", titulo: "Votante Frecuente", desc: "Emití votos de cualquier tipo" },
+  { key: "marathoner", code: "PRESENCE_60MIN", ico: "🏃", titulo: "El Maratonista", desc: "60 minutos conectado a la fiesta" },
+  { key: "interactive", code: "INTERACTIVO", ico: "⚡", titulo: "El Interactivo", desc: "Participá con votos y reacciones" },
+  { key: "good_vibes", code: "BUENA_ONDA", ico: "💚", titulo: "El Buena Onda", desc: "Votá varias veces sin negativos ni Súper Hate" },
+  { key: "eternal", code: "ETERNO", ico: "♾", titulo: "El Eterno", desc: "Permanecé conectado durante la noche" },
 ];
 
 const PREMIOS = {
   extra_super_vote:     { ico: "🔥", label: "Súper voto extra" },
   giant_reaction:       { ico: "💥", label: "Reacción gigante" },
-  highlighted_nickname: { ico: "✨", label: "Apodo destacado" },
+  highlighted_nickname: { ico: "✨", label: "Apodo Destacado en TV" },
   physical_prize:       { ico: "🎁", label: "Premio real del local" },
-  vip_upgrade:          { ico: "👑", label: "Pase a VIP" },
-  gif_screen:           { ico: "🎞", label: "GIF a pantalla" },
+  vip_upgrade:          { ico: "👑", label: "Ascenso a VIP" },
+  throw_screen:         { ico: "🪽", label: "Revoleo a Pantalla" },
+  gif_screen:           { ico: "🎞", label: "GIF a Pantalla" },
   screen_message:       { ico: "💬", label: "Mensaje en pantalla" },
-  vip_badge:            { ico: "🏅", label: "Insignia VIP" },
+  vip_badge:            { ico: "🏅", label: "Badge VIP" },
 };
 
-const NIVELES = 3;
-
-/**
- * `levels` es jsonb con la forma del contrato:
- *   [{ threshold: 15, prize_key: "extra_super_vote" }, …]
- * y `repeat_last: true` en el último nivel cuando ese premio se vuelve a dar
- * cada vez que se alcanza el umbral otra vez.
- *
- * En la UI son tres filas fijas; se guardan sólo las que tienen umbral y premio,
- * y el `repeat_last` viaja pegado a la última que quedó.
- */
 const aNiveles = (levels) => {
   const l = Array.isArray(levels) ? levels : [];
-  return Array.from({ length: NIVELES }, (_, i) => ({
-    threshold: Number(l[i]?.threshold) || 0,
-    prize_key: l[i]?.prize_key || "",
+  if (!l.length) return [{ threshold: 0, prize_key: "" }];
+  return l.map((n) => ({
+    threshold: Number(n?.threshold) || 0,
+    prize_key: n?.prize_key || "",
   }));
 };
 
@@ -168,7 +163,10 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
     setLogros((l) => ({ ...l, [key]: { ...l[key], ...patch } }));
 
   return (
-    <PanelSection id="recompensas" title="Recompensas" icon="🏅">
+    <PanelSection id="recompensas" title="Recompensas" icon="🏅"
+      status="pendiente"
+      aviso={"Los logros y el catálogo se guardan, pero no hay motor que los otorgue solo. Lo "
+        + "único que funciona hoy es dar un premio a mano desde «Sorteos» en la consola en vivo."}>
       <CampoSwitch label="Sistema de recompensas habilitado" checked={b.rewards_enabled}
         onChange={(v) => set("rewards_enabled", v)} />
 
@@ -183,7 +181,7 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
       {/* ── Logros ─────────────────────────────────────────────────── */}
       <div style={{ marginTop: 13, opacity: off ? .5 : 1 }}>
         <div style={{ fontSize: 10.5, fontWeight: 800, color: P.tenue, marginBottom: 7 }}>
-          LOGROS CONFIGURABLES
+          LOGROS DEL EVENTO
         </div>
 
         {LOGROS.map((l) => {
@@ -195,6 +193,10 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
               background: v.enabled ? "rgba(155,47,255,.07)" : "rgba(240,232,255,.03)",
               border: `1px solid ${v.enabled ? "rgba(155,47,255,.26)" : "rgba(240,232,255,.08)"}`,
             }}>
+              <div style={{
+                fontSize: 8.5, letterSpacing: 1, color: P.tenue2, marginBottom: 6,
+                fontFamily: "monospace",
+              }}>{l.code}</div>
               <label style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
                 <input type="checkbox" checked={v.enabled} disabled={off}
                   onChange={(e) => setLogro(l.key, { enabled: e.target.checked })}
@@ -212,47 +214,78 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
                     placeholder="Descripción" aria-label={`Descripción de ${l.titulo}`}
                     onChange={(e) => setLogro(l.key, { description: e.target.value })}
                     style={{ padding: "5px 7px", fontSize: 11, marginBottom: 6 }} />
-                  {v.niveles.map((n, i) => (
-                    <div key={i} style={{
-                      display: "grid", gridTemplateColumns: "34px 58px minmax(0,1fr)",
-                      gap: 5, alignItems: "center", marginBottom: 4,
-                    }}>
-                      <span style={{
-                        fontSize: 8.5, fontWeight: 800, letterSpacing: .3,
-                        textTransform: "uppercase", color: P.tenue2,
-                      }}>N{i + 1}</span>
-                      <input className="pdj-input" type="number" min={0} value={n.threshold}
-                        disabled={off} placeholder="0"
-                        aria-label={`Umbral del nivel ${i + 1} de ${l.titulo}`}
+                  {l.key === "first_vote" ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+                      <span style={{ fontSize: 10.5, color: P.tenue }}>Premio</span>
+                      <select className="pdj-input"
+                        value={v.niveles[0]?.prize_key || ""} disabled={off}
                         onChange={(e) => setLogro(l.key, {
-                          niveles: v.niveles.map((x, j) =>
-                            (j === i ? { ...x, threshold: Number(e.target.value) || 0 } : x)),
+                          niveles: [{ threshold: 1, prize_key: e.target.value }],
                         })}
-                        style={{ padding: "5px 6px", fontSize: 10.5 }} />
-                      <select className="pdj-input" value={n.prize_key} disabled={off}
-                        aria-label={`Premio del nivel ${i + 1} de ${l.titulo}`}
-                        onChange={(e) => setLogro(l.key, {
-                          niveles: v.niveles.map((x, j) =>
-                            (j === i ? { ...x, prize_key: e.target.value } : x)),
-                        })}
-                        style={{ padding: "5px 6px", fontSize: 10.5, minWidth: 0 }}>
+                        style={{ maxWidth: 260, padding: "6px 8px", fontSize: 10.5 }}>
                         <option value="">Sin premio</option>
                         {CLAVES_PREMIO.map((k) => (
-                          <option key={k} value={k}>{PREMIOS[k].ico} {PREMIOS[k].label}</option>
+                          <option key={k} value={k}>{PREMIOS[k].label}</option>
                         ))}
                       </select>
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      <div style={{
+                        fontSize: 9.5, fontWeight: 900, letterSpacing: .7,
+                        color: P.tenue, margin: "8px 0 6px",
+                      }}>NIVELES</div>
+                      {v.niveles.map((n, i) => (
+                        <div key={i} style={{
+                          display: "grid", gridTemplateColumns: "42px 68px minmax(0,1fr) 28px",
+                          gap: 5, alignItems: "center", marginBottom: 5,
+                        }}>
+                          <span style={{ fontSize: 9.5, color: P.tenue }}>Nv. {i + 1}</span>
+                          <input className="pdj-input" type="number" min={1} value={n.threshold || ""}
+                            disabled={off} placeholder="0"
+                            aria-label={`Umbral del nivel ${i + 1} de ${l.titulo}`}
+                            onChange={(e) => setLogro(l.key, {
+                              niveles: v.niveles.map((x, j) =>
+                                (j === i ? { ...x, threshold: Number(e.target.value) || 0 } : x)),
+                            })}
+                            style={{ padding: "5px 6px", fontSize: 10.5 }} />
+                          <select className="pdj-input" value={n.prize_key} disabled={off}
+                            aria-label={`Premio del nivel ${i + 1} de ${l.titulo}`}
+                            onChange={(e) => setLogro(l.key, {
+                              niveles: v.niveles.map((x, j) =>
+                                (j === i ? { ...x, prize_key: e.target.value } : x)),
+                            })}
+                            style={{ padding: "5px 6px", fontSize: 10.5, minWidth: 0 }}>
+                            <option value="">Sin premio</option>
+                            {CLAVES_PREMIO.map((k) => (
+                              <option key={k} value={k}>{PREMIOS[k].label}</option>
+                            ))}
+                          </select>
+                          <button type="button" className="pdj-ico pdj-ico-peligro"
+                            disabled={off || v.niveles.length <= 1}
+                            title="Eliminar nivel" aria-label={`Eliminar nivel ${i + 1}`}
+                            onClick={() => setLogro(l.key, {
+                              niveles: v.niveles.filter((_, j) => j !== i),
+                            })}>🗑</button>
+                        </div>
+                      ))}
 
-                  <label style={{
-                    display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-                    fontSize: 10, color: "rgba(240,232,255,.55)", marginTop: 5,
-                  }}>
-                    <input type="checkbox" checked={!!v.repetir} disabled={off}
-                      onChange={(e) => setLogro(l.key, { repetir: e.target.checked })}
-                      style={{ accentColor: "#9B2FFF", cursor: "pointer", flexShrink: 0 }} />
-                    Repetir el último nivel cada vez que se vuelve a alcanzar
-                  </label>
+                      <button type="button" className="pdj-mini" disabled={off}
+                        onClick={() => setLogro(l.key, {
+                          niveles: [...v.niveles, { threshold: 0, prize_key: "" }],
+                        })}>+ Agregar nivel</button>
+
+                      <label style={{
+                        display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+                        fontSize: 10, color: "rgba(240,232,255,.72)", marginTop: 8,
+                      }}>
+                        <input type="checkbox" checked={!!v.repetir} disabled={off}
+                          onChange={(e) => setLogro(l.key, { repetir: e.target.checked })}
+                          style={{ accentColor: "#9B2FFF", cursor: "pointer", flexShrink: 0 }} />
+                        Repetir el último nivel indefinidamente
+                      </label>
+                    </>
+                  )}
 
                   <div className="pdj-campo-hint">
                     Un nivel se guarda sólo si tiene umbral y premio. Se ordenan por umbral
@@ -264,34 +297,6 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
           );
         })}
       </div>
-
-      {/* ── Catálogo de premios ────────────────────────────────────── */}
-      <div style={{ marginTop: 13, opacity: off ? .5 : 1 }}>
-        <div style={{ fontSize: 10.5, fontWeight: 800, color: P.tenue, marginBottom: 7 }}>
-          CATÁLOGO DE PREMIOS
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
-          {CLAVES_PREMIO.map((k) => (
-            <label key={k} style={{
-              display: "flex", alignItems: "center", gap: 5, cursor: "pointer", minWidth: 0,
-              padding: "6px 7px", borderRadius: 9,
-              background: premios[k] ? "rgba(0,229,255,.09)" : "rgba(240,232,255,.03)",
-              border: `1px solid ${premios[k] ? "rgba(0,229,255,.26)" : "rgba(240,232,255,.07)"}`,
-            }}>
-              <input type="checkbox" checked={!!premios[k]} disabled={off}
-                onChange={(e) => setPremios((p) => ({ ...p, [k]: e.target.checked }))}
-                style={{ accentColor: "#00E5FF", cursor: "pointer", flexShrink: 0 }} />
-              <span style={{ fontSize: 12 }}>{PREMIOS[k].ico}</span>
-              <span style={{
-                fontSize: 9.5, color: "rgba(240,232,255,.65)", flex: 1, minWidth: 0,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>{PREMIOS[k].label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado} onClick={guardar} />
 
       {/* ── Premios reales del local ───────────────────────────────── */}
       <div style={{
@@ -365,6 +370,51 @@ export default function SeccionRecompensas({ event, refresh, onError }) {
           da efectivamente a alguien.
         </div>
       </div>
+
+      <SeccionCodigoCanje event={event} onError={onError} embedded />
+      <SeccionCartelesTv event={event} refresh={refresh} onError={onError} embedded />
+      <SeccionFiltro event={event} refresh={refresh} embedded />
+      <SeccionRevoleo event={event} disabled={off} onError={onError} />
+
+      {/* ── Catálogo de premios ────────────────────────────────────── */}
+      <div style={{ marginTop: 13, opacity: off ? .5 : 1 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 800, color: P.tenue, marginBottom: 7 }}>
+          CATÁLOGO DE PREMIOS
+        </div>
+        <div style={{ display: "grid", gap: 7 }}>
+          {CLAVES_PREMIO.map((k) => {
+            const descripciones = {
+              extra_super_vote: "Otorga un Super Vote positivo adicional",
+              giant_reaction: "La próxima reacción aparece gigante en la pantalla",
+              highlighted_nickname: "El apodo se muestra destacado en la TV",
+              physical_prize: "Premio físico canjeable en el local",
+              vip_upgrade: "Convierte al invitado en VIP por el resto del evento",
+              throw_screen: "El invitado elige un objeto de la galería y lo revolea a la pantalla grande",
+              gif_screen: "El GIF aparece en la pantalla grande",
+              screen_message: "Permite escribir un mensaje corto que aparece en la TV",
+              vip_badge: "Marca VIP en el perfil del invitado",
+            };
+            return (
+              <label key={k} style={{
+                display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                padding: "3px 0",
+              }}>
+                <span style={{ fontSize: 13 }}>{PREMIOS[k].ico}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <strong style={{ display: "block", fontSize: 10.5, color: P.texto }}>{PREMIOS[k].label}</strong>
+                  <span style={{ display: "block", fontSize: 9.5, color: P.tenue2 }}>{descripciones[k]}</span>
+                </span>
+                <input type="checkbox" checked={!!premios[k]} disabled={off}
+                  onChange={(e) => setPremios((p) => ({ ...p, [k]: e.target.checked }))}
+                  style={{ accentColor: "#00E5FF", cursor: "pointer", flexShrink: 0 }} />
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado} onClick={guardar} />
+
     </PanelSection>
   );
 }

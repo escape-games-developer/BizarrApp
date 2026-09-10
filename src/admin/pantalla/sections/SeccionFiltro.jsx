@@ -17,7 +17,7 @@ const aLista = (txt) => [...new Set(
   String(txt || "").split(/[,\n]/).map((s) => s.trim().toLowerCase()).filter(Boolean),
 )];
 
-export default function SeccionFiltro({ event, refresh }) {
+export default function SeccionFiltro({ event, refresh, embedded = false }) {
   const [b, set] = useBorrador(
     {
       content_filter_enabled: !!event.content_filter_enabled,
@@ -43,7 +43,7 @@ export default function SeccionFiltro({ event, refresh }) {
 
   return (
     <PanelSection id="filtro-contenido" title="Filtro de contenido" icon="🚧"
-      badge={lista.length || null}>
+      badge={lista.length || null} embedded={embedded}>
       <CampoSwitch label="Filtro habilitado" checked={b.content_filter_enabled}
         onChange={(v) => set("content_filter_enabled", v)} />
 

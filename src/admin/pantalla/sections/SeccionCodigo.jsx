@@ -12,6 +12,10 @@ import { BotonCopiar, BotonGuardar, Campo, useGuardado } from "../panelControls"
  * `pantalla__new_code()` en el servidor, para que no haya códigos que se lean
  * mal a tres metros de la barra. El código es único en toda la base: si ya
  * existe, el guardado falla y se muestra el error.
+ *
+ * Es también la tarjeta de ACCESO del editor: el QR va grande (190 px, el mismo
+ * tamaño de la tarjeta de sólo lectura que reemplaza) porque se muestra en la
+ * barra y se lee de lejos.
  */
 
 const ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -30,11 +34,12 @@ export default function SeccionCodigo({ event, refresh, refreshEvents }) {
   const cambiado = codigo !== event.code;
 
   return (
-    <PanelSection id="codigo-evento" title="Código del evento" icon="🔑" defaultOpen>
+    <PanelSection id="codigo-evento" title="Acceso y código del evento" icon="🔑" defaultOpen>
       <div style={{ textAlign: "center", marginBottom: 13 }}>
         <div className="pdj-codigo" style={{ fontSize: 32, marginBottom: 11 }}>{event.code}</div>
-        <div className="pdj-qr" style={{ display: "inline-block" }}>
-          <QRCode value={guestUrl(event.code)} size={128} />
+        <div className="pdj-qr" style={{ display: "inline-block", maxWidth: "100%" }}>
+          <QRCode value={guestUrl(event.code)} size={190}
+            style={{ height: "auto", maxWidth: "100%", width: 190 }} />
         </div>
       </div>
 

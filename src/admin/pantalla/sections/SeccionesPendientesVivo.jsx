@@ -28,7 +28,7 @@ export default function SeccionesPendientesVivo({ event, onlyRoles = false, excl
   return (
     <>
       {/* ── Efectos de TV ───────────────────────────────────────────── */}
-      <PanelSection id="efectos-tv" title="Efectos visuales en TV" icon="🎆" status="pendiente">
+      <PanelSection id="efectos-tv" title="Efectos visuales en TV" icon="🎆" status="pendiente" showTechnicalStatus>
         <div className="pdj-sub">
           Dispara un efecto sobre el video que está sonando.
         </div>
@@ -47,7 +47,7 @@ export default function SeccionesPendientesVivo({ event, onlyRoles = false, excl
       </PanelSection>
 
       {/* ── Súper votos por equipo ──────────────────────────────────── */}
-      <PanelSection id="super-equipos" title="Súper votos por equipo" icon="🏆" status="pendiente">
+      <PanelSection id="super-equipos" title="Súper votos por equipo" icon="🏆" status="pendiente" showTechnicalStatus>
         <div className="pdj-sub">
           Darle súper votos a todo un equipo de una sola vez.
         </div>
@@ -74,7 +74,7 @@ export default function SeccionesPendientesVivo({ event, onlyRoles = false, excl
 
 function RolesQr({ event }) {
   return (
-      <PanelSection id="qr-roles" title="QRs de roles especiales" icon="🎫" status="pendiente" defaultOpen>
+      <PanelSection id="qr-roles" title="QRs de roles especiales" icon="🎫" status="pendiente" showTechnicalStatus defaultOpen>
         <div className="pdj-sub">
           Un QR por rol: quien lo escanea entra ya con ese rol, sin que el staff lo asigne a mano.
         </div>

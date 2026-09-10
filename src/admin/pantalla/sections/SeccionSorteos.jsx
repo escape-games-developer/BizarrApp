@@ -20,7 +20,7 @@ import { Campo } from "../panelControls";
  * el anterior.
  *
  * El catálogo se filtra por los premios habilitados en `pantalla_prizes`. Si
- * todavía no se configuró ninguno se ofrecen los ocho, para que el DJ no quede
+ * todavía no se configuró ninguno se ofrecen el catálogo completo, para que el DJ no quede
  * trabado por una sección que quizá nadie tocó.
  */
 
@@ -30,6 +30,7 @@ const PREMIOS = {
   highlighted_nickname: { ico: "✨", label: "Apodo destacado" },
   physical_prize:       { ico: "🎁", label: "Premio real del local" },
   vip_upgrade:          { ico: "👑", label: "Pase a VIP" },
+  throw_screen:         { ico: "🪽", label: "Revoleo a pantalla" },
   gif_screen:           { ico: "🎞", label: "GIF a pantalla" },
   screen_message:       { ico: "💬", label: "Mensaje en pantalla" },
   vip_badge:            { ico: "🏅", label: "Insignia VIP" },

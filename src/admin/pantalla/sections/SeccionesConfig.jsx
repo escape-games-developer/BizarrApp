@@ -1,6 +1,9 @@
 import SeccionReglas from "./SeccionReglas";
-import SeccionPoderes from "./SeccionPoderes";
+import SeccionKick from "./SeccionKick";
+import SeccionSubtitulos from "./SeccionSubtitulos";
+import SeccionLimpieza from "./SeccionLimpieza";
 import SeccionIngreso from "./SeccionIngreso";
+import SeccionPoderes from "./SeccionPoderes";
 import SeccionEmojis from "./SeccionEmojis";
 import SeccionRegalosVip from "./SeccionRegalosVip";
 import SeccionEquipos from "./SeccionEquipos";
@@ -10,18 +13,16 @@ import SeccionTandas from "./SeccionTandas";
 import SeccionTransicion from "./SeccionTransicion";
 import SeccionRecompensas from "./SeccionRecompensas";
 import SeccionPresets from "./SeccionPresets";
+import SeccionReset from "./SeccionReset";
 
-/**
- * Columna de configuración del editor: el orden en que el DJ arma una noche.
- *
- * Todas las secciones se montan con <PanelSection/>; ninguna arma su propio
- * acordeón. Las que todavía no tienen respaldo en la base van con
- * `status="pendiente"`, se ven completas y no escriben nada.
- */
+/** Orden observado en el editor original. */
 export default function SeccionesConfig(shared) {
   return (
     <>
       <SeccionReglas {...shared} />
+      <SeccionKick {...shared} />
+      <SeccionSubtitulos {...shared} />
+      <SeccionLimpieza {...shared} />
       <SeccionIngreso {...shared} />
       <SeccionPoderes {...shared} />
       <SeccionEmojis {...shared} />
@@ -33,6 +34,7 @@ export default function SeccionesConfig(shared) {
       <SeccionTransicion {...shared} />
       <SeccionRecompensas {...shared} />
       <SeccionPresets {...shared} />
+      <SeccionReset {...shared} />
     </>
   );
 }

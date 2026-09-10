@@ -3750,8 +3750,8 @@ export default function AdminPanel(){
       case "placas":    return <PlacasPanel sec={curSec} controls={controls}/>;
       case "menu":      return <MenuPanel sec={curSec}/>;
       case "novedades": return <NovedadesPanel sec={curSec}/>;
-      case "pantallaEditor": return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null} modo="editor"/>;
-      case "pantallaLive":   return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null} modo="live"/>;
+      case "pantallaEditor": return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null} modo="editor" goTo={goTo}/>;
+      case "pantallaLive":   return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null} modo="live" goTo={goTo}/>;
       case "dashboard": return <DashboardPanel sec={curSec} connectedCount={connectedCount}/>;
       case "playlists": return <PlaylistsPanel/>;
       case "designer":  return <DesignerView/>;

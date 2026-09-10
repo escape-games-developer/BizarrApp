@@ -32,7 +32,7 @@ const CAMPOS = [
   "giant_reaction_count", "giant_reaction_scale",
 ];
 
-export default function SeccionCartelesTv({ event, refresh, onError }) {
+export default function SeccionCartelesTv({ event, refresh, onError, embedded = false }) {
   const [gifs,    setGifs]    = useState([]);
   const [url,     setUrl]     = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -80,7 +80,7 @@ export default function SeccionCartelesTv({ event, refresh, onError }) {
     set("textos", { ...b.textos, [key]: valor });
 
   return (
-    <PanelSection id="carteles-tv" title="Carteles y efectos en la TV" icon="📢">
+    <PanelSection id="carteles-tv" title="Carteles y efectos en la TV" icon="📢" embedded={embedded}>
       {/* ── Textos ─────────────────────────────────────────────────── */}
       <div style={{ fontSize: 10.5, fontWeight: 800, color: P.tenue, marginBottom: 7 }}>
         TEXTOS DE CARTEL
