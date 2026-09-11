@@ -7,6 +7,7 @@ import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen, Pal
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
 import FtlOverlay from "./FtlOverlay";
 import FtlStandby from "./FtlStandby";
+import TomatazoOverlay from "./TomatazoOverlay";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
@@ -605,6 +606,15 @@ export default function PantallaTV() {
         waiting={!soloVideoFtl && (!fuente || readyCount < 2)}/>
 
       {!soloVideoFtl && <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>}
+
+      {/* Tomatazo: es la votación para voltear la canción del DJ, así que sólo
+          se monta cuando la capa visual es la del DJ. Con un juego en vivo, un
+          escenario o una placa puesta no se tiran tomates: no son su pantalla.
+          Desmontarlo no pierde nada — al volver, el seq del momento es baseline
+          y no se reproducen impactos viejos. */}
+      {!soloVideoFtl && !hasLiveLayer && !hasPlaca && (
+        <TomatazoOverlay event={event} eventId={eventId} client={supabaseAnon}/>
+      )}
     </>
   );
 }

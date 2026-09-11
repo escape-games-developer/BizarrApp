@@ -219,12 +219,13 @@ export default function SeccionKick({ event, refresh, onError }) {
           value={b.kick_activity_minutes} onChange={(v) => set("kick_activity_minutes", v)}
           hint="Alguien cuenta como activo si su último heartbeat entra en esta ventana." />
 
-        {/* Único subcampo de la sección que todavía no llega a ningún lado: la
-            TV no lee `kick_tv_text`. El resto (habilitar, %, ventana y texto del
-            botón) sí gobierna el comportamiento real del kick. */}
+        {/* La TV lo muestra como banner durante unos segundos cuando la votación
+            alcanza el umbral y el tema se va abajo. Vacío usa el texto por
+            defecto del motor. */}
         <CampoTexto label="Texto del cartel en la TV" value={b.kick_tv_text} disabled={off}
           maxLength={120} placeholder="El pueblo quitó este tema de forma democrática"
-          onChange={(v) => set("kick_tv_text", v)} />
+          onChange={(v) => set("kick_tv_text", v)}
+          hint="Se proyecta al voltearse el tema. Si queda vacío la TV pone el suyo." />
 
       </div>
 

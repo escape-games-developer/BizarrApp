@@ -146,7 +146,11 @@ export const clearVote = (eventId, itemId, type) =>
 export const castSuperVote = (eventId, itemId, type = "super_up") =>
   rpc("pantalla_cast_super_vote", { _event_id: eventId, _item_id: itemId, _type: type });
 
-export const getKickStatus  = (eventId) => rpc("pantalla_get_kick_status",  { _event_id: eventId });
+// La TV también la consulta, y entra sin sesión: el cliente es un parámetro
+// para que pueda pasar `supabaseAnon`. La RPC es SECURITY DEFINER y sin sesión
+// devuelve lo mismo salvo `voted`, que sin `auth.uid()` es false.
+export const getKickStatus  = (eventId, client = supabase) =>
+  rpc("pantalla_get_kick_status", { _event_id: eventId }, client);
 export const toggleKickVote = (eventId) => rpc("pantalla_toggle_kick_vote", { _event_id: eventId });
 
 /** Única escritura directa del cliente. La RLS exige user_id = auth.uid(). */
