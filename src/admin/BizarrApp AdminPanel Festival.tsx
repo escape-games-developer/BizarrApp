@@ -28,7 +28,17 @@ import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { iniciarJornada } from "../services/jornada";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
-import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInvalida, MAX_PALABRAS } from "../hooks/realtime/useArmaPalabraRound";
+import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInvalida } from "../hooks/realtime/useArmaPalabraRound";
+import { useBibliotecaPalabras } from "../hooks/useBibliotecaPalabras";
+import {
+  useBibliotecaPremiosRey, motivoPremioInvalido, premioValido, PREMIO_MAX,
+} from "../hooks/useBibliotecaPremiosRey";
+import {
+  useReglasRey, motivoMinimoInvalido,
+  REGLA_PARTICIPANTES_MINIMOS, REGLA_BLOQUEAR_REPETIDOS,
+  REGLAS_CONOCIDAS, NOMBRE_REGLA,
+  MIN_PARTICIPANTES_PISO, MIN_PARTICIPANTES_TECHO,
+} from "../hooks/useReglasRey";
 import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
 import {
   RaffleScreen,
@@ -198,6 +208,66 @@ const css = `
   .live-bar{height:4px;border-radius:2px;background:rgba(240,232,255,.06);overflow:hidden;margin:6px 0;}
   .live-fill{height:100%;border-radius:2px;transition:width .6s ease;}
   .dot-live{width:6px;height:6px;border-radius:50%;background:#EF4444;animation:blink 1.2s infinite;flex-shrink:0;}
+
+  /* Arma la Palabra — biblioteca como panel lateral.
+     El minmax(0,...) en las dos columnas evita que una palabra larga estire el
+     grid y desborde el panel. Abajo de 1040px las columnas se apilan: es el
+     único breakpoint que agrega este módulo. */
+  .pal-split{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:10px;align-items:start;}
+  .pal-list{max-height:46vh;overflow-y:auto;margin:0 -4px;padding:0 4px;
+    scrollbar-width:thin;scrollbar-color:rgba(155,47,255,.3) transparent;}
+  .pal-list::-webkit-scrollbar{width:4px;}
+  .pal-list::-webkit-scrollbar-track{background:transparent;}
+  .pal-list::-webkit-scrollbar-thumb{background:rgba(155,47,255,.35);border-radius:2px;}
+  .pal-row{display:flex;align-items:center;gap:6px;width:100%;text-align:left;margin-bottom:5px;
+    padding:7px 8px;border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s;
+    background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
+  .pal-row:hover{background:rgba(168,85,247,.08);border-color:rgba(168,85,247,.25);}
+  .pal-row.sel{background:rgba(168,85,247,.16);border-color:#A855F7;}
+  .pal-row-w{font-family:'Syne',sans-serif;font-weight:900;font-size:14px;letter-spacing:1.4px;
+    color:#F0E8FF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pal-row-n{font-size:9px;color:rgba(240,232,255,.32);margin-top:1px;}
+  @media (max-width:1040px){
+    .pal-split{grid-template-columns:1fr;}
+    .pal-list{max-height:320px;}
+  }
+
+  /* Rey del Orto — biblioteca de premios como panel lateral.
+     Mismo contrato visual que .pal-*, con clases propias para no atar dos
+     módulos a la misma regla: el día que uno cambie, el otro no se entera. */
+  .rey-split{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:10px;align-items:start;}
+  .rey-list{max-height:42vh;overflow-y:auto;margin:0 -4px;padding:0 4px;
+    scrollbar-width:thin;scrollbar-color:rgba(255,214,0,.3) transparent;}
+  .rey-list::-webkit-scrollbar{width:4px;}
+  .rey-list::-webkit-scrollbar-track{background:transparent;}
+  .rey-list::-webkit-scrollbar-thumb{background:rgba(255,214,0,.35);border-radius:2px;}
+  .rey-row{display:flex;align-items:center;gap:6px;width:100%;text-align:left;margin-bottom:5px;
+    padding:7px 8px;border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s;
+    background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
+  .rey-row:hover{background:rgba(255,214,0,.08);border-color:rgba(255,214,0,.25);}
+  .rey-row.sel{background:rgba(255,214,0,.16);border-color:#FFD600;}
+  .rey-row-t{font-family:'Syne',sans-serif;font-weight:800;font-size:12.5px;
+    color:#F0E8FF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rey-row-d{font-size:9.5px;color:rgba(240,232,255,.32);margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* Rey del Orto — configuración de reglas. Cada regla es un bloque cerrado,
+     separado del siguiente por una línea: se leen como ajustes independientes
+     y no como una lista de items. */
+  .rey-regla{padding:10px 0;border-top:1px solid rgba(240,232,255,.08);}
+  .rey-regla:first-of-type{border-top:none;padding-top:2px;}
+  .rey-regla-hdr{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+  .rey-regla-t{flex:1;min-width:0;font-family:'Syne',sans-serif;font-weight:800;
+    font-size:12px;color:#F0E8FF;}
+  .rey-regla-estado{font-size:8.5px;font-weight:800;letter-spacing:.6px;
+    padding:2px 7px;border-radius:9px;white-space:nowrap;}
+  .rey-regla-on{background:rgba(0,245,160,.12);border:1px solid rgba(0,245,160,.28);color:#00F5A0;}
+  .rey-regla-off{background:rgba(240,232,255,.05);border:1px solid rgba(240,232,255,.1);color:rgba(240,232,255,.4);}
+  .rey-regla-d{font-size:10px;color:rgba(240,232,255,.35);line-height:1.5;}
+
+  @media (max-width:1040px){
+    .rey-split{grid-template-columns:1fr;}
+    .rey-list{max-height:300px;}
+  }
 `;
 
 const STROBE = ["#FF2D78","#FFD600","#9B2FFF","#00E5FF","#FF9500","#FFF","#FF2D78","#000"];
@@ -274,10 +344,87 @@ const SECS = [
 // poder reactivarlos, pero no los exponemos en los accesos operativos.
 const FROZEN_MODULE_IDS = new Set(["karaoke"]);
 
+// ── ESTADO REAL DE LA PANTALLA ─────────────────────────────────────────────
+// Etiquetas legibles para el cartel de Lanzar. No son una fuente de datos:
+// la única fuente de verdad de qué está al aire es `game_state`, y esto sólo
+// traduce sus valores a algo que el operador pueda leer.
+const LIVE_GAME_LABELS = {
+  "rey del orto": "Rey del Orto",
+  trivia:         "Desafío Demente",
+  suma:           "Sumate que sumamos",
+  palabra:        "Arma la palabra",
+};
+const LIVE_ESCENARIO_LABELS = {
+  duelo:   "Duelo de Talentos",
+  ftl:     "Follow the Leader",
+  pt:      "Personal Trainer",
+  karaoke: "Si lo sabe cante",
+};
+const LIVE_PLACA_LABELS = {
+  logo_animado:  "Logo animado del bar",
+  game_rey:      "Rey del Orto",
+  game_trivia:   "Desafío Demente",
+  game_suma:     "Sumate que sumamos",
+  game_palabra:  "Arma la palabra",
+  escenario:     "Escenario Bizarren",
+  duelo:         "Duelo de Talentos",
+  escenario_ftl: "Follow the Leader",
+  escenario_pt:  "Personal Trainer",
+  break:         "Break / Pausa",
+  cierre:        "Cierre de noche",
+  mensaje_app:   "Mensaje de la app",
+  promo:         "Promoción",
+};
+
+// El id del módulo en el panel y el valor guardado en `active_game` coinciden
+// en todos los casos menos uno: el módulo `rey` se guarda como 'rey del orto'.
+// El mapa existe para traducir en la lectura, no para renombrar nada en la
+// base — el CHECK de `game_state` y `JuegosView` esperan ese valor exacto.
+const GAME_VALUE_BY_ID = { rey: "rey del orto" };
+const gameValueOf = id => GAME_VALUE_BY_ID[id] || id;
+
+/**
+ * Qué está realmente al aire, leído de `game_state`.
+ *
+ * La prioridad de capas NO se decide acá: es la que ya aplican las dos
+ * pantallas. `/pantalla` la documenta como "juego > escenario > video > placa
+ * > idle" y `/tv` la aplica con `active_escenario && !activeGame` ("el Duelo
+ * cede ante un juego activo"). Esta función replica ese mismo orden para el
+ * admin, sin la capa de video: la cola de videos ya tiene su propia tarjeta.
+ *
+ * `karaoke` / `escenario_karaoke` quedan afuera igual que en las dos
+ * pantallas: el módulo está congelado y un valor viejo que haya quedado en la
+ * base no debe reaparecer como EN VIVO.
+ *
+ * Devuelve `null` cuando no hay ninguna capa puesta (standby).
+ */
+function estadoEnVivo(gameState){
+  const game = gameState?.active_game || null;
+  if (game)
+    return { kind:"game", id:game, label:LIVE_GAME_LABELS[game] || game };
+
+  const escenario = gameState?.active_escenario || null;
+  if (escenario && escenario !== "karaoke")
+    return { kind:"escenario", id:escenario, label:LIVE_ESCENARIO_LABELS[escenario] || escenario };
+
+  // Criterio de `/pantalla` (no el de `/tv`): cualquier placa puesta cuenta
+  // salvo la del módulo congelado. `logo_animado` es la placa "Bienvenida" de
+  // las placas rápidas de este mismo panel, así que mandarla tiene que verse.
+  const placa = gameState?.active_placa || null;
+  if (placa && placa !== "escenario_karaoke")
+    return { kind:"placa", id:placa, label:LIVE_PLACA_LABELS[placa] || placa };
+
+  return null;
+}
+
+// Prefijo del cartel por capa: distingue un juego de una experiencia de
+// escenario y de una placa, que no son lo mismo para el operador.
+const LIVE_KIND_PREFIX = { game:"EN VIVO", escenario:"ESCENARIO", placa:"PLACA" };
+
 // ══════════════════════════════════════════════════════════════════════════
-// PANEL LANZAR — botonera de show
+// PANEL LANZAR — accesos a los módulos + estado real de la pantalla
 // ══════════════════════════════════════════════════════════════════════════
-function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,controls}){
+function LaunchPanel({sec,gameState,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,controls}){
   // Comienzo de jornada. El reset vive en services/jornada.js — acá sólo se
   // dispara y se muestra el resultado; no hay lógica de limpieza duplicada.
   const [jornadaBusy, setJornadaBusy] = useState(false);
@@ -289,8 +436,10 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
       "\n\nNo se borra historial, playlists, resultados ni usuarios.")) return;
     setJornadaBusy(true); setJornadaMsg(null);
     try {
+      // No hay que bajar ningún estado local: `iniciarJornada` deja los campos
+      // de `game_state` en neutro y el cartel, que los lee por Realtime, pasa
+      // solo a standby.
       await iniciarJornada();
-      setActive(null);
       setJornadaMsg({ ok: true, text: "Jornada iniciada — la TV está en DJ Democracy." });
     } catch (err) {
       setJornadaMsg({ ok: false, text: err?.message || String(err) });
@@ -306,19 +455,24 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
     {id:"pt",      icon:"🏋️",label:"Trainer",         col:"#00F5A0",bg:"rgba(0,245,160,.1)", bdr:"rgba(0,245,160,.3)"},
     {id:"karaoke", icon:"🎤",label:"Karaoke",         col:"#9B2FFF",bg:"rgba(155,47,255,.1)",bdr:"rgba(155,47,255,.3)"},
   ].filter(item => !FROZEN_MODULE_IDS.has(item.id));
-  const isOn = id => active === id;
+  // Lo que está al aire sale de `game_state`, no de un estado local: así el
+  // cartel dice lo mismo en toda pestaña del admin y sobrevive a un F5.
+  const enVivo = estadoEnVivo(gameState);
+  // Un módulo figura EN VIVO sólo si la base dice que esa capa está puesta.
+  // Abrir su panel para configurarlo no lo enciende.
+  const isOn = id =>
+    (enVivo?.kind === "game"      && enVivo.id === gameValueOf(id)) ||
+    (enVivo?.kind === "escenario" && enVivo.id === id);
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {/* Estado actual */}
+      {/* Estado actual — derivado de `game_state` (juego > escenario > placa) */}
       <div className="card">
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div className="dot-live" style={{background:active?"#EF4444":"rgba(240,232,255,.2)",animation:active?"blink 1.2s infinite":"none"}}/>
+          <div className="dot-live" style={{background:enVivo?"#EF4444":"rgba(240,232,255,.2)",animation:enVivo?"blink 1.2s infinite":"none"}}/>
           <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:13,
-            color:active?"#00F5A0":"rgba(240,232,255,.3)",flex:1}}>
-            {active?`EN VIVO: ${ITEMS.find(i=>i.id===active)?.label||active}`:"Pantalla en standby"}
+            color:enVivo?"#00F5A0":"rgba(240,232,255,.3)",flex:1}}>
+            {enVivo?`${LIVE_KIND_PREFIX[enVivo.kind]}: ${enVivo.label}`:"Pantalla en standby"}
           </div>
-          {active&&<button className="btn btn-r" style={{padding:"4px 10px",fontSize:10}}
-            onClick={()=>setActive(null)}>⏹ Cerrar</button>}
         </div>
       </div>
 
@@ -368,14 +522,16 @@ function LaunchPanel({sec,active,setActive,zocaloOn,setZocaloOn,msgCount,vidCoun
         </div>
       )}
 
-      {/* Grid de lanzamiento */}
+      {/* Accesos a los módulos. Son navegación pura: cada experiencia se lanza
+          desde su propio panel, después de configurarla (premio, preguntas,
+          palabra, participantes, video). Entrar a configurar no es lanzar. */}
       <div className="card">
-        <div className="ctitle">Lanzar contenido — toque para activar</div>
+        <div className="ctitle">Juegos y experiencias — seleccioná un módulo para administrarlo</div>
         <div className="lg">
           {ITEMS.map(it=>(
             <button key={it.id} className="lbtn"
               style={{background:it.bg,border:`1.5px solid ${isOn(it.id)?it.col:it.bdr}`,"--gw":it.bdr}}
-              onClick={()=>{ setActive(isOn(it.id)?null:it.id); goTo(it.id); }}>
+              onClick={()=>goTo(it.id)}>
               {isOn(it.id)&&<div className="achip"/>}
               <span className="lico">{it.icon}</span>
               <span className="llbl" style={{color:it.col}}>{it.label}</span>
@@ -1315,17 +1471,130 @@ const REY_PRESENCE_WINDOW_MS = 2 * 60 * 1000;
 const reyActivo = (c) =>
   Date.now() - new Date(c.last_seen).getTime() < REY_PRESENCE_WINDOW_MS;
 
-// Misma regla que aplica el servidor: activo en la ventana y, si el toggle
-// está puesto, que no haya ganado antes.
-const reyElegibles = (rows, excludePrev) =>
-  (rows || []).filter(c => reyActivo(c) && (!excludePrev || c.excluded_raffle !== true));
+// Presentes: activos en la ventana de presencia. Es lo ÚNICO que el panel
+// calcula sobre la lista — la elegibilidad real (mínimo de participantes,
+// ganadores de la jornada) la determina el backend en `rey_resolver_sorteo`.
+// Antes esta función también filtraba por `connected_users.excluded_raffle`:
+// esa marca es legacy, Rey del Orto V1 ya no la lee.
+const reyPresentes = (rows) => (rows || []).filter(reyActivo);
+
+/**
+ * Traduce la respuesta de error de `launch-raffle` v7 a algo que el operador
+ * pueda leer y actuar. Los números salen SIEMPRE del backend: el mínimo es
+ * configurable desde el panel, así que hardcodearlo sería mentir.
+ *
+ * `r.error` ya viene en castellano desde la Edge Function; se usa de respaldo
+ * para los códigos que no tienen un texto propio acá. Nunca se muestra SQL,
+ * stack trace ni el código interno.
+ */
+const mensajeErrorSorteo = (r) => {
+  const conectados = r?.connected_count;
+  const minimo     = r?.required_count;
+  switch (r?.code) {
+    case "MIN_PARTICIPANTS":
+      return `⚠️ No se puede lanzar el sorteo. Hay ${conectados ?? 0} participantes conectados y el mínimo configurado es ${minimo ?? "—"}.`;
+    case "NO_ELIGIBLE_PARTICIPANTS":
+      return typeof conectados === "number"
+        ? `⚠️ No hay participantes elegibles para este sorteo. Hay ${conectados} participantes conectados, pero ninguno puede participar según las reglas actuales.`
+        : "⚠️ No hay participantes elegibles para este sorteo.";
+    case "RAFFLE_CONFIG_INCOMPLETE":
+      return "⚠️ La configuración de Rey del Orto está incompleta. Revisá Configuración de reglas.";
+    case "ROUND_NOT_LAUNCHED":
+      return "⚠️ La ronda no está abierta. Volvé a lanzar el sorteo.";
+    case "ROUND_NOT_FOUND":
+      return "⚠️ No existe una ronda para esta sesión.";
+    case "INVALID_PRIZE":
+      return "⚠️ El premio no es válido. Elegí uno de la biblioteca.";
+    case "INVALID_REQUEST":
+      return "⚠️ No pudimos armar el pedido al servidor. Recargá el panel.";
+    case "RAFFLE_CONFLICT":
+      return "⚠️ Otro administrador resolvió esta ronda al mismo tiempo. Revisá el resultado.";
+    case "UNAUTHORIZED":
+      return r?.error || "⚠️ Tu sesión venció. Volvé a entrar al Admin.";
+    case "NETWORK_ERROR":
+      return "⚠️ No se pudo contactar al servidor. Revisá la conexión.";
+    default:
+      return r?.error || "⚠️ No se pudo resolver el sorteo.";
+  }
+};
 
 function ReyPanel({sec, controls, sessionId, gameState}){
-  const [prize,       setPrize]       = useState("");
-  const [excludePrev, setExcludePrev] = useState(false);
+  // 🎟️ Biblioteca: la fuente de verdad es `rey_premios_biblioteca` en Supabase.
+  // Sobrevive al F5, al cambio de módulo y al cambio de computadora.
+  const {
+    premios, loading: premiosLoading, error: premiosError,
+    existe: yaEnBiblioteca, agregar: agregarPremio,
+    editar: editarPremio, eliminar: eliminarPremio,
+  } = useBibliotecaPremiosRey();
+
+  const [validando,   setValidando]   = useState(false); // dry-run en curso
   const [candidates,  setCandidates]  = useState(null);
   const [busy,        setBusy]        = useState(false);
   const [actionError, setActionError] = useState(null);
+
+  // ── Estado OPERATIVO LOCAL de la biblioteca ───────────────────────────────
+  // Nada de esto se persiste ni toca game_state. Seleccionar ≠ lanzar.
+  const [premioId,  setPremioId]  = useState(null);  // premio que se está preparando
+  const [busqueda,  setBusqueda]  = useState("");    // filtro local
+  const [nuevoNom,  setNuevoNom]  = useState("");    // alta: nombre
+  const [nuevoDet,  setNuevoDet]  = useState("");    // alta: detalle opcional
+  const [editando,  setEditando]  = useState(null);  // id de la fila en edición
+  const [editNom,   setEditNom]   = useState("");
+  const [editDet,   setEditDet]   = useState("");
+
+  // ── ⚙️ Configuración de reglas ────────────────────────────────────────────
+  // Sólo configura y persiste. En esta etapa NO afecta al sorteo: el botón
+  // LANZAR y la elegibilidad siguen exactamente como estaban.
+  const {
+    loading: reglasLoading, error: reglasError, refresh: refrescarReglas,
+    reglaPorKey, actualizarRegla,
+  } = useReglasRey();
+
+  const [minInput,    setMinInput]    = useState("");   // borrador del número
+  const [guardandoRegla, setGuardandoRegla] = useState(null); // key en curso
+  const [reglaError,  setReglaError]  = useState(null); // error inline de la card
+
+  const reglaMin  = reglaPorKey(REGLA_PARTICIPANTES_MINIMOS);
+  const reglaRep  = reglaPorKey(REGLA_BLOQUEAR_REPETIDOS);
+  const minGuardado = typeof reglaMin?.value?.min === "number" ? reglaMin.value.min : null;
+
+  // El input arranca y se resincroniza con lo PERSISTIDO. Apagar la regla no
+  // toca `value`, así que el número sigue acá aunque la regla esté en OFF.
+  useEffect(() => {
+    setMinInput(minGuardado == null ? "" : String(minGuardado));
+  }, [minGuardado]);
+
+  const minMotivo = motivoMinimoInvalido(minInput);
+  const minSucio  = minInput !== (minGuardado == null ? "" : String(minGuardado));
+
+  // Una sola puerta para los tres guardados de la card: serializa, corta el
+  // doble click y deja el error donde el operador lo está mirando.
+  const guardarRegla = async (key, patch) => {
+    if (guardandoRegla) return;
+    setGuardandoRegla(key); setReglaError(null);
+    try { await actualizarRegla(key, patch); }
+    catch (e) { setReglaError(e?.message || String(e)); }
+    finally { setGuardandoRegla(null); }
+  };
+
+  // El toggle no lleva estado local: pinta `regla.enabled`, que sólo cambia
+  // cuando el servidor confirmó. Si el UPDATE falla, la perilla se queda donde
+  // estaba sola — no hay nada que "revertir".
+  const alternarRegla = (regla) => {
+    if (!regla) return;
+    guardarRegla(regla.key, { enabled: !regla.enabled });
+  };
+
+  const guardarMinimo = () => {
+    if (!reglaMin || minMotivo) return;
+    guardarRegla(REGLA_PARTICIPANTES_MINIMOS, { value: { min: Number(minInput.trim()) } });
+  };
+
+  // Keys esperadas que la base no trajo. El frontend NO tiene INSERT y no debe
+  // intentar crearlas: sólo avisa. Las keys DESCONOCIDAS se ignoran en silencio
+  // (llegan en `reglas` pero ninguna fila de abajo las busca).
+  const reglasFaltantes = REGLAS_CONOCIDAS.filter((k) => !reglaPorKey(k));
+
   // Guarda contra doble sorteo: marca la ronda ya resuelta por ESTE panel.
   const drawnRef = useRef(null);
 
@@ -1338,26 +1607,15 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   const winnerName = gameState?.raffle_winner_name ?? null;
   const { cd } = useRaffle(gameState);   // la misma cuenta regresiva que ven cliente y TV
 
-  // Configuración de la ronda EN CURSO. Con la ronda abierta la fuente de
-  // verdad es lo persistido en game_state, nunca el toggle local: después de
-  // un F5 el estado local arranca en false y mandaría al servidor una regla
-  // distinta a la que se lanzó. En idle manda el toggle, que es donde el
-  // admin todavía está decidiendo.
-  const rondaAbierta   = phase === "launched" || phase === "winner";
-  const roundExclude   = gameState?.minijuego_payload?.raffle?.exclude_previous === true;
-  const excludeEfectivo = rondaAbierta ? roundExclude : excludePrev;
-
-  // Trae la sesión entera y el filtro de elegibilidad lo aplica reyElegibles,
-  // que replica la regla de la Edge Function v6 (ventana de 2 minutos +
-  // excluded_raffle). Los inactivos se siguen listando en gris, pero no
-  // cuentan ni habilitan el lanzamiento.
-  // Devuelve las filas además de guardarlas: `launch` revalida con datos
-  // frescos antes de lanzar, sin depender del snapshot que hay en pantalla.
+  // Lista de conectados, SÓLO informativa. Ya no se pide `excluded_raffle`:
+  // era la marca legacy de ganadores previos y Rey del Orto V1 no la lee ni la
+  // muestra. Quién puede ganar de verdad lo decide `rey_resolver_sorteo`
+  // cruzando presencia con `rey_ganadores` de la jornada.
   const loadCandidates = useCallback(async () => {
     if (!sessionId) { setCandidates(null); return []; }
     const { data, error } = await supabase
       .from("connected_users")
-      .select("user_id,name,avatar_emoji,excluded_raffle,last_seen")
+      .select("user_id,name,avatar_emoji,last_seen")
       .eq("session_id", sessionId)
       .order("last_seen", { ascending: false });
     if (error) { setActionError("No pudimos leer los conectados."); return null; }
@@ -1368,7 +1626,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   // anuncio. Sin intervalos: para refrescar en el medio está el botón ↻.
   useEffect(() => { loadCandidates(); }, [loadCandidates, phase, announcing]);
 
-  const elegibles = reyElegibles(candidates, excludeEfectivo);
+  const presentes = reyPresentes(candidates);
   const inactivos = (candidates || []).filter(c => !reyActivo(c));
 
   // useAdminControls devuelve un objeto nuevo en cada render y el
@@ -1389,13 +1647,74 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     const t = setTimeout(async () => {
       if (drawnRef.current === roundKey) return;
       drawnRef.current = roundKey;
-      const res = await controlsRef.current?.drawRaffleWinner({
-        prize: roundPriz, excludePrevious: excludeEfectivo,
-      });
-      if (res?.error) { setActionError(res.error); drawnRef.current = null; }
+      // Resolución definitiva: el backend vuelve a validar TODO. El dry-run de
+      // hace 10 segundos no garantiza nada — puede haberse ido gente y salir
+      // MIN_PARTICIPANTS o NO_ELIGIBLE_PARTICIPANTS ahora. Eso es correcto.
+      const res = await controlsRef.current?.drawRaffleWinner({ prize: roundPriz });
+      if (res?.error) { setActionError(mensajeErrorSorteo(res)); drawnRef.current = null; }
     }, raffleCountdown(roundKey) * 1000);
     return () => clearTimeout(t);
-  }, [phase, sessionId, roundKey, roundPriz, excludeEfectivo]);
+  }, [phase, sessionId, roundKey, roundPriz]);
+
+  // ── Biblioteca de premios ─────────────────────────────────────────────────
+  // El premio elegido se DERIVA de `premios` por id, no se guarda una copia:
+  // si el operador lo edita, la tarjeta de arriba se actualiza sola, y si lo
+  // borra, la selección cae al empty state sin lógica extra.
+  const premioElegido = premios.find((p) => p.id === premioId) || null;
+
+  // Filtro LOCAL sobre lo que ya trajo el hook: ni una consulta por tecla.
+  // Busca en nombre y detalle, sin distinguir mayúsculas ni acentos de espacios.
+  const filtro = busqueda.trim().replace(/\s+/g, " ").toLowerCase();
+  const premiosFiltrados = filtro
+    ? premios.filter((p) =>
+        `${p.nombre} ${p.detalle || ""}`.replace(/\s+/g, " ").toLowerCase().includes(filtro))
+    : premios;
+
+  // Helper local: las acciones del hook TIRAN con un mensaje ya legible.
+  const correrPremio = async (fn) => {
+    if (busy) return;
+    setBusy(true); setActionError(null);
+    try { await fn(); }
+    catch (e) { setActionError(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+
+  // Alta. El chequeo de duplicado de acá es UX: la autoridad es el índice
+  // único normalizado de la tabla, y el hook traduce el choque a castellano.
+  const altaMotivo = nuevoNom.trim() ? motivoPremioInvalido(nuevoNom) : null;
+  const altaDup    = premioValido(nuevoNom) && yaEnBiblioteca(nuevoNom);
+  const puedeAgregar = premioValido(nuevoNom) && !altaDup;
+
+  const agregar = () => correrPremio(async () => {
+    if (!puedeAgregar) return;
+    const creado = await agregarPremio(nuevoNom, nuevoDet);
+    setNuevoNom(""); setNuevoDet("");
+    // Recién cargado es, casi siempre, el que se va a usar.
+    setPremioId(creado.id);
+  });
+
+  // Edición en línea. UPDATE por id; no toca ningún sorteo pasado, porque el
+  // premio viaja a game_state como TEXTO copiado, no como referencia.
+  const edicionMotivo = editNom.trim() ? motivoPremioInvalido(editNom) : null;
+  const edicionDup    = premioValido(editNom) && yaEnBiblioteca(editNom, editando);
+  const puedeGuardarEdicion = premioValido(editNom) && !edicionDup;
+
+  const abrirEdicion    = (p) => { setEditando(p.id); setEditNom(p.nombre); setEditDet(p.detalle || ""); };
+  const cancelarEdicion = ()  => { setEditando(null); setEditNom(""); setEditDet(""); };
+  const guardarEdicion  = ()  => correrPremio(async () => {
+    if (!puedeGuardarEdicion) return;
+    await editarPremio(editando, editNom, editDet);
+    cancelarEdicion();
+  });
+
+  // DELETE real, con confirmación: la biblioteca es permanente y el historial
+  // no depende de ella, así que lo borrado no se recupera.
+  const quitarPremio = (p) => correrPremio(async () => {
+    if (!window.confirm(`¿Eliminar "${p.nombre}" de la biblioteca de premios?`)) return;
+    await eliminarPremio(p.id);
+    if (editando === p.id) cancelarEdicion();
+    if (premioId === p.id) setPremioId(null);
+  });
 
   const announce = async () => {
     if (busy) return; setBusy(true); setActionError(null);
@@ -1406,21 +1725,34 @@ function ReyPanel({sec, controls, sessionId, gameState}){
 
   const launch = async () => {
     if (busy || !sessionId) return;
-    setBusy(true); setActionError(null); drawnRef.current = null;
-    // La ventana de presencia es de 2 minutos: el listado en pantalla puede
-    // haber envejecido mientras el admin cargaba el premio. Revalidamos contra
-    // el servidor antes de lanzar en vez de descubrirlo con el 400 de la
-    // Edge Function cuando ya está el estroboscópico en la pantalla gigante.
-    const fresh = await loadCandidates();
-    if (fresh === null) { setBusy(false); return; }
-    if (reyElegibles(fresh, excludePrev).length === 0) {
-      setActionError("Ya no queda nadie activo en los últimos 2 minutos.");
-      setBusy(false); return;
+    setBusy(true); setValidando(true); setActionError(null); drawnRef.current = null;
+
+    // ── 1) DRY-RUN — la validación pasa ANTES de tocar game_state ───────────
+    // El backend es la única autoridad: chequea configuración, presencia,
+    // mínimo de participantes y elegibilidad por `rey_ganadores`. Acá no se
+    // replica ni una regla, y ya no hay ningún conteo local que pueda
+    // contradecirlo. Si falla, no se abre ronda, no hay estroboscópico, no
+    // arranca el timer y la pantalla gigante no se entera de nada.
+    const chequeo = await controls?.validateRaffle({ prize: premioElegido?.nombre });
+    if (!chequeo?.ok) {
+      setActionError(mensajeErrorSorteo(chequeo));
+      setValidando(false); setBusy(false);
+      // Refresca la lista para que el número de conectados acompañe al error.
+      loadCandidates();
+      return;
     }
-    // La decisión del toggle se congela acá: viaja en el mismo UPDATE que abre
-    // la ronda y a partir de ahora la manda game_state, no el estado local.
+    setValidando(false);
+
+    // ── 2) Recién ahora se abre la ronda ────────────────────────────────────
+    // El premio viaja como TEXTO COPIADO del nombre de la biblioteca: a partir
+    // de acá `game_state.raffle_prize` es el snapshot de esta ronda y ya no
+    // depende de la fila de `rey_premios_biblioteca` (editarla o borrarla
+    // después no cambia el sorteo que se jugó).
+    //
+    // El segundo argumento es la compatibilidad muerta de `exclude_previous`
+    // (ver useGameState): se manda `false` fijo y nadie lo lee.
     const r = await controls?.launchRaffle(
-      prize || livePrize, excludePrev, gameState?.minijuego_payload,
+      premioElegido?.nombre || livePrize, false, gameState?.minijuego_payload,
     );
     if (r?.error) setActionError("No se pudo lanzar el sorteo.");
     setBusy(false);
@@ -1429,10 +1761,8 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   const drawNow = async () => {
     if (busy) return; setBusy(true); setActionError(null);
     drawnRef.current = gameState?.updated_at ?? "";
-    const res = await controls?.drawRaffleWinner({
-      prize: gameState?.raffle_prize, excludePrevious: excludeEfectivo,
-    });
-    if (res?.error) { setActionError(res.error); drawnRef.current = null; }
+    const res = await controls?.drawRaffleWinner({ prize: gameState?.raffle_prize });
+    if (res?.error) { setActionError(mensajeErrorSorteo(res)); drawnRef.current = null; }
     setBusy(false);
   };
 
@@ -1456,7 +1786,9 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     const r = await controls?.resetRaffle();
     // Sólo se canta éxito si el UPDATE salió bien. Si falló, el estado queda
     // como estaba y el mismo botón reintenta.
-    if (r?.error) setActionError("No se pudo cerrar Rey del Orto."); else setPrize("");
+    // Al cerrar el juego se suelta la selección: el premio de la próxima
+    // jornada se elige de nuevo, no se hereda.
+    if (r?.error) setActionError("No se pudo cerrar Rey del Orto."); else setPremioId(null);
     setBusy(false);
   };
 
@@ -1464,7 +1796,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     <div className="card">
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <div className="ctitle" style={{margin:0}}>
-          {elegibles.length} en el sorteo
+          {presentes.length} conectados
           {inactivos.length > 0 && (
             <span style={{fontWeight:400,color:"rgba(240,232,255,.3)"}}>
               {" "}· {inactivos.length} inactivos
@@ -1474,123 +1806,427 @@ function ReyPanel({sec, controls, sessionId, gameState}){
         <button className="btn btn-g" style={{padding:"3px 10px",fontSize:10}}
           onClick={loadCandidates}>↻</button>
       </div>
-      {/* Con la ronda ya lanzada el toggle es de solo lectura y muestra la
-          regla persistida: la decisión se congela en LANZAR. */}
-      <label style={{display:"flex",alignItems:"center",gap:7,fontSize:11,
-        color:"rgba(240,232,255,.55)",marginBottom:9,
-        cursor:rondaAbierta?"default":"pointer",opacity:rondaAbierta?.6:1}}>
-        <input type="checkbox" checked={excludeEfectivo} disabled={rondaAbierta}
-          onChange={e=>setExcludePrev(e.target.checked)}/>
-        Excluir a los que ya ganaron esta noche
-        {rondaAbierta&&(
-          <span style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>· fijado para esta ronda</span>
-        )}
-      </label>
       {candidates === null && (
         <div style={{fontSize:11,color:"rgba(240,232,255,.3)"}}>Cargando conectados…</div>
       )}
-      {candidates !== null && elegibles.length === 0 && (
+      {candidates !== null && presentes.length === 0 && (
         <div style={{fontSize:11,color:"#FCA5A5"}}>
           {(candidates.length === 0)
             ? "Nadie hizo check-in en esta sesión."
             : "Nadie estuvo activo en los últimos 2 minutos."}
         </div>
       )}
+      {/* Lista puramente informativa: muestra PRESENCIA, no elegibilidad. El
+          único atenuado es el de los inactivos por `last_seen`. Quién puede
+          ganar lo decide el backend con `rey_ganadores` de la jornada. */}
       <div style={{maxHeight:150,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
         {(candidates || []).map(c=>{
-          const entra = reyElegibles([c], excludeEfectivo).length === 1;
+          const activo = reyActivo(c);
           return (
             <div key={c.user_id} style={{display:"flex",alignItems:"center",gap:7,
               padding:"5px 8px",borderRadius:8,fontSize:11,
-              background:"rgba(240,232,255,.04)",opacity:entra?1:.4}}>
+              background:"rgba(240,232,255,.04)",opacity:activo?1:.4}}>
               <span style={{fontSize:14}}>{c.avatar_emoji || "👤"}</span>
               <span style={{flex:1,color:"#F0E8FF"}}>{c.name}</span>
-              {!reyActivo(c) && (
+              {!activo && (
                 <span style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>inactivo</span>
-              )}
-              {c.excluded_raffle && (
-                <span style={{fontSize:9,color:"#FFD600"}}>ya ganó</span>
               )}
             </div>
           );
         })}
       </div>
       <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",marginTop:8,lineHeight:1.5}}>
-        Sortean solo los activos en los últimos 2 minutos — la misma ventana que
-        aplica el servidor. Los grises quedan afuera. Tocá ↻ para refrescar.
+        Conectados en los últimos 2 minutos — la misma ventana que aplica el
+        servidor. Los grises quedan afuera. La elegibilidad final (mínimo de
+        participantes y ganadores de la jornada) la valida el servidor al lanzar.
       </div>
+    </div>
+  );
+
+  // ── Premio que el operador está preparando ────────────────────────────────
+  // Sólo preparación: elegirlo no escribe nada. El premio recién viaja a
+  // `game_state.raffle_prize` cuando se toca LANZAR.
+  const premioCard = (
+    <div className="card">
+      <div className="ctitle">Premio del sorteo</div>
+      {!premioElegido ? (
+        <div style={{textAlign:"center",padding:"20px 12px"}}>
+          <div style={{fontSize:26,marginBottom:7,opacity:.45}}>🎟️</div>
+          <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:13.5,
+            color:"rgba(240,232,255,.6)",marginBottom:5}}>
+            Elegí un premio de la biblioteca
+          </div>
+          <div style={{fontSize:11,color:"rgba(240,232,255,.3)",lineHeight:1.5}}>
+            Seleccionalo en el panel derecho para preparar el próximo sorteo.
+          </div>
+        </div>
+      ) : (
+        <div style={{padding:"10px 12px",borderRadius:11,textAlign:"center",
+          background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.28)"}}>
+          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,color:"#FFD600",
+            lineHeight:1.25,wordBreak:"break-word"}}>
+            {premioElegido.nombre}
+          </div>
+          {premioElegido.detalle && (
+            <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",marginTop:4,lineHeight:1.5}}>
+              {premioElegido.detalle}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // ── 🎟️ Biblioteca de premios (panel lateral) ──────────────────────────────
+  const bibliotecaPremios = (
+    <div className="card">
+      <div className="ctitle">🎟️ Biblioteca de premios</div>
+
+      {/* Buscador — filtra en memoria lo que ya trajo el hook. */}
+      <input className="inp" value={busqueda} maxLength={PREMIO_MAX}
+        style={{margin:"0 0 8px",width:"100%"}}
+        onChange={e=>setBusqueda(e.target.value)}
+        placeholder="🔎 Buscar premio..."/>
+
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+        <div style={{flex:1,fontSize:9.5,color:"rgba(240,232,255,.3)"}}>
+          {filtro
+            ? `${premiosFiltrados.length} de ${premios.length}`
+            : `${premios.length} ${premios.length === 1 ? "premio" : "premios"}`}
+        </div>
+        {filtro && (
+          <button className="btn btn-g" style={{padding:"3px 9px",fontSize:9.5}}
+            onClick={()=>setBusqueda("")}>✕ Limpiar</button>
+        )}
+      </div>
+
+      {/* La biblioteca vive en Supabase: hay estado de carga y de error. */}
+      {premiosError && (
+        <div style={{fontSize:10.5,color:"#FCA5A5",marginBottom:8,lineHeight:1.5}}>{premiosError}</div>
+      )}
+      {premiosLoading && (
+        <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",padding:"10px 0"}}>
+          Cargando la biblioteca…
+        </div>
+      )}
+      {!premiosLoading && !premiosError && premios.length === 0 && (
+        <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",padding:"10px 0"}}>
+          Todavía no cargaste ningún premio.
+        </div>
+      )}
+      {!premiosLoading && premios.length > 0 && premiosFiltrados.length === 0 && (
+        <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",padding:"10px 0"}}>
+          No se encontraron premios.
+        </div>
+      )}
+
+      {/* Scroll propio: con 50 premios el Admin no crece hacia abajo, y el
+          título + el buscador quedan siempre a la vista. */}
+      <div className="rey-list">
+        {premiosFiltrados.map((p) => {
+          const editandoEste = editando === p.id;
+
+          if (editandoEste) return (
+            /* Edición en línea — UPDATE por id sobre `rey_premios_biblioteca`.
+               No toca el historial: los sorteos guardan el premio como texto
+               copiado, no como referencia a esta fila. */
+            <div key={p.id} style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:5,
+              padding:"7px 8px",borderRadius:10,background:"rgba(240,232,255,.03)",
+              border:"1px solid rgba(0,229,255,.35)"}}>
+              <input className="inp" value={editNom} maxLength={PREMIO_MAX} autoFocus
+                style={{width:"100%",margin:0,fontWeight:700}}
+                onChange={e=>setEditNom(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter") guardarEdicion();
+                                if(e.key==="Escape") cancelarEdicion(); }}/>
+              <input className="inp" value={editDet} maxLength={160}
+                style={{width:"100%",margin:0,fontSize:11}}
+                placeholder="Detalle (opcional)"
+                onChange={e=>setEditDet(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter") guardarEdicion();
+                                if(e.key==="Escape") cancelarEdicion(); }}/>
+              <button className="btn btn-g" style={{padding:"5px 9px",fontSize:10}}
+                disabled={busy || !puedeGuardarEdicion} onClick={guardarEdicion}>✓ Guardar</button>
+              <button className="btn btn-r" style={{padding:"5px 9px",fontSize:10}}
+                onClick={cancelarEdicion}>Cancelar</button>
+              {(edicionMotivo || edicionDup) && (
+                <div style={{width:"100%",fontSize:10,color:"#FCA5A5",lineHeight:1.5}}>
+                  {edicionDup ? "Ese premio ya está en la biblioteca." : edicionMotivo}
+                </div>
+              )}
+            </div>
+          );
+
+          return (
+            /* Tocar la fila SELECCIONA. No lanza, no anuncia, no escribe nada:
+               sólo cambia qué premio está preparando el operador. El lápiz y el
+               tacho cortan la propagación para no arrastrar la selección. */
+            <div key={p.id} role="button" tabIndex={0}
+              className={`rey-row${p.id === premioId ? " sel" : ""}`}
+              onClick={()=>setPremioId(p.id)}
+              onKeyDown={e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); setPremioId(p.id); } }}>
+              <div style={{flex:1,minWidth:0}}>
+                <div className="rey-row-t">{p.nombre}</div>
+                {p.detalle && <div className="rey-row-d">{p.detalle}</div>}
+              </div>
+              <button className="btn" style={{padding:"4px 7px",fontSize:10,flexShrink:0,
+                background:"rgba(0,229,255,.06)",border:"1px solid rgba(0,229,255,.2)",
+                color:"rgba(0,229,255,.75)"}}
+                title="Editar premio" disabled={busy}
+                onClick={e=>{ e.stopPropagation(); abrirEdicion(p); }}>✏️</button>
+              <button className="btn" style={{padding:"4px 7px",fontSize:10,flexShrink:0,
+                background:"rgba(255,45,120,.06)",border:"1px solid rgba(255,45,120,.2)",
+                color:"rgba(255,45,120,.7)"}}
+                title="Eliminar de la biblioteca" disabled={busy}
+                onClick={e=>{ e.stopPropagation(); quitarPremio(p); }}>🗑️</button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Alta manual — la biblioteca no se precarga ni se autogenera. */}
+      <div style={{borderTop:"1px solid rgba(240,232,255,.08)",marginTop:10,paddingTop:10}}>
+        <input className="inp" value={nuevoNom} maxLength={PREMIO_MAX}
+          style={{width:"100%",margin:"0 0 6px",fontWeight:700}}
+          onChange={e=>setNuevoNom(e.target.value)}
+          onKeyDown={e=>{ if(e.key === "Enter") agregar(); }}
+          placeholder="+ Nuevo premio"/>
+        <div style={{display:"flex",gap:6,marginBottom:6}}>
+          <input className="inp" value={nuevoDet} maxLength={160}
+            style={{flex:1,minWidth:0,margin:0,fontSize:11}}
+            onChange={e=>setNuevoDet(e.target.value)}
+            onKeyDown={e=>{ if(e.key === "Enter") agregar(); }}
+            placeholder="Detalle (opcional)"/>
+          <button className="btn btn-p" style={{padding:"0 13px",whiteSpace:"nowrap"}}
+            disabled={busy || !puedeAgregar} onClick={agregar}>➕</button>
+        </div>
+
+        {altaMotivo && (
+          <div style={{fontSize:10,color:"#FCA5A5",marginBottom:4,lineHeight:1.5}}>{altaMotivo}</div>
+        )}
+        {!altaMotivo && altaDup && (
+          <div style={{fontSize:10,color:"#FFD600",marginBottom:4}}>Ese premio ya está en la biblioteca.</div>
+        )}
+        <div style={{fontSize:9,color:"rgba(240,232,255,.25)",lineHeight:1.5}}>
+          2 a {PREMIO_MAX} caracteres · sin repetir
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── ⚙️ Configuración de reglas (debajo de la Biblioteca) ──────────────────
+  // Las reglas las define producto por migración: acá sólo se configuran las
+  // que existen. No hay alta ni baja a propósito — el frontend no tiene
+  // INSERT ni DELETE sobre `rey_reglas_config`.
+  const chipEstado = (on) => (
+    <span className={`rey-regla-estado ${on ? "rey-regla-on" : "rey-regla-off"}`}>
+      {on ? "ACTIVA" : "DESACTIVADA"}
+    </span>
+  );
+
+  const configReglas = (
+    <div className="card">
+      <div className="ctitle">⚙️ Configuración de reglas</div>
+
+      {reglasLoading && (
+        <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",padding:"10px 0"}}>
+          Cargando configuración…
+        </div>
+      )}
+
+      {/* Sin fallback silencioso: si no se pudo leer, no se muestra ninguna
+          regla. Enseñar "ON / 5" sin saberlo sería peor que no mostrar nada. */}
+      {!reglasLoading && reglasError && (
+        <div style={{padding:"10px 0"}}>
+          <div style={{fontSize:11,color:"#FCA5A5",marginBottom:8,lineHeight:1.5}}>
+            {reglasError}
+          </div>
+          <button className="btn btn-g" style={{padding:"5px 12px",fontSize:10.5}}
+            onClick={refrescarReglas}>↻ Reintentar</button>
+        </div>
+      )}
+
+      {!reglasLoading && !reglasError && (
+        <>
+          {reglasFaltantes.length > 0 && (
+            <div style={{fontSize:10.5,color:"#FFD600",lineHeight:1.5,marginBottom:8,
+              padding:"8px 10px",borderRadius:9,
+              background:"rgba(255,214,0,.07)",border:"1px solid rgba(255,214,0,.2)"}}>
+              ⚠️ Configuración incompleta. Falta{reglasFaltantes.length > 1 ? "n" : ""}:{" "}
+              {reglasFaltantes.map((k) => NOMBRE_REGLA[k]).join(", ")}. Se carga desde
+              Supabase — este panel no puede crearla.
+            </div>
+          )}
+
+          {/* ── 👥 Participantes mínimos ── */}
+          {reglaMin && (
+            <div className="rey-regla">
+              <div className="rey-regla-hdr">
+                <div className="rey-regla-t">👥 Participantes mínimos</div>
+                {chipEstado(reglaMin.enabled)}
+              </div>
+
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                <Toggle on={reglaMin.enabled} color="#FFD600"
+                  label={guardandoRegla === REGLA_PARTICIPANTES_MINIMOS ? "Guardando…" : ""}
+                  onToggle={()=>alternarRegla(reglaMin)}/>
+                <span style={{fontSize:10.5,color:"rgba(240,232,255,.45)"}}>Mínimo</span>
+                <input className="inp" type="number"
+                  min={MIN_PARTICIPANTES_PISO} max={MIN_PARTICIPANTES_TECHO} step={1}
+                  value={minInput}
+                  style={{width:68,margin:0,padding:"5px 8px",fontSize:12,fontWeight:700,
+                    textAlign:"center",opacity:reglaMin.enabled?1:.55}}
+                  onChange={e=>setMinInput(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter") guardarMinimo(); }}/>
+                {/* El número NO se guarda por cada tecla: viaja con este botón. */}
+                <button className="btn btn-g" style={{padding:"5px 10px",fontSize:10}}
+                  disabled={!!guardandoRegla || !minSucio || !!minMotivo}
+                  onClick={guardarMinimo}>
+                  {guardandoRegla === REGLA_PARTICIPANTES_MINIMOS ? "…" : "Guardar"}
+                </button>
+              </div>
+
+              {minMotivo && minSucio && (
+                <div style={{fontSize:10,color:"#FCA5A5",marginBottom:5,lineHeight:1.5}}>{minMotivo}</div>
+              )}
+              {!minMotivo && minSucio && (
+                <div style={{fontSize:10,color:"#FFD600",marginBottom:5}}>Sin guardar.</div>
+              )}
+
+              <div className="rey-regla-d">
+                Define cuántas personas deben estar conectadas para permitir iniciar el sorteo.
+              </div>
+              {!reglaMin.enabled && (
+                <div style={{fontSize:10,color:"rgba(240,232,255,.4)",marginTop:5,lineHeight:1.5}}>
+                  Sin mínimo de participantes configurado. El número queda guardado para
+                  cuando la vuelvas a activar.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── 🏆 Bloquear ganadores repetidos ── */}
+          {reglaRep && (
+            <div className="rey-regla">
+              <div className="rey-regla-hdr">
+                <div className="rey-regla-t">🏆 Bloquear ganadores repetidos</div>
+                {chipEstado(reglaRep.enabled)}
+              </div>
+
+              <div style={{marginBottom:6}}>
+                <Toggle on={reglaRep.enabled} color="#FFD600"
+                  label={guardandoRegla === REGLA_BLOQUEAR_REPETIDOS ? "Guardando…" : ""}
+                  onToggle={()=>alternarRegla(reglaRep)}/>
+              </div>
+
+              <div className="rey-regla-d">
+                Si está activo, una persona que ya ganó durante la jornada no podrá volver
+                a ganar. Si está desactivado, podrá volver a participar de sorteos posteriores.
+              </div>
+              {!reglaRep.enabled && (
+                <div style={{fontSize:10,color:"#FFD600",marginTop:5,lineHeight:1.5}}>
+                  ⚠️ Los ganadores anteriores podrán volver a ganar.
+                </div>
+              )}
+            </div>
+          )}
+
+          {reglaError && (
+            <div style={{fontSize:10.5,color:"#FCA5A5",marginTop:8,lineHeight:1.5}}>{reglaError}</div>
+          )}
+
+          {/* Estas reglas todavía NO afectan al sorteo: se conectan cuando
+              `launch-raffle` pase a leerlas. Decirlo evita que el operador crea
+              que ya están operativas. */}
+          <div style={{fontSize:9,color:"rgba(240,232,255,.25)",marginTop:10,lineHeight:1.5,
+            borderTop:"1px solid rgba(240,232,255,.06)",paddingTop:8}}>
+            Las reglas activas se aplican automáticamente al lanzar el sorteo.
+          </div>
+        </>
+      )}
     </div>
   );
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {phase==="idle"&&!announcing&&(
-        <>
-          <div className="card">
-            <div className="ctitle">Premio del sorteo</div>
-            <input className="inp" value={prize} onChange={e=>setPrize(e.target.value)}
-              placeholder="Ej: Trago gratis 🍺"/>
-            <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:10,lineHeight:1.5}}>
-              El ganador lo ve en su celular y en pantalla gigante.
-              El servidor selecciona al ganador — no manipulable desde el cliente.
-            </div>
-            <button className="btn btn-p btn-full" onClick={announce} disabled={busy}>
-              📢 Anunciar → mostrar placa en pantalla
-            </button>
-            {/* Reposo CON el juego en el aire — es donde deja "🔁 Nueva ronda".
-                Sin esta salida, la única forma de bajar el Rey de la TV era
-                pasar otra vez por Anunciar. Con el juego fuera del aire este
-                bloque es el de configuración de siempre y no hace falta. */}
-            {isRey && (
-              <>
-                <div style={{fontSize:10,color:"rgba(240,232,255,.3)",margin:"9px 0 6px",textAlign:"center"}}>
-                  Rey del Orto sigue en el aire, en reposo.
-                </div>
-                <button className="btn btn-r btn-full" onClick={finalizarJuego} disabled={busy}>
-                  🎵 Finalizar juego y volver a DJ Democracy
-                </button>
-              </>
-            )}
-          </div>
-          {listaElegibles}
-        </>
-      )}
+      {/* Preparación — dos columnas: a la izquierda el operador trabaja, a la
+          derecha la biblioteca es un SELECTOR. Abajo de 1040px se apilan. */}
+      {phase==="idle"&&(
+        <div className="rey-split">
+          <div>
+            {premioCard}
 
-      {phase==="idle"&&announcing&&(
-        <>
-          <div className="card">
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-              <div className="chip chip-wait">⏳ Placa en pantalla</div>
-            </div>
-            <div style={{padding:"12px",background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.25)",
-              borderRadius:11,marginBottom:12,textAlign:"center"}}>
-              <div style={{fontSize:28,marginBottom:4}}>🎰</div>
-              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
-                background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
-                WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-                REY DEL ORTO
-              </div>
-              <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>
-                Premio: {prize || livePrize || "—"}
-              </div>
-            </div>
-            <input className="inp" value={prize} onChange={e=>setPrize(e.target.value)}
-              placeholder="Premio (editable hasta lanzar)"/>
-            <button className="btn btn-p btn-full" onClick={launch}
-              disabled={busy||elegibles.length===0}>
-              🎰 LANZAR SORTEO AHORA
-            </button>
-            {elegibles.length===0&&(
-              <div style={{fontSize:10,color:"#FCA5A5",marginTop:7,textAlign:"center"}}>
-                Nadie activo en los últimos 2 minutos — tocá ↻ para refrescar.
+            {!announcing&&(
+              <div className="card">
+                <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:10,lineHeight:1.5}}>
+                  El ganador ve el premio en su celular y en la pantalla gigante.
+                  El servidor selecciona al ganador — no manipulable desde el cliente.
+                </div>
+                <button className="btn btn-p btn-full" onClick={announce} disabled={busy}>
+                  📢 Anunciar → mostrar placa en pantalla
+                </button>
+                {/* Reposo CON el juego en el aire — es donde deja "🔁 Nueva ronda".
+                    Sin esta salida, la única forma de bajar el Rey de la TV era
+                    pasar otra vez por Anunciar. Con el juego fuera del aire este
+                    bloque es el de configuración de siempre y no hace falta. */}
+                {isRey && (
+                  <>
+                    <div style={{fontSize:10,color:"rgba(240,232,255,.3)",margin:"9px 0 6px",textAlign:"center"}}>
+                      Rey del Orto sigue en el aire, en reposo.
+                    </div>
+                    <button className="btn btn-r btn-full" onClick={finalizarJuego} disabled={busy}>
+                      🎵 Finalizar juego y volver a DJ Democracy
+                    </button>
+                  </>
+                )}
               </div>
             )}
-            <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={finalizarJuego} disabled={busy}>
-              ⏹ Cancelar juego y volver a DJ Democracy
-            </button>
+
+            {announcing&&(
+              <div className="card">
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                  <div className="chip chip-wait">⏳ Placa en pantalla</div>
+                </div>
+                <div style={{padding:"12px",background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.25)",
+                  borderRadius:11,marginBottom:12,textAlign:"center"}}>
+                  <div style={{fontSize:28,marginBottom:4}}>🎰</div>
+                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
+                    background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
+                    WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
+                    REY DEL ORTO
+                  </div>
+                  <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>
+                    Premio: {premioElegido?.nombre || livePrize || "—"}
+                  </div>
+                </div>
+                {/* El botón sólo se bloquea por lo que el panel SABE con
+                    certeza: que no hay premio elegido. Si falta gente o las
+                    reglas lo impiden, lo dice el dry-run del servidor al
+                    tocarlo — no un conteo local que podría contradecirlo. */}
+                <button className="btn btn-p btn-full" onClick={launch}
+                  disabled={busy||validando||!premioElegido}>
+                  {validando ? "⏳ VALIDANDO…" : "🎰 LANZAR SORTEO AHORA"}
+                </button>
+                {/* Un botón gris sin motivo deja al operador mirando la pantalla. */}
+                {!premioElegido&&(
+                  <div style={{fontSize:10,color:"#FCA5A5",marginTop:7,textAlign:"center"}}>
+                    Elegí un premio de la biblioteca para poder lanzar.
+                  </div>
+                )}
+                <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={finalizarJuego} disabled={busy}>
+                  ⏹ Cancelar juego y volver a DJ Democracy
+                </button>
+              </div>
+            )}
+
+            {listaElegibles}
           </div>
-          {listaElegibles}
-        </>
+
+          {/* Columna derecha: biblioteca arriba, configuración debajo. */}
+          <div>
+            {bibliotecaPremios}
+            {configReglas}
+          </div>
+        </div>
       )}
 
       {phase==="launched"&&(
@@ -1604,11 +2240,6 @@ function ReyPanel({sec, controls, sessionId, gameState}){
             </div>
             <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginTop:6}}>
               {cd>0 ? "Estroboscópico en pantalla…" : "Pidiendo ganador al servidor…"}
-            </div>
-            {/* Regla congelada de esta ronda, leída de game_state: es la que
-                va a viajar a la Edge Function, sobreviva o no el refresh. */}
-            <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",marginTop:6}}>
-              Excluye ganadores anteriores: <strong>{roundExclude ? "sí" : "no"}</strong>
             </div>
           </div>
           <button className="btn btn-p btn-full" style={{marginTop:10}} onClick={drawNow} disabled={busy}>
@@ -1934,9 +2565,23 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   const { round, assignments, lanzarRonda, validarGrupo, cancelarRonda } =
     useArmaPalabraRound(sessionId, { admin: true });
 
+  // 📚 Biblioteca: la fuente de verdad es `palabra_biblioteca` en Supabase, no
+  // un array de esta pestaña. Sobrevive al F5, al cambio de sección y al cambio
+  // de computadora.
+  const {
+    palabras, loading: bibliLoading, error: bibliError,
+    existe: yaEnBiblioteca, agregar, editar, eliminar,
+  } = useBibliotecaPalabras();
+
   const [palabra,   setPalabra]   = useState("");   // input en curso
-  const [palabras,  setPalabras]  = useState([]);   // lista de la partida (máx 10)
+  const [busqueda,  setBusqueda]  = useState("");   // filtro local de la biblioteca
+  const [editando,  setEditando]  = useState(null); // id de la fila en edición
+  const [editTexto, setEditTexto] = useState("");   // texto nuevo mientras se edita
   const [usadas,    setUsadas]    = useState([]);   // ya lanzadas en esta partida
+  // Palabra que el operador está preparando. Es estado OPERATIVO LOCAL: no se
+  // persiste, no toca game_state, no crea ronda y no llega ni a la TV ni a los
+  // celulares. Seleccionar y lanzar son dos cosas distintas.
+  const [elegidaId, setElegidaId] = useState(null);
   const [seleccion, setSeleccion] = useState([]);   // user_ids EN ORDEN
   const [conectados, setConectados] = useState(null);
   const [busy,  setBusy]  = useState(false);
@@ -1946,6 +2591,10 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   const enElAire = gameState?.active_game === "palabra";
   const enJuego  = round?.status === "playing";
   const conGanador = round?.status === "finished" && !!round?.winner_group;
+  // La placa del juego puesta por «Anunciar». Es una capa aparte de
+  // `active_game`: anunciar no inicia ninguna ronda. Sale de `gameState`, no de
+  // un estado local, así que se ve igual en toda pestaña del admin.
+  const anunciado = gameState?.active_placa === "game_palabra" && !enElAire;
 
   // Presencia: misma ventana de 2 minutos y misma tabla que Rey del Orto y
   // Sumate. No se inventa una fuente nueva de "tiene la app abierta".
@@ -1971,25 +2620,73 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
     finally { setBusy(false); }
   };
 
-  // Lo que va a quedar realmente: el RPC normaliza igual del otro lado.
-  // ── Lista de la partida (UI local, no se persiste) ────────────────────────
-  // El operador prepara hasta 10 palabras y después elige cuál lanzar. No hay
-  // catálogo global: es la lista de ESTA partida.
+  // ── Alta en la biblioteca ─────────────────────────────────────────────────
+  // El chequeo de acá es UX: avisa antes de mandar el INSERT. La autoridad es
+  // el CHECK + el UNIQUE de la tabla, y el hook traduce el choque a castellano.
   const palabraNorm  = normalizarPalabra(palabra);
   const motivo       = palabra.trim() ? motivoPalabraInvalida(palabraNorm) : null;
-  const yaEsta       = palabras.includes(palabraNorm);
-  const puedeAgregar = palabraValida(palabraNorm) && !yaEsta && palabras.length < MAX_PALABRAS;
+  const yaEsta       = palabraValida(palabraNorm) && yaEnBiblioteca(palabraNorm);
+  const puedeAgregar = palabraValida(palabraNorm) && !yaEsta;
 
-  const agregarPalabra = () => {
+  const agregarPalabra = () => correr(async () => {
     if (!puedeAgregar) return;
-    setPalabras((ps) => [...ps, palabraNorm]);
+    await agregar(palabraNorm);
     setPalabra("");
-  };
-  const quitarPalabra = (w) => setPalabras((ps) => ps.filter((x) => x !== w));
+    setNota(`📚 ${palabraNorm} quedó guardada en la biblioteca.`);
+  });
+
+  // ── Edición de una palabra de la biblioteca ──────────────────────────────
+  // `editando` es el ID de la fila. La biblioteca no se renderiza con una ronda
+  // viva, así que no hay forma de editar la palabra que está jugando. Y las
+  // rondas guardan la palabra como texto copiado: editar acá nunca reescribe
+  // el historial.
+  const editNorm   = normalizarPalabra(editTexto);
+  const editMotivo = editTexto.trim() ? motivoPalabraInvalida(editNorm) : null;
+  const editDup    = palabraValida(editNorm) && yaEnBiblioteca(editNorm, editando);
+  const puedeGuardarEdicion = palabraValida(editNorm) && !editDup;
+
+  const abrirEdicion    = (p) => { setEditando(p.id); setEditTexto(p.word); };
+  const cancelarEdicion = ()  => { setEditando(null); setEditTexto(""); };
+  const guardarEdicion  = ()  => correr(async () => {
+    if (!puedeGuardarEdicion) return;
+    await editar(editando, editNorm);
+    cancelarEdicion();
+  });
+
+  // DELETE real, con confirmación: la biblioteca es permanente y el historial
+  // de rondas no depende de ella, así que lo borrado no se recupera.
+  const quitarPalabra = (p) => correr(async () => {
+    if (!window.confirm(`¿Eliminar "${p.word}" de la biblioteca?`)) return;
+    await eliminar(p.id);
+    if (editando  === p.id) cancelarEdicion();
+    if (elegidaId === p.id) setElegidaId(null);
+    setNota(`🗑️ ${p.word} salió de la biblioteca.`);
+  });
+
+  // ── Selección y búsqueda ─────────────────────────────────────────────────
+  // La elegida se DERIVA de `palabras` por id, no se guarda una copia: si el
+  // operador edita MARCO → BARCO, el área principal pasa a decir BARCO sola, y
+  // si la borra, la selección se cae al empty state sin lógica extra.
+  const elegida = palabras.find((p) => p.id === elegidaId) || null;
+
+  // Filtro LOCAL sobre lo que ya trajo el hook: ni una consulta por tecla. Se
+  // normaliza la búsqueda con la misma función que las palabras, así "mar",
+  // "MAR" y "már" encuentran MARCO.
+  const filtro    = normalizarPalabra(busqueda);
+  const filtradas = filtro ? palabras.filter((p) => p.word.includes(filtro)) : palabras;
 
   // Cuánta gente hace falta para una palabra: uno por letra, porque el reparto
   // entrega cada letra al menos una vez.
   const alcanzaGente = (w) => activos >= w.length;
+
+  // Anuncio: sólo pone la placa del juego en la pantalla gigante. No crea
+  // ronda ni reparte letras — `announceGame` deja `active_game` en null a
+  // propósito, así el operador prepara las palabras con la placa ya al aire.
+  const anunciar = () => correr(async () => {
+    const e = await controls?.announceGame("palabra");
+    if (e?.error) throw new Error(e.error.message || String(e.error));
+    setNota("📺 La placa de Arma la Palabra está en pantalla.");
+  });
 
   const lanzar = (w) => correr(async () => {
     const r = await lanzarRonda(w);
@@ -2076,111 +2773,249 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
         </div>
       )}
 
-      {/* ── Sin ronda viva: lista de palabras + elegir cuál lanzar ── */}
+      {/* ── Sin ronda viva: preparar la próxima palabra ──────────────────
+          Dos columnas: a la izquierda el operador trabaja (anuncia, revisa la
+          palabra elegida, lanza); a la derecha la biblioteca es un SELECTOR.
+          Abajo de 1040px `.pal-split` apila las columnas. */}
       {!enJuego && !conGanador && (
-        <>
-          <div className="card" style={{marginBottom:10}}>
-            <div className="ctitle">🔤 Arma la palabra</div>
-            <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
-              Preparás hasta {MAX_PALABRAS} palabras y elegís cuál lanzar. El servidor
-              reparte SÓLO letras de esa palabra, lo más parejo posible: todas salen
-              al menos una vez, así siempre hay una combinación posible.
-            </p>
-
-            <div style={{display:"flex", gap:6, marginBottom:6}}>
-              <input className="inp" value={palabra} maxLength={8}
-                style={{flex:1, margin:0, textTransform:"uppercase", letterSpacing:2, fontWeight:700}}
-                onChange={e=>setPalabra(e.target.value)}
-                onKeyDown={e=>{ if(e.key === "Enter") agregarPalabra(); }}
-                placeholder="Nueva palabra (ej: DISCO)"/>
-              <button className="btn btn-p" style={{padding:"0 14px", whiteSpace:"nowrap"}}
-                disabled={!puedeAgregar} onClick={agregarPalabra}>➕</button>
+        <div className="pal-split">
+          {/* ══ Columna principal ══════════════════════════════════════ */}
+          <div>
+            {/* Anuncio — placa en la pantalla gigante, sin crear ronda.
+                Es independiente de la selección: anunciar no lanza nada y
+                seleccionar no anuncia nada. */}
+            <div className="card" style={{marginBottom:10}}>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <div style={{flex:1}}>
+                  <div className="ctitle" style={{margin:0}}>Anunciar en pantalla</div>
+                  <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", marginTop:2}}>
+                    Pone la placa de Arma la Palabra en la pantalla gigante. No arranca
+                    ninguna ronda: seguís acá preparando la palabra.
+                  </div>
+                </div>
+                <button className="btn btn-g" style={{padding:"7px 13px", fontSize:10.5, whiteSpace:"nowrap"}}
+                  disabled={busy} onClick={anunciar}>
+                  📺 Anunciar
+                </button>
+              </div>
+              {anunciado && (
+                <div style={{marginTop:8, fontSize:10.5, color:"#00F5A0"}}>
+                  ✓ La placa está en pantalla.
+                </div>
+              )}
             </div>
 
-            {/* Por qué no se puede agregar. Un botón gris sin motivo es lo que
-                hace que el operador se quede mirando la pantalla. */}
-            {motivo && (
-              <div style={{fontSize:10.5, color:"#FCA5A5", marginBottom:8, lineHeight:1.5}}>{motivo}</div>
-            )}
-            {!motivo && yaEsta && (
-              <div style={{fontSize:10.5, color:"#FFD600", marginBottom:8}}>Esa palabra ya está en la lista.</div>
-            )}
-            {palabras.length >= MAX_PALABRAS && (
-              <div style={{fontSize:10.5, color:"#FFD600", marginBottom:8}}>Llegaste al máximo de {MAX_PALABRAS}.</div>
-            )}
+            {/* Palabra elegida — sólo preparación. Nada de esto está en la
+                base ni en la TV hasta que se toque «Lanzar». */}
+            <div className="card" style={{marginBottom:10}}>
+              <div className="ctitle">Palabra seleccionada</div>
 
-            <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", marginBottom:8}}>
-              {palabras.length} / {MAX_PALABRAS} palabras · 3 a 6 letras, sin repetir ninguna
+              {!elegida ? (
+                <div style={{textAlign:"center", padding:"26px 14px"}}>
+                  <div style={{fontSize:30, marginBottom:8, opacity:.45}}>🔤</div>
+                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:800, fontSize:14,
+                    color:"rgba(240,232,255,.6)", marginBottom:5}}>
+                    Seleccioná una palabra de la biblioteca
+                  </div>
+                  <div style={{fontSize:11, color:"rgba(240,232,255,.3)", lineHeight:1.5}}>
+                    Elegí una palabra del panel derecho para preparar la próxima ronda.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{display:"flex", gap:6, justifyContent:"center", flexWrap:"wrap",
+                    padding:"8px 0 10px"}}>
+                    {elegida.word.split("").map((l, i) => (
+                      <div key={i} style={{minWidth:44, height:54, padding:"0 6px", borderRadius:11,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:26, color:COL,
+                        background:"rgba(168,85,247,.12)", border:"1.5px solid rgba(168,85,247,.4)"}}>{l}</div>
+                    ))}
+                  </div>
+                  <div style={{textAlign:"center", fontSize:10.5, color:"rgba(240,232,255,.4)",
+                    marginBottom:12}}>
+                    {elegida.word.length} letras
+                  </div>
+
+                  {/* Mismo flujo de siempre: `lanzar()` → arma_palabra_launch_round. */}
+                  <button className="btn btn-p btn-full"
+                    disabled={busy || !alcanzaGente(elegida.word)}
+                    onClick={()=>lanzar(elegida.word)}>
+                    🚀 Lanzar {elegida.word}
+                  </button>
+
+                  {/* La misma guarda que ya existía, ahora contra la palabra
+                      elegida en vez de contra toda la lista. El RPC igual la
+                      vuelve a chequear del otro lado. */}
+                  {!alcanzaGente(elegida.word) && (
+                    <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:8, lineHeight:1.5,
+                      textAlign:"center"}}>
+                      Con {activos} conectados no alcanza. Hace falta un participante por letra.
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
-            {palabras.length === 0 && (
+            <div className="card">
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
+                  Participantes conectados
+                </div>
+                <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22, color:COL}}>{activos}</div>
+                <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                  onClick={leerConectados}>↻</button>
+              </div>
+              {enElAire && (
+                <>
+                  <div style={{fontSize:10, color:"rgba(240,232,255,.3)", margin:"10px 0 6px", textAlign:"center"}}>
+                    Arma la Palabra sigue en el aire, esperando la palabra siguiente.
+                  </div>
+                  {salida}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ══ Panel lateral: biblioteca ══════════════════════════════ */}
+          <div className="card">
+            <div className="ctitle">📚 Biblioteca de palabras</div>
+
+            {/* Buscador — filtra en memoria lo que ya trajo el hook. */}
+            <input className="inp" value={busqueda} maxLength={12}
+              style={{margin:"0 0 8px", width:"100%"}}
+              onChange={e=>setBusqueda(e.target.value)}
+              placeholder="🔎 Buscar palabra..."/>
+
+            <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
+              <div style={{flex:1, fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
+                {filtro
+                  ? `${filtradas.length} de ${palabras.length}`
+                  : `${palabras.length} ${palabras.length === 1 ? "palabra" : "palabras"}`}
+              </div>
+              {filtro && (
+                <button className="btn btn-g" style={{padding:"3px 9px", fontSize:9.5}}
+                  onClick={()=>setBusqueda("")}>✕ Limpiar</button>
+              )}
+            </div>
+
+            {/* La biblioteca vive en Supabase: hay un estado de carga y uno de
+                error que la lista en memoria no necesitaba. */}
+            {bibliError && (
+              <div style={{fontSize:10.5, color:"#FCA5A5", marginBottom:8, lineHeight:1.5}}>{bibliError}</div>
+            )}
+            {bibliLoading && (
+              <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"10px 0"}}>
+                Cargando la biblioteca…
+              </div>
+            )}
+            {!bibliLoading && !bibliError && palabras.length === 0 && (
               <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"10px 0"}}>
                 Todavía no cargaste ninguna palabra.
               </div>
             )}
+            {!bibliLoading && palabras.length > 0 && filtradas.length === 0 && (
+              <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"10px 0"}}>
+                No se encontraron palabras.
+              </div>
+            )}
 
-            {/* Cada palabra es su propio botón de lanzamiento: no hay un paso
-                intermedio de 'seleccionar' que se pueda desincronizar. */}
-            {palabras.map((w) => {
-              const usada = usadas.includes(w);
-              const alcanza = alcanzaGente(w);
-              return (
-                <div key={w} style={{display:"flex", alignItems:"center", gap:7, marginBottom:6,
-                  padding:"7px 8px", borderRadius:10, background:"rgba(240,232,255,.03)",
-                  border:"1px solid rgba(240,232,255,.08)", opacity: usada ? .55 : 1}}>
-                  <div style={{display:"flex", gap:3, flex:1, flexWrap:"wrap"}}>
-                    {w.split("").map((l,i2)=>(
-                      <div key={i2} style={{width:24,height:30,borderRadius:6,
-                        background:"rgba(168,85,247,.12)", border:"1px solid rgba(168,85,247,.3)",
-                        display:"flex",alignItems:"center",justifyContent:"center",
-                        fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:13,color:COL}}>{l}</div>
-                    ))}
+            {/* Scroll propio: con 100 palabras el Admin no crece hacia abajo,
+                y el título + el buscador quedan siempre a la vista. */}
+            <div className="pal-list">
+              {filtradas.map((p) => {
+                const w = p.word;
+                const usada = usadas.includes(w);
+                const editandoEsta = editando === p.id;
+
+                if (editandoEsta) return (
+                  /* Edición en línea — UPDATE por id sobre `palabra_biblioteca`.
+                     No toca el historial: las rondas guardan la palabra como
+                     texto copiado, no como referencia a esta fila. */
+                  <div key={p.id} style={{display:"flex", gap:5, flexWrap:"wrap", marginBottom:5,
+                    padding:"7px 8px", borderRadius:10, background:"rgba(240,232,255,.03)",
+                    border:"1px solid rgba(0,229,255,.35)"}}>
+                    <input className="inp" value={editTexto} maxLength={6} autoFocus
+                      style={{flex:1, margin:0, minWidth:90, textTransform:"uppercase",
+                        letterSpacing:2, fontWeight:700}}
+                      onChange={e=>setEditTexto(e.target.value)}
+                      onKeyDown={e=>{ if(e.key==="Enter") guardarEdicion();
+                                      if(e.key==="Escape") cancelarEdicion(); }}/>
+                    <button className="btn btn-g" style={{padding:"5px 9px", fontSize:10}}
+                      disabled={busy || !puedeGuardarEdicion} onClick={guardarEdicion}>✓</button>
+                    <button className="btn btn-r" style={{padding:"5px 9px", fontSize:10}}
+                      onClick={cancelarEdicion}>✕</button>
+                    {/* Un botón gris sin motivo es lo que deja al operador mirando la pantalla */}
+                    {(editMotivo || editDup) && (
+                      <div style={{width:"100%", fontSize:10, color:"#FCA5A5", lineHeight:1.5}}>
+                        {editDup ? "Esa palabra ya está en la biblioteca." : editMotivo}
+                      </div>
+                    )}
                   </div>
-                  {usada && (
-                    <span style={{fontSize:9, color:"rgba(240,232,255,.35)"}}>ya jugada</span>
-                  )}
-                  <button className="btn btn-p" style={{padding:"5px 11px", fontSize:10, whiteSpace:"nowrap"}}
-                    disabled={busy || !alcanza} onClick={()=>lanzar(w)}>
-                    🚀 Lanzar
-                  </button>
-                  <button className="btn" style={{padding:"5px 8px", fontSize:10,
-                    background:"rgba(255,45,120,.06)", border:"1px solid rgba(255,45,120,.2)",
-                    color:"rgba(255,45,120,.7)"}}
-                    disabled={busy} onClick={()=>quitarPalabra(w)}>✕</button>
-                </div>
-              );
-            })}
+                );
 
-            {/* Aviso por palabra: con 4 conectados, DISCO (5) no se puede jugar
-                pero SOL (3) sí. */}
-            {palabras.some((w)=>!alcanzaGente(w)) && (
-              <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:4, lineHeight:1.5}}>
-                Con {activos} conectados no alcanza para:{" "}
-                {palabras.filter((w)=>!alcanzaGente(w)).join(", ")}.
-                {" "}Hace falta un participante por letra.
-              </div>
-            )}
-          </div>
-
-          <div className="card">
-            <div style={{display:"flex", alignItems:"center", gap:8}}>
-              <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
-                Participantes conectados
-              </div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22, color:COL}}>{activos}</div>
-              <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
-                onClick={leerConectados}>↻</button>
+                return (
+                  /* Tocar la fila SELECCIONA. No lanza, no escribe, no toca la
+                     TV: sólo cambia qué palabra está preparando el operador.
+                     El lápiz y el tacho cortan la propagación para no arrastrar
+                     la selección detrás suyo. */
+                  <div key={p.id} role="button" tabIndex={0}
+                    className={`pal-row${p.id === elegidaId ? " sel" : ""}`}
+                    style={{opacity: usada ? .6 : 1}}
+                    onClick={()=>setElegidaId(p.id)}
+                    onKeyDown={e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); setElegidaId(p.id); } }}>
+                    <div style={{flex:1, minWidth:0}}>
+                      <div className="pal-row-w">{w}</div>
+                      <div className="pal-row-n">
+                        {w.length} letras{usada ? " · ya jugada" : ""}
+                      </div>
+                    </div>
+                    {/* Una palabra ya lanzada es historial de la partida: editarla
+                        retroactivamente no cambia la ronda que se jugó. */}
+                    <button className="btn" style={{padding:"4px 7px", fontSize:10, flexShrink:0,
+                      background:"rgba(0,229,255,.06)", border:"1px solid rgba(0,229,255,.2)",
+                      color: usada ? "rgba(0,229,255,.25)" : "rgba(0,229,255,.75)"}}
+                      title={usada ? "Ya se jugó en esta partida" : "Editar palabra"}
+                      disabled={busy || usada}
+                      onClick={e=>{ e.stopPropagation(); abrirEdicion(p); }}>✏️</button>
+                    <button className="btn" style={{padding:"4px 7px", fontSize:10, flexShrink:0,
+                      background:"rgba(255,45,120,.06)", border:"1px solid rgba(255,45,120,.2)",
+                      color:"rgba(255,45,120,.7)"}}
+                      title="Eliminar de la biblioteca"
+                      disabled={busy}
+                      onClick={e=>{ e.stopPropagation(); quitarPalabra(p); }}>🗑️</button>
+                  </div>
+                );
+              })}
             </div>
-            {enElAire && (
-              <>
-                <div style={{fontSize:10, color:"rgba(240,232,255,.3)", margin:"10px 0 6px", textAlign:"center"}}>
-                  Arma la Palabra sigue en el aire, esperando la palabra siguiente.
-                </div>
-                {salida}
-              </>
-            )}
+
+            {/* Alta manual — la biblioteca no se precarga ni se autogenera. */}
+            <div style={{borderTop:"1px solid rgba(240,232,255,.08)", marginTop:10, paddingTop:10}}>
+              <div style={{display:"flex", gap:6, marginBottom:6}}>
+                <input className="inp" value={palabra} maxLength={6}
+                  style={{flex:1, minWidth:0, margin:0, textTransform:"uppercase",
+                    letterSpacing:2, fontWeight:700}}
+                  onChange={e=>setPalabra(e.target.value)}
+                  onKeyDown={e=>{ if(e.key === "Enter") agregarPalabra(); }}
+                  placeholder="+ Nueva palabra"/>
+                <button className="btn btn-p" style={{padding:"0 13px", whiteSpace:"nowrap"}}
+                  disabled={busy || !puedeAgregar} onClick={agregarPalabra}>➕</button>
+              </div>
+
+              {/* Por qué no se puede agregar. Un botón gris sin motivo es lo que
+                  hace que el operador se quede mirando la pantalla. */}
+              {motivo && (
+                <div style={{fontSize:10, color:"#FCA5A5", marginBottom:4, lineHeight:1.5}}>{motivo}</div>
+              )}
+              {!motivo && yaEsta && (
+                <div style={{fontSize:10, color:"#FFD600", marginBottom:4}}>Esa palabra ya está en la biblioteca.</div>
+              )}
+              <div style={{fontSize:9, color:"rgba(240,232,255,.25)", lineHeight:1.5}}>
+                3 a 6 letras, sin repetir ninguna
+              </div>
+            </div>
           </div>
-        </>
+        </div>
       )}
       {/* ── Ronda en curso: seleccionar EN ORDEN y validar ── */}
       {enJuego && (
@@ -2311,19 +3146,104 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
 // hace fallar el INSERT entero al lanzar la ronda.
 const MAX_TRIVIA_Q = 10;
 
+// Una pregunta admite entre 2 y 4 opciones. No es una decisión del panel: es
+// el CHECK que ya tiene la tabla —`jsonb_array_length(options) BETWEEN 2 AND 4`
+// (schema.sql:266)— más `correct_option < jsonb_array_length(options)`. El
+// formulario arranca en 2 y nunca rellena opciones vacías para llegar a 4:
+// se persiste sólo lo que el operador escribió.
+const TRIVIA_MIN_OPTS = 2;
+const TRIVIA_MAX_OPTS = 4;
+
+// `correct` en null = hay que elegir de nuevo (pasa al borrar la que estaba
+// marcada). Nunca se guarda un índice que no apunte a una opción real.
+const preguntaValida = (texto, opts, correct) =>
+  !!texto.trim() &&
+  opts.length >= TRIVIA_MIN_OPTS && opts.length <= TRIVIA_MAX_OPTS &&
+  opts.every(o => o.trim()) &&
+  correct !== null && correct >= 0 && correct < opts.length;
+
+/**
+ * Editor de las opciones de una pregunta — compartido por el alta y la edición
+ * para que las dos se comporten igual (agregar, quitar y reelegir la correcta).
+ */
+function OpcionesEditor({opts, setOpts, correct, setCorrect}){
+  const agregar = () => {
+    if (opts.length >= TRIVIA_MAX_OPTS) return;
+    setOpts([...opts, ""]);
+  };
+  const quitar = (i) => {
+    if (opts.length <= TRIVIA_MIN_OPTS) return;
+    setOpts(opts.filter((_, idx) => idx !== i));
+    // Si se borró la correcta, el operador tiene que volver a elegirla: correrla
+    // sola a otra respuesta sería cambiarle la pregunta sin avisarle. Si se borró
+    // una anterior, la correcta sigue siendo la misma opción, una posición antes.
+    if (correct === i)    setCorrect(null);
+    else if (correct > i) setCorrect(correct - 1);
+  };
+  return (
+    <>
+      {opts.map((o,i)=>(
+        <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
+          <button onClick={()=>setCorrect(i)} title="Marcar como correcta" style={{
+            width:24,height:24,borderRadius:"50%",flexShrink:0,cursor:"pointer",
+            border:`2px solid ${i===correct?"#00F5A0":"rgba(240,232,255,.15)"}`,
+            background:i===correct?"rgba(0,245,160,.15)":"transparent",
+            fontSize:9,color:i===correct?"#00F5A0":"rgba(240,232,255,.3)"}}>
+            {String.fromCharCode(65+i)}
+          </button>
+          <input className="inp" style={{margin:0,flex:1}}
+            placeholder={`Opción ${String.fromCharCode(65+i)}`}
+            value={o} onChange={e=>{const n=[...opts];n[i]=e.target.value;setOpts(n);}}/>
+          <button onClick={()=>quitar(i)}
+            disabled={opts.length<=TRIVIA_MIN_OPTS}
+            title={opts.length<=TRIVIA_MIN_OPTS?`Mínimo ${TRIVIA_MIN_OPTS} opciones`:"Quitar opción"}
+            style={{background:"none",border:"none",flexShrink:0,fontSize:13,padding:"0 4px",
+              cursor:opts.length<=TRIVIA_MIN_OPTS?"default":"pointer",
+              color:opts.length<=TRIVIA_MIN_OPTS?"rgba(240,232,255,.12)":"rgba(255,45,120,.55)"}}>✕</button>
+        </div>
+      ))}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4,marginBottom:8}}>
+        <button onClick={agregar} disabled={opts.length>=TRIVIA_MAX_OPTS}
+          style={{background:"none",fontFamily:"inherit",
+            border:`1px dashed ${opts.length>=TRIVIA_MAX_OPTS?"rgba(240,232,255,.1)":"rgba(0,229,255,.35)"}`,
+            borderRadius:8,padding:"4px 10px",fontSize:10,fontWeight:700,
+            cursor:opts.length>=TRIVIA_MAX_OPTS?"default":"pointer",
+            color:opts.length>=TRIVIA_MAX_OPTS?"rgba(240,232,255,.18)":"#00E5FF"}}>
+          + Agregar opción
+        </button>
+        <span style={{fontSize:9.5,color:correct===null?"#FCD34D":"rgba(0,245,160,.5)"}}>
+          {correct===null
+            ? "⚠️ Elegí cuál es la respuesta correcta"
+            : `● = respuesta correcta · ${opts.length}/${TRIVIA_MAX_OPTS} opciones`}
+        </span>
+      </div>
+    </>
+  );
+}
+
 function TriviaPanel({sec, controls, sessionId, gameState}){
   const [qs,       setQs]       = useState([]);
   const [coupon,   setCoupon]   = useState("BEER50");
   const [newQ,     setNewQ]     = useState("");
-  const [newOpts,  setNewOpts]  = useState(["","","",""]);
+  const [newOpts,  setNewOpts]  = useState(["",""]);
   const [newCorr,  setNewCorr]  = useState(0);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
+  // Índice de la pregunta que se está editando (null = ninguna). La edición
+  // ocurre sobre `qs`, en memoria: nada de esto toca `trivia_questions` hasta
+  // que el operador lanza la ronda.
+  const [editIdx,  setEditIdx]  = useState(null);
+  const [editQ,    setEditQ]    = useState("");
+  const [editOpts, setEditOpts] = useState(["",""]);
+  const [editCorr, setEditCorr] = useState(0);
   const phase = gameState?.active_game === "trivia" ? gameState?.trivia_state || "idle" : "idle";
   const enElAire = gameState?.active_game === "trivia";
   const curQ = gameState?.trivia_question ?? 0;
   const roundId = gameState?.trivia_round_id ?? null;
   const revealed = phase === "revealed";
+  // La placa del juego puesta por «Anunciar». Es una capa aparte de
+  // `active_game`: anunciar no inicia nada.
+  const anunciado = gameState?.active_placa === "game_trivia";
   const { pcts } = useTriviaVotes(sessionId, roundId, curQ, phase);
   const { accumulated, leader } = useTriviaAccumulated(sessionId, roundId, phase);
   const bata = pcts?.batata ?? 50, memb = pcts?.membrillo ?? 50;
@@ -2340,10 +3260,58 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
   }, [sessionId, roundId]);
 
   const addQ = () => {
-    if(!newQ.trim()||newOpts.some(o=>!o.trim())||qs.length>=MAX_TRIVIA_Q) return;
-    setQs(q=>[...q,{text:newQ,opts:newOpts,correct:newCorr}]);
-    setNewQ(""); setNewOpts(["","","",""]); setNewCorr(0);
+    if(!preguntaValida(newQ,newOpts,newCorr)||qs.length>=MAX_TRIVIA_Q) return;
+    // Se guardan sólo las opciones reales y sin espacios sobrantes: nada de
+    // rellenar hasta cuatro. Eso es lo que después va a `options` en el INSERT.
+    setQs(q=>[...q,{text:newQ.trim(),opts:newOpts.map(o=>o.trim()),correct:newCorr}]);
+    setNewQ(""); setNewOpts(["",""]); setNewCorr(0);
   };
+
+  // ── Gestión de la lista local, previa al lanzamiento ─────────────────────
+  // Las tres operan sobre `qs` y nada más: el orden del array ES el
+  // `question_idx` que se va a insertar, así que reordenar acá alcanza para
+  // que la ronda salga en el orden elegido.
+  const abrirEdicion = (i) => {
+    setEditIdx(i);
+    setEditQ(qs[i].text);
+    setEditOpts([...qs[i].opts]);
+    setEditCorr(qs[i].correct);
+  };
+  const cancelarEdicion = () => setEditIdx(null);
+  const guardarEdicion = () => {
+    if(!preguntaValida(editQ,editOpts,editCorr)) return;
+    setQs(list=>list.map((q,i)=>i===editIdx
+      ?{text:editQ.trim(),opts:editOpts.map(o=>o.trim()),correct:editCorr}:q));
+    setEditIdx(null);
+  };
+  const borrarQ = (i) => {
+    if(!window.confirm(`¿Eliminar la pregunta ${i+1}?`)) return;
+    setQs(list=>list.filter((_,idx)=>idx!==i));
+    // Si estaba abierta en edición, la edición deja de tener sentido.
+    setEditIdx(null);
+  };
+  const moverQ = (i, dir) => {
+    const destino = i + dir;
+    if(destino<0||destino>=qs.length) return;
+    setQs(list=>{
+      const next=[...list];
+      [next[i],next[destino]]=[next[destino],next[i]];
+      return next;
+    });
+    // El índice editado se movería junto con la fila; más simple es cerrarla.
+    setEditIdx(null);
+  };
+
+  // Las preguntas cargadas viven sólo en memoria hasta que se lanza la ronda:
+  // un F5 acá las borra todas. El aviso del navegador es la única red de
+  // contención mientras no haya borrador persistido.
+  const hayBorradorSinLanzar = qs.length > 0 && !roundId;
+  useEffect(() => {
+    if (!hayBorradorSinLanzar) return undefined;
+    const avisar = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [hayBorradorSinLanzar]);
 
   // Toda acción pasa por acá: un solo vuelo a la vez y el error queda visible.
   // Sin esto, un doble click en Lanzar insertaba las preguntas dos veces y uno
@@ -2365,6 +3333,14 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
     if (error) { setActionError("No se pudieron guardar las preguntas."); return; }
     const result = await controls?.startTrivia(coupon, nextRound);
     if (result?.error) setActionError("No se pudo iniciar el desafío.");
+  });
+
+  // Anuncio: sólo pone la placa del juego en la pantalla gigante. No inicia
+  // nada — `announceGame` deja `active_game` en null a propósito, así el
+  // operador configura las preguntas con la placa ya al aire.
+  const anunciar = () => correr(async () => {
+    const r = await controls?.announceGame("trivia");
+    if (r?.error) setActionError("No se pudo mostrar la placa.");
   });
 
   const reveal = () => correr(async () => { const r=await controls?.revealTriviaAnswer(); if(r?.error)setActionError("No se pudo revelar."); });
@@ -2400,6 +3376,28 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
       {phase==="idle"&&(
         <>
+          {/* Anuncio — placa en la pantalla gigante, sin iniciar el juego */}
+          <div className="card">
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{flex:1}}>
+                <div className="ctitle" style={{margin:0}}>Anunciar en pantalla</div>
+                <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",marginTop:2}}>
+                  Pone la placa de Desafío Demente en la pantalla gigante. No arranca el
+                  juego: seguís acá cargando las preguntas.
+                </div>
+              </div>
+              <button className="btn btn-g" style={{padding:"7px 13px",fontSize:10.5,whiteSpace:"nowrap"}}
+                disabled={busy} onClick={anunciar}>
+                📺 Anunciar
+              </button>
+            </div>
+            {anunciado && (
+              <div style={{marginTop:8,fontSize:10.5,color:"#00F5A0"}}>
+                ✓ La placa de Desafío Demente está en pantalla.
+              </div>
+            )}
+          </div>
+
           {/* Configuración */}
           <div className="card">
             <div className="ctitle">Cupón del equipo ganador</div>
@@ -2414,21 +3412,65 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             </div>
             {qs.map((q,i)=>(
               <div key={i} style={{padding:"8px 10px",background:"rgba(240,232,255,.04)",
-                border:"1px solid rgba(240,232,255,.07)",borderRadius:9,marginBottom:5}}>
-                <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:2}}>P{i+1}</div>
-                <div style={{fontSize:11.5,fontWeight:600,color:"#F0E8FF",marginBottom:5}}>{q.text}</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                  {q.opts.map((o,oi)=>(
-                    <span key={oi} style={{fontSize:9.5,padding:"2px 7px",borderRadius:6,
-                      background:q.correct===oi?"rgba(0,245,160,.12)":"rgba(240,232,255,.06)",
-                      color:q.correct===oi?"#00F5A0":"rgba(240,232,255,.4)",
-                      border:q.correct===oi?"1px solid rgba(0,245,160,.28)":"1px solid transparent"}}>
-                      {String.fromCharCode(65+oi)}. {o}
-                    </span>
-                  ))}
-                </div>
+                border:`1px solid ${editIdx===i?"rgba(0,229,255,.35)":"rgba(240,232,255,.07)"}`,
+                borderRadius:9,marginBottom:5}}>
+                {editIdx===i ? (
+                  /* Edición en línea — sobre `qs`, nada viaja a Supabase todavía */
+                  <>
+                    <div style={{fontSize:10,color:"#00E5FF",marginBottom:4,fontWeight:700}}>
+                      Editando P{i+1}
+                    </div>
+                    <textarea className="inp" rows={2} placeholder="Pregunta"
+                      value={editQ} onChange={e=>setEditQ(e.target.value)}/>
+                    <OpcionesEditor opts={editOpts} setOpts={setEditOpts}
+                      correct={editCorr} setCorrect={setEditCorr}/>
+                    <div style={{display:"flex",gap:6}}>
+                      <button className="btn btn-g" style={{flex:1,padding:"6px",fontSize:10.5}}
+                        disabled={!preguntaValida(editQ,editOpts,editCorr)}
+                        onClick={guardarEdicion}>✓ Guardar cambios</button>
+                      <button className="btn btn-r" style={{padding:"6px 11px",fontSize:10.5}}
+                        onClick={cancelarEdicion}>Cancelar</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                      <div style={{fontSize:10,color:"rgba(240,232,255,.3)",flex:1}}>P{i+1}</div>
+                      {/* El orden del array es el `question_idx` que se va a insertar */}
+                      <button title="Mover arriba" disabled={i===0} onClick={()=>moverQ(i,-1)}
+                        style={{background:"none",border:"none",cursor:i===0?"default":"pointer",
+                          color:i===0?"rgba(240,232,255,.12)":"rgba(240,232,255,.45)",fontSize:13,padding:"0 3px"}}>↑</button>
+                      <button title="Mover abajo" disabled={i===qs.length-1} onClick={()=>moverQ(i,1)}
+                        style={{background:"none",border:"none",cursor:i===qs.length-1?"default":"pointer",
+                          color:i===qs.length-1?"rgba(240,232,255,.12)":"rgba(240,232,255,.45)",fontSize:13,padding:"0 3px"}}>↓</button>
+                      <button title="Editar" onClick={()=>abrirEdicion(i)}
+                        style={{background:"none",border:"none",cursor:"pointer",
+                          color:"rgba(0,229,255,.6)",fontSize:12,padding:"0 3px"}}>✏️</button>
+                      <button title="Eliminar" onClick={()=>borrarQ(i)}
+                        style={{background:"none",border:"none",cursor:"pointer",
+                          color:"rgba(255,45,120,.6)",fontSize:12,padding:"0 3px"}}>🗑️</button>
+                    </div>
+                    <div style={{fontSize:11.5,fontWeight:600,color:"#F0E8FF",marginBottom:5}}>{q.text}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                      {q.opts.map((o,oi)=>(
+                        <span key={oi} style={{fontSize:9.5,padding:"2px 7px",borderRadius:6,
+                          background:q.correct===oi?"rgba(0,245,160,.12)":"rgba(240,232,255,.06)",
+                          color:q.correct===oi?"#00F5A0":"rgba(240,232,255,.4)",
+                          border:q.correct===oi?"1px solid rgba(0,245,160,.28)":"1px solid transparent"}}>
+                          {String.fromCharCode(65+oi)}. {o}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
+            {hayBorradorSinLanzar && (
+              <div style={{fontSize:9.5,color:"rgba(255,214,0,.55)",marginTop:6,lineHeight:1.5}}>
+                ⚠️ Las preguntas todavía no se guardaron: viven en esta pestaña hasta que
+                lances la partida. Si recargás, se pierden.
+              </div>
+            )}
           </div>
 
           {/* Agregar pregunta */}
@@ -2436,29 +3478,15 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             <div className="ctitle">Agregar pregunta</div>
             <textarea className="inp" rows={2} placeholder="Pregunta" value={newQ}
               onChange={e=>setNewQ(e.target.value)}/>
-            {newOpts.map((o,i)=>(
-              <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
-                <button onClick={()=>setNewCorr(i)} style={{
-                  width:24,height:24,borderRadius:"50%",flexShrink:0,cursor:"pointer",
-                  border:`2px solid ${i===newCorr?"#00F5A0":"rgba(240,232,255,.15)"}`,
-                  background:i===newCorr?"rgba(0,245,160,.15)":"transparent",
-                  fontSize:9,color:i===newCorr?"#00F5A0":"rgba(240,232,255,.3)"}}>
-                  {String.fromCharCode(65+i)}
-                </button>
-                <input className="inp" style={{margin:0,flex:1}} placeholder={`Opción ${String.fromCharCode(65+i)}`}
-                  value={o} onChange={e=>{const n=[...newOpts];n[i]=e.target.value;setNewOpts(n);}}/>
-              </div>
-            ))}
-            <div style={{fontSize:9.5,color:"rgba(0,245,160,.5)",marginTop:4,marginBottom:8}}>
-              ● = respuesta correcta
-            </div>
+            <OpcionesEditor opts={newOpts} setOpts={setNewOpts}
+              correct={newCorr} setCorrect={setNewCorr}/>
             {qs.length>=MAX_TRIVIA_Q&&(
               <div style={{fontSize:9.5,color:"rgba(255,214,0,.6)",marginBottom:8}}>
                 Máximo {MAX_TRIVIA_Q} preguntas por ronda.
               </div>
             )}
             <button className="btn btn-g btn-full" onClick={addQ}
-              disabled={!newQ.trim()||newOpts.some(o=>!o.trim())||qs.length>=MAX_TRIVIA_Q}>
+              disabled={!preguntaValida(newQ,newOpts,newCorr)||qs.length>=MAX_TRIVIA_Q}>
               + Agregar pregunta
             </button>
           </div>
@@ -3617,7 +4645,6 @@ export default function AdminPanel(){
   const [sbCollapsed, setSbCollapsed] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
-  const [active,   setActive]   = useState(null);
   const [authSession, setAuthSession] = useState(undefined); // undefined = verificando sesión
   const [isAdmin,     setIsAdmin]     = useState(undefined); // undefined = verificando admin_users
   const [adminRole,   setAdminRole]   = useState(undefined);
@@ -3722,7 +4749,7 @@ export default function AdminPanel(){
 
   const renderPanel = () => {
     switch(sec){
-      case "launch":    return <LaunchPanel sec={curSec} active={active} setActive={setActive}
+      case "launch":    return <LaunchPanel sec={curSec} gameState={gameState}
                                  zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
                                  msgCount={msgCount} vidCount={vidCount} goTo={goTo} controls={controls}/>;
       case "duelo":     return <DueloPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;

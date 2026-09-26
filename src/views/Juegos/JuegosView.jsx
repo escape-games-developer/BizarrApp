@@ -150,7 +150,12 @@ function DesafioDemente({ user, sessionId, gameState }) {
       <div style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 900, color: "#FFD700", marginBottom: 6 }}>
         ¡Desafío terminado!
       </div>
-      {gameState?.trivia_winner_team && t && gameState.trivia_winner_team === user?.team ? (
+      {/* `trivia_winner_team === null` con la ronda terminada es EMPATE, no
+          derrota: mismos aciertos en los dos equipos. Antes caía en el else y
+          el que empataba leía lo mismo que el que perdía. */}
+      {!gameState?.trivia_winner_team ? (
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#FCD34D" }}>🤝 ¡EMPATE!</div>
+      ) : t && gameState.trivia_winner_team === user?.team ? (
         <div style={{ fontSize: 14, color: "#86EFAC" }}>¡Tu equipo ganó el desafío! 🎉</div>
       ) : (
         <div style={{ fontSize: 13, color: "rgba(245,230,192,.5)" }}>Mejor suerte la próxima.</div>
@@ -413,8 +418,10 @@ function FormaLaPalabra({ user, sessionId }) {
   return (
     <div>
       {header}
+      {/* Sólo la letra propia: ni la palabra, ni letras ajenas, ni nombres, ni
+          la solución. La consigna la da la pantalla gigante. */}
       <div style={{
-        textAlign:"center", padding:"22px 16px", marginBottom:12, borderRadius:16,
+        textAlign:"center", padding:"22px 16px", borderRadius:16,
         background:"rgba(168,85,247,.1)", border:"1px solid rgba(168,85,247,.3)",
       }}>
         <div style={{fontSize:11,color:"rgba(168,85,247,.8)",letterSpacing:".14em",fontWeight:700,marginBottom:6}}>
@@ -424,17 +431,116 @@ function FormaLaPalabra({ user, sessionId }) {
           {miLetra ?? "…"}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Ni la palabra, ni letras ajenas, ni nombres, ni la solución: hay que
-          mirar la TV y encontrarse en el bar. */}
+// ─── Desafío Demente anunciado ────────────────────────────────────────────
+/**
+ * Aviso de "próximamente" dentro de la sección Juegos.
+ *
+ * Se apoya en la capa que el admin ya usa para anunciar en la pantalla
+ * gigante (`active_placa='game_trivia'`, que escribe `announceGame`), sin
+ * columnas ni push nuevos. Anunciar NO es jugar: mientras `active_game` no
+ * sea 'trivia' esto es sólo un aviso, sin nada que tocar.
+ *
+ * Mismo patrón visual que DueloCard en su estado apagado: logo en gris y CTA
+ * deshabilitado, para que se lea distinto de un juego en curso.
+ */
+function TriviaProximamenteCard() {
+  return (
+    <div style={{ marginBottom: 14 }}>
       <div style={{
-        padding:"14px", borderRadius:12, textAlign:"center", lineHeight:1.6,
-        background:"rgba(255,215,0,.06)", border:"1px solid rgba(255,215,0,.14)",
-        fontSize:12.5, color:"rgba(255,215,0,.6)",
+        borderRadius: 18, padding: "18px 16px", textAlign: "center",
+        background: "linear-gradient(135deg, rgba(155,47,255,.12), rgba(255,45,120,.08))",
+        border: "1.5px solid rgba(155,47,255,.4)",
       }}>
-        Mirá la pantalla gigante.<br/>
-        Buscá a los jugadores que tengan las letras que necesitás, y
-        preséntense al staff en orden.
+        <img
+          src="/placas/Desafio_demente-removebg-preview.png"
+          alt="Desafío Demente"
+          style={{
+            width: 120, height: 120, objectFit: "contain", margin: "0 auto 8px",
+            filter: "grayscale(.35) opacity(.85)",
+          }}
+          onError={(e) => { e.target.style.display = "none"; }}
+        />
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 18,
+          color: "#C084FC", marginBottom: 4,
+        }}>
+          Desafío Demente
+        </div>
+        <div style={{ fontSize: 12, color: "rgba(245,230,192,.45)", marginBottom: 12 }}>
+          Team Batata 🍠 vs Team Membrillo 🍋
+        </div>
+        <button disabled style={{
+          width: "100%", padding: "13px 16px", borderRadius: 12,
+          background: "rgba(255,255,255,.04)", color: "rgba(245,230,192,.35)",
+          border: "1px solid rgba(255,255,255,.08)",
+          fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 13,
+          cursor: "not-allowed",
+        }}>
+          Próximamente
+        </button>
+        <div style={{ fontSize: 11, color: "rgba(255,215,0,.45)", marginTop: 10 }}>
+          ⏳ Preparate — arranca en breve
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Arma la Palabra anunciada ────────────────────────────────────────────
+/**
+ * Aviso de "próximamente" de Arma la Palabra dentro de la sección Juegos.
+ *
+ * Igual que la de Desafío Demente, se apoya en la capa que el admin ya usa
+ * para anunciar en la pantalla gigante (`active_placa='game_palabra'`, que
+ * escribe `announceGame`): sin columnas, sin push. Anunciar NO es jugar —
+ * mientras `active_game` no sea 'palabra' esto es sólo un aviso.
+ *
+ * Deliberadamente NO comparte código con TriviaProximamenteCard: ese módulo
+ * está cerrado y no se toca. Si aparece un tercer juego con el mismo patrón,
+ * ahí valdrá la pena unificar las tres.
+ */
+function PalabraProximamenteCard() {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{
+        borderRadius: 18, padding: "18px 16px", textAlign: "center",
+        background: "linear-gradient(135deg, rgba(168,85,247,.12), rgba(255,45,120,.08))",
+        border: "1.5px solid rgba(168,85,247,.4)",
+      }}>
+        <img
+          src="/placas/Arma_la_palabra-removebg-preview.png"
+          alt="Arma la palabra"
+          style={{
+            width: 120, height: 120, objectFit: "contain", margin: "0 auto 8px",
+            filter: "grayscale(.35) opacity(.85)",
+          }}
+          onError={(e) => { e.target.style.display = "none"; }}
+        />
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 18,
+          color: "#C77DFF", marginBottom: 4,
+        }}>
+          Arma la palabra
+        </div>
+        <div style={{ fontSize: 12, color: "rgba(245,230,192,.45)", marginBottom: 12 }}>
+          Encontrá a los que tienen las otras letras 🔤
+        </div>
+        <button disabled style={{
+          width: "100%", padding: "13px 16px", borderRadius: 12,
+          background: "rgba(255,255,255,.04)", color: "rgba(245,230,192,.35)",
+          border: "1px solid rgba(255,255,255,.08)",
+          fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 13,
+          cursor: "not-allowed",
+        }}>
+          Próximamente
+        </button>
+        <div style={{ fontSize: 11, color: "rgba(255,215,0,.45)", marginTop: 10 }}>
+          ⏳ Preparate — arranca en breve
+        </div>
       </div>
     </div>
   );
@@ -467,6 +573,15 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
     ? <DueloCard activeEscenario={activeEscenario} onOpen={() => setGameOpen?.("duelo")} />
     : null;
 
+  // Anuncio del Desafío: la placa está en la pantalla gigante pero el juego
+  // todavía no arrancó. Si `activeGame` ya es 'trivia', manda el juego real y
+  // este aviso no se muestra — el switch de abajo lo resuelve solo.
+  const triviaAnunciada = gameState?.active_placa === "game_trivia" && activeGame !== "trivia";
+  // Mismo criterio para Arma la Palabra. Son excluyentes en la práctica:
+  // `active_placa` guarda una sola placa a la vez.
+  const palabraAnunciada = gameState?.active_placa === "game_palabra" && activeGame !== "palabra";
+  const hayAnuncio = triviaAnunciada || palabraAnunciada;
+
   // Contenido del juego activo (o standby si no hay ninguno).
   let gameContent;
   switch (activeGame) {
@@ -474,12 +589,19 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
     case "trivia":       gameContent = <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} />; break;
     case "suma":         gameContent = <SumaElNumero user={user} sessionId={sessionId} />; break;
     case "palabra":      gameContent = <FormaLaPalabra user={user} sessionId={sessionId} />; break;
-    default:             gameContent = <GameStandby />;
+    default:             gameContent = hayAnuncio ? null : <GameStandby />;
   }
 
   // La card del duelo depende del estado realtime: no se muestra si el admin
   // no activó active_escenario="duelo".
-  if (!activeGame) return <div>{dueloCard}{gameContent}</div>;
+  if (!activeGame) return (
+    <div>
+      {dueloCard}
+      {triviaAnunciada  && <TriviaProximamenteCard />}
+      {palabraAnunciada && <PalabraProximamenteCard />}
+      {gameContent}
+    </div>
+  );
   return activeEscenario === "duelo"
     ? <div>{dueloCard}{gameContent}</div>
     : gameContent;

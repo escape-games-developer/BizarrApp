@@ -334,7 +334,12 @@ export function TriviaScreen({ gameState, sessionId }) {
         <>
           <div style={{fontSize:"clamp(14px,1.6vw,22px)",opacity:.55}}>PREGUNTA {questionIdx + 1} · {phase === "revealed" ? "RESPUESTA" : "VOTACIÓN ABIERTA"}</div>
           <div className="trivia-q">{question?.text || "Preparando pregunta…"}</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1.2vh 1.2vw",width:"min(1100px,90vw)"}}>
+          {/* Una pregunta puede tener 2, 3 o 4 opciones. La grilla se adapta a
+              las que existen: 3 en fila y el resto en 2×2. Nunca se dibuja un
+              hueco por una C o D que la pregunta no tiene. */}
+          <div style={{display:"grid",
+            gridTemplateColumns:(question?.options?.length === 3) ? "repeat(3,1fr)" : "1fr 1fr",
+            gap:"1.2vh 1.2vw",width:"min(1100px,90vw)"}}>
             {(question?.options || []).map((option, index) => {
               const correct = phase === "revealed" && question?.correct === index;
               return <div key={index} style={{padding:"1.5vh 1.5vw",borderRadius:14,border:`2px solid ${correct?"#00F5A0":"rgba(240,232,255,.18)"}`,background:correct?"rgba(0,245,160,.15)":"rgba(240,232,255,.06)",fontSize:"clamp(16px,2vw,28px)",fontWeight:700}}>{String.fromCharCode(65+index)}. {option} {correct&&"✓"}</div>;
@@ -342,6 +347,53 @@ export function TriviaScreen({ gameState, sessionId }) {
           </div>
         </>
       )}
+      {/* Distribución de respuestas — sólo después del reveal. Mientras la
+          votación está abierta, mostrar hacia dónde va la mayoría induciría el
+          voto del resto. `pcts.opts` ya lo calcula la vista `trivia_totals`
+          (opt_0..opt_3): acá no se agrega ninguna consulta. */}
+      {phase === "revealed" && !!question?.options?.length && (
+        <div style={{width:"min(1100px,90vw)",marginTop:"1.5vh"}}>
+          <div style={{fontSize:"clamp(12px,1.2vw,18px)",opacity:.45,letterSpacing:".1em",marginBottom:".8vh"}}>
+            CÓMO RESPONDIERON
+          </div>
+          {/* Sólo las opciones que la pregunta realmente tiene: `pcts.opts`
+              trae siempre 4 entradas (opt_0..opt_3), pero acá se indexa por la
+              opción existente, así que una pregunta de 2 muestra A y B nada más. */}
+          <div style={{display:"grid",
+            gridTemplateColumns:(question.options.length === 3) ? "repeat(3,1fr)" : "1fr 1fr",
+            gap:".8vh 1.2vw"}}>
+            {question.options.map((option, index) => {
+              const pct = pcts?.opts?.[index] ?? 0;
+              const correct = question?.correct === index;
+              return (
+                <div key={index} style={{display:"flex",alignItems:"center",gap:".8vw"}}>
+                  <span style={{fontSize:"clamp(13px,1.3vw,20px)",fontWeight:700,width:"1.6vw",
+                    color:correct?"#00F5A0":"rgba(240,232,255,.5)"}}>
+                    {String.fromCharCode(65+index)}
+                  </span>
+                  <div style={{flex:1,height:"1.4vh",minHeight:9,borderRadius:999,
+                    background:"rgba(240,232,255,.08)",overflow:"hidden"}}>
+                    <div style={{width:`${pct}%`,height:"100%",borderRadius:999,
+                      background:correct?"#00F5A0":"rgba(240,232,255,.28)",transition:"width .6s ease"}}/>
+                  </div>
+                  <span style={{fontSize:"clamp(12px,1.2vw,18px)",fontWeight:700,minWidth:"3.2vw",
+                    textAlign:"right",color:correct?"#00F5A0":"rgba(240,232,255,.45)"}}>
+                    {pct}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {/* OJO: estos porcentajes son PARTICIPACIÓN (qué proporción de los votos
+          de esta pregunta puso cada equipo), no aciertos. El marcador de
+          aciertos real sólo se puede mostrar al final, porque `trivia_totals`
+          expone `batata_correct`/`membrillo_correct` recién en revealed. Sin
+          el rótulo se leían como si fueran el puntaje. */}
+      <div style={{fontSize:"clamp(11px,1.1vw,16px)",opacity:.4,letterSpacing:".1em",marginTop:"1.5vh"}}>
+        PARTICIPACIÓN POR EQUIPO
+      </div>
       <div className="teams">
         {[
           {name:"Team Batata 🍠", pct:bataPct, grad:"linear-gradient(90deg,#FF9500,#FFD600)", col:"#FF9500", bg:"rgba(255,149,0,.08)", bdr:"rgba(255,149,0,.25)"},
@@ -517,6 +569,28 @@ export function PalabraScreen({ sessionId }) {
     );
   }
 
+  // ── Sin palabra al aire ──
+  // La ronda se canceló (el operador tocó «Nueva palabra» y va a lanzar la
+  // siguiente) o se cerró sin grupo ganador. Sin esta rama caía en el render de
+  // «ronda en curso» y la pantalla seguía pidiendo a la sala que formara la
+  // palabra VIEJA, mientras los celulares ya decían que la ronda había cerrado.
+  // El juego sigue al aire: por eso es el standby del juego y no el logo del bar.
+  if (round.status !== "playing") return (
+    <div style={{position:"absolute",inset:0,
+      background:"radial-gradient(ellipse at center,rgba(168,85,247,.1),#08040F 70%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2vh",
+      padding:"4vh 4vw",overflow:"hidden"}}>
+      <Orbs colors={["rgba(168,85,247,.14)","rgba(255,45,120,.08)","rgba(0,229,255,.05)"]}/>
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+        fontSize:"clamp(22px,3.4vw,62px)",color:"#A855F7",letterSpacing:".04em",zIndex:2}}>
+        🔤 ARMA LA PALABRA
+      </div>
+      <div style={{fontSize:"clamp(16px,2vw,34px)",opacity:.55,letterSpacing:".08em",zIndex:2}}>
+        PREPARANDO LA PALABRA SIGUIENTE…
+      </div>
+    </div>
+  );
+
   // ── Ronda en curso: la palabra manda la pantalla ──
   return (
     <div style={{position:"absolute",inset:0,
@@ -524,10 +598,16 @@ export function PalabraScreen({ sessionId }) {
       display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2vh",
       padding:"4vh 4vw",overflow:"hidden"}}>
       <Orbs colors={["rgba(168,85,247,.18)","rgba(255,45,120,.1)","rgba(0,229,255,.06)"]}/>
-      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
-        fontSize:"clamp(22px,3.4vw,62px)",color:"#A855F7",letterSpacing:".04em",zIndex:2}}>
-        🔤 ARMA LA PALABRA
-      </div>
+      {/* El mismo archivo que usa la placa `game_palabra` de PlacaScreen: el
+          logo oficial reemplaza al 🔤 + «ARMA LA PALABRA» en texto. Los dos
+          topes (vh y vw) con object-fit:contain mantienen la proporción y
+          dejan la palabra en el centro óptico, incluso con 6 letras. Si el
+          archivo faltara se oculta y la pantalla sigue siendo jugable:
+          FORMEN + la palabra alcanzan. */}
+      <img src="/placas/Arma_la_palabra-removebg-preview.png" alt="Arma la palabra"
+        style={{maxHeight:"28vh", maxWidth:"66vw", objectFit:"contain", zIndex:2,
+          filter:"drop-shadow(0 0 45px rgba(168,85,247,.5))"}}
+        onError={e=>{e.target.style.display="none";}}/>
       <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
         fontSize:"clamp(14px,1.8vw,32px)",color:"#FFD600",letterSpacing:".12em",zIndex:2}}>
         FORMEN:

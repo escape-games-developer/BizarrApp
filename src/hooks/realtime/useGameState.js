@@ -214,11 +214,21 @@ export function useAdminControls(sessionId) {
   // ronda colgada: el panel vuelve a pedir el sorteo sin relanzar nada.
   const launchRaffle = useCallback(async (prize, excludePrevious = false, currentPayload = null) => {
     await dismissActiveVideo();
-    // La regla de la ronda viaja en minijuego_payload.raffle, en el MISMO
-    // UPDATE que abre la ronda: queda persistida antes de que exista la
-    // posibilidad de resolver un ganador. Sin esto, un F5 del admin durante
-    // los 10s de estroboscópico reseteaba el toggle a false y el sorteo salía
-    // con una regla distinta a la que había elegido.
+    // ⚠️ LEGACY / COMPATIBILIDAD MUERTA — `excludePrevious`
+    //
+    // `minijuego_payload.raffle.exclude_previous` se sigue escribiendo para no
+    // tocar el merge del payload, que es infraestructura compartida con los
+    // otros minijuegos. Pero DESDE REY DEL ORTO V1 NADIE LO LEE:
+    //   · el Admin no lo usa para elegibilidad, badges ni para decidir quién
+    //     entra al sorteo;
+    //   · `drawRaffleWinner` ya no lo manda en el body;
+    //   · la Edge Function v7 lo acepta y lo ignora a propósito;
+    //   · la RPC `rey_resolver_sorteo` ni lo recibe.
+    //
+    // La autoridad sobre ganadores repetidos es
+    // `rey_reglas_config.bloquear_ganadores_repetidos` + `rey_ganadores`.
+    // Cuando se limpie el payload compartido, esta clave se va sin más.
+    //
     // Merge no destructivo: se preserva cualquier otra clave del payload.
     const base = (currentPayload && typeof currentPayload === "object" && !Array.isArray(currentPayload))
       ? currentPayload
@@ -238,11 +248,20 @@ export function useAdminControls(sessionId) {
     });
   }, [update, dismissActiveVideo]);
 
-  // Al ganador lo elige la Edge Function con service_role — nunca el cliente.
-  const drawRaffleWinner = useCallback(async ({ prize, excludePrevious = false } = {}) => {
-    if (!sessionId) return { error: "Sin sesión activa" };
+  // ── Llamada cruda a launch-raffle ─────────────────────────────────────────
+  // React → Edge Function → RPC `rey_resolver_sorteo`. La RPC NUNCA se llama
+  // directo desde el navegador: su EXECUTE es sólo de `service_role`.
+  //
+  // Devuelve SIEMPRE el cuerpo estructurado de la v7 (`ok`, `code`, `error`,
+  // `connected_count`, `eligible_count`, `required_count`, …) sin recortar
+  // nada: el panel necesita los contadores reales para poder decirle al
+  // operador cuánta gente falta, y hardcodear ese número sería mentirle.
+  const callLaunchRaffle = useCallback(async ({ prize, dryRun }) => {
+    if (!sessionId) return { ok: false, code: "INVALID_REQUEST", error: "Sin sesión activa" };
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return { error: "Sesión de admin vencida — volvé a entrar." };
+    if (!session?.access_token) {
+      return { ok: false, code: "UNAUTHORIZED", error: "Sesión de admin vencida — volvé a entrar." };
+    }
     try {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/launch-raffle`,
@@ -253,22 +272,81 @@ export function useAdminControls(sessionId) {
             "Authorization": `Bearer ${session.access_token}`,
             "apikey":        import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({
-            session_id:       sessionId,
-            prize,
-            exclude_previous: excludePrevious,
-          }),
+          // `exclude_previous` ya NO se manda: la autoridad sobre ganadores
+          // repetidos es `rey_reglas_config.bloquear_ganadores_repetidos`,
+          // que lee la RPC. La v7 todavía acepta el campo, pero lo ignora.
+          body: JSON.stringify({ session_id: sessionId, prize, dry_run: !!dryRun }),
         }
       );
       const body = await res.json().catch(() => ({}));
-      // La function contesta 4xx/5xx con {error}. Sin este chequeo el panel
-      // cantaba "ganador" aunque el servidor no hubiera elegido a nadie.
-      if (!res.ok || body?.error) return { error: body?.error || `Error ${res.status}` };
-      return { winner: body.winner };
+      // La function contesta 4xx/5xx con {ok:false, code, error}. Sin este
+      // chequeo el panel cantaba "ganador" aunque el servidor no hubiera
+      // elegido a nadie.
+      if (!res.ok || body?.error || body?.ok === false) {
+        return {
+          ok: false,
+          code:            body?.code || "INTERNAL_ERROR",
+          error:           body?.error || `Error ${res.status}`,
+          connected_count: body?.connected_count,
+          eligible_count:  body?.eligible_count,
+          required_count:  body?.required_count,
+        };
+      }
+      return { ok: true, ...body };
     } catch (err) {
-      return { error: err.message || "No se pudo contactar al servidor." };
+      return {
+        ok: false, code: "NETWORK_ERROR",
+        error: err.message || "No se pudo contactar al servidor.",
+      };
     }
   }, [sessionId]);
+
+  /**
+   * PREVALIDACIÓN (dry-run). No elige ganador, no escribe, no abre ronda.
+   *
+   * Es lo que el panel corre ANTES de `launchRaffle`, para no encender el
+   * estroboscópico de una ronda que el servidor va a rechazar. La autoridad
+   * sigue siendo el backend: acá no se replica ni una sola regla.
+   *
+   * Éxito: { ok:true, dry_run:true, connected_count, eligible_count,
+   *          required_count, raffle_state, min_participants_enabled,
+   *          block_repeat_winners_enabled, jornada }
+   * Fallo:  { ok:false, code, error, connected_count, eligible_count,
+   *           required_count }
+   *
+   * OJO — TOCTOU: que dé OK ahora no garantiza nada dentro de 10 segundos.
+   * La resolución definitiva vuelve a validar todo, y puede fallar igual.
+   */
+  const validateRaffle = useCallback(
+    ({ prize } = {}) => callLaunchRaffle({ prize, dryRun: true }),
+    [callLaunchRaffle],
+  );
+
+  // Al ganador lo elige la RPC con service_role — nunca el cliente.
+  // Propaga `code` y los contadores además del ganador: si falla DESPUÉS del
+  // estroboscópico, el panel tiene que poder decir exactamente por qué.
+  const drawRaffleWinner = useCallback(async ({ prize } = {}) => {
+    const r = await callLaunchRaffle({ prize, dryRun: false });
+    if (!r.ok) {
+      return {
+        error:           r.error,
+        code:            r.code,
+        connected_count: r.connected_count,
+        eligible_count:  r.eligible_count,
+        required_count:  r.required_count,
+      };
+    }
+    return {
+      winner:          r.winner,
+      already_drawn:   r.already_drawn,
+      prize:           r.prize,
+      victoria_n:      r.victoria_n,
+      jornada:         r.jornada,
+      connected_count: r.connected_count,
+      eligible_count:  r.eligible_count,
+      required_count:  r.required_count,
+    };
+  }, [callLaunchRaffle]);
 
   // Limpia también active_game/active_placa: si no, la TV se quedaba con la
   // capa del sorteo encima del DJ y RaffleScreen estroboscopiaba sin fin.
@@ -311,6 +389,12 @@ export function useAdminControls(sessionId) {
     await dismissActiveVideo();
     return update({
       active_game:        "trivia",
+      // El anuncio deja `active_placa='game_trivia'` puesta. La prioridad de
+      // capas de /pantalla (juego > placa) ya hace que gane el juego, pero sin
+      // limpiarla acá la placa queda de residuo en la base y reaparece al
+      // cerrar el desafío. `activateGame` hace lo mismo; `startTrivia` no lo
+      // hacía.
+      active_placa:       null,
       trivia_state:       "active",
       trivia_question:    0,
       trivia_round_id:    roundId,
@@ -714,7 +798,7 @@ export function useAdminControls(sessionId) {
   // ── Return — SIN gameState (ese lo da useGameState) ───────────────────────
   return {
     announceGame, activateGame, deactivateGame,
-    launchRaffle, drawRaffleWinner, resetRaffle, nuevaRondaRaffle,
+    launchRaffle, validateRaffle, drawRaffleWinner, resetRaffle, nuevaRondaRaffle,
     startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia, newTriviaRound,
     activateEscenario, deactivateEscenario,
     startDuelo, revealDuelo,

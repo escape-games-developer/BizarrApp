@@ -67,10 +67,6 @@ export default function MensajeCliente({ messages, gameState }) {
     .filter((m) => m && m.text && (m.status ? m.status === "approved" : true))
     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
-  // [DEBUG-TEMP] verificar en runtime que el toggle llega y por qué no oculta.
-  console.info("[MensajeCliente] zocalo_active:", gameState?.zocalo_active,
-               "mensajes:", approved.length);
-
   const zocaloActive = gameState?.zocalo_active ?? false;
   const msg = approved[0] || null;
 
