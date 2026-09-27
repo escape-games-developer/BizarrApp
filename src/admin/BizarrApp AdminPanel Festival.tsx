@@ -39,6 +39,11 @@ import {
   REGLAS_CONOCIDAS, NOMBRE_REGLA,
   MIN_PARTICIPANTES_PISO, MIN_PARTICIPANTES_TECHO,
 } from "../hooks/useReglasRey";
+import {
+  useReglasSumate, motivoMinimoSumateInvalido,
+  REGLA_SUMATE_MINIMOS, SUMATE_MIN_ESTRUCTURAL,
+  SUMATE_MIN_PISO, SUMATE_MIN_TECHO,
+} from "../hooks/useReglasSumate";
 import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
 import {
   RaffleScreen,
@@ -439,8 +444,17 @@ function LaunchPanel({sec,gameState,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,
       // No hay que bajar ningún estado local: `iniciarJornada` deja los campos
       // de `game_state` en neutro y el cartel, que los lee por Realtime, pasa
       // solo a standby.
-      await iniciarJornada();
-      setJornadaMsg({ ok: true, text: "Jornada iniciada — la TV está en DJ Democracy." });
+      // `avisos` son limpiezas NO críticas que no salieron (hoy: la ronda vieja
+      // de Sumate). La jornada arrancó igual, así que el cartel es de éxito —
+      // pero lo dice, en vez de tragárselo.
+      const r = await iniciarJornada();
+      const avisos = r?.avisos || [];
+      setJornadaMsg({
+        ok: true,
+        text: avisos.length
+          ? `Jornada iniciada — la TV está en DJ Democracy. ⚠️ ${avisos.join(" ")}`
+          : "Jornada iniciada — la TV está en DJ Democracy.",
+      });
     } catch (err) {
       setJornadaMsg({ ok: false, text: err?.message || String(err) });
     } finally { setJornadaBusy(false); }
@@ -2659,33 +2673,119 @@ function ReyPanel({sec, controls, sessionId, gameState}){
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// SUMÁ EL NÚMERO
+// SUMATE QUE SUMAMOS
 // ══════════════════════════════════════════════════════════════════════════
-// Sumate que Sumamos — ronda multiusuario.
+// Ronda multiusuario con número por persona.
 //
-// El operador NO escribe el objetivo: lo calcula el servidor sumando entre 3 y
-// 5 números reales ya repartidos, así la ronda siempre tiene solución. Acá el
-// operador sólo lanza, selecciona al grupo que se le presenta y valida.
+// El operador NO escribe el objetivo: lo calcula el servidor sumando entre 2 y
+// 5 números REALES ya repartidos, así la ronda siempre nace con solución. Acá
+// el operador anuncia, lanza, selecciona al grupo que se le presenta y valida.
+//
+// ── UNA SOLA AUTORIDAD (Backend V1) ───────────────────────────────────────
+// `sumate_launch_round` es atómico: crea la ronda, reparte números, calcula el
+// objetivo Y pone `game_state.active_game='suma'` en la misma transacción. Por
+// eso este panel YA NO llama a `activateGame('suma')` después de lanzar, y
+// `sumate_cancel_round(round, true)` reemplaza al par cancelar + deactivateGame.
+// Antes eran dos escrituras sueltas que podían quedar a medias: ronda viva sin
+// proyectar, o pantalla proyectando una ronda muerta.
 //
 // La validación es SERVER-SIDE: este panel manda user_ids, nunca números. La
 // suma que se ve en pantalla es una ayuda visual; quien decide es el RPC.
+
+/**
+ * Traduce los códigos del contrato V1 a algo que el operador pueda leer y
+ * actuar. Los números salen SIEMPRE del backend.
+ *
+ * Nunca imprime un número que no recibió: un `?? 0` diría "hay 0 conectados"
+ * cuando lo que pasó es que no vino el dato, y 0 es un número que el operador
+ * puede ir a verificar al bar.
+ */
+const mensajeSumate = (r) => {
+  const conectados = typeof r?.connected_count === "number" ? r.connected_count : null;
+  const requeridos = typeof r?.required_count  === "number" ? r.required_count  : null;
+  switch (r?.code) {
+    // ── Lanzamiento ──
+    case "MIN_PARTICIPANTS":
+      return (conectados !== null && requeridos !== null)
+        ? `⚠️ No se puede lanzar: hay ${conectados} participantes conectados y se necesitan ${requeridos}.`
+        : "⚠️ No se puede lanzar: no hay suficientes participantes conectados.";
+    case "CONFIG_INCOMPLETE":
+      return "⚠️ La configuración de Sumate está incompleta. Revisá la regla de participantes mínimos.";
+    case "SESSION_NOT_FOUND":
+      return "⚠️ La sesión activa no tiene estado de pantalla. Iniciá la jornada.";
+    case "CONFLICT":
+      return "⚠️ Otro lanzamiento se cruzó con este. Volvé a intentar.";
+    // WRONG_SUM, INVALID_GROUP y MISSING_ASSIGNMENT NO están mapeados a
+    // propósito: son exclusivos de `validate_sumate_group`, que dejó de tener
+    // consumidor en el frontend. Mantener sus textos sería dejar UX viva para
+    // un camino que ya no existe.
+    //
+    // ── Estado de la ronda (cancel / check_target) ──
+    case "ROUND_ALREADY_FINISHED":
+      return "ℹ️ Esta ronda ya tiene grupo ganador.";
+    case "ROUND_ALREADY_CANCELLED":
+      return "ℹ️ Esta ronda estaba cancelada. Lanzá una nueva.";
+    case "ROUND_EXPIRED":
+      return "⚠️ La ronda era de una jornada anterior y quedó cerrada. Lanzá una nueva.";
+    case "ROUND_NOT_FOUND":
+      return "⚠️ La ronda ya no existe.";
+    // ── Objetivo imposible ──
+    case "TARGET_NO_LONGER_POSSIBLE":
+      return "⚠️ El objetivo ya no puede formarse con los participantes presentes.";
+    // ── Transversales ──
+    case "UNAUTHORIZED":
+      return "⚠️ Tu sesión venció o no sos administrador. Volvé a entrar al Admin.";
+    case "INVALID_REQUEST":
+      return "⚠️ No pudimos armar el pedido al servidor. Recargá el panel.";
+    case "RPC_ERROR":
+      return "⚠️ No se pudo contactar al servidor. Revisá la conexión.";
+    default:
+      return r?.error || "⚠️ No se pudo completar la operación.";
+  }
+};
+
+/** Motivo de cancelación en castellano. El código técnico no se muestra. */
+const MOTIVO_CANCELACION = {
+  manual:    "La cerró el staff.",
+  new_round: "Se lanzó una ronda nueva.",
+  jornada:   "Se cerró al iniciar la jornada.",
+  expired:   "Era de una jornada anterior.",
+};
+
+// ── EL OPERADOR NO VALIDA NADA ─────────────────────────────────────────────
+// La resolución de Sumate ocurre FÍSICAMENTE en el bar: la gente se junta, se
+// acerca al escenario y el staff resuelve ahí. La plataforma no necesita saber
+// qué personas formaron la suma.
+//
+// Por eso este panel NO tiene selección de participantes, ni marcador de suma,
+// ni botón de validar, y NO llama a `validate_sumate_group`. La RPC sigue
+// existiendo en Supabase —no se borró nada— pero dejó de tener consumidor.
+//
+// La lista de participantes queda, pero es INFORMATIVA: le sirve al operador
+// para ver cuánta gente tiene número y quién sigue presente. No se puede tildar
+// a nadie porque no hay nada que tildar.
 function SumaPanel({sec, controls, sessionId, gameState}){
   const COL = "#FF9500";
-  const { round, assignments, lanzarRonda, validarGrupo, cancelarRonda } =
+  const { round, assignments, lanzarRonda, cancelarRonda, verificarObjetivo } =
     useSumateRound(sessionId, { admin: true });
 
-  const [seleccion, setSeleccion] = useState([]);   // user_ids marcados
   const [conectados, setConectados] = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState(null);
   const [nota,  setNota]  = useState(null);
+  // Resultado de `sumate_check_target`. null = todavía no se consultó.
+  const [objetivoPosible, setObjetivoPosible] = useState(null);
 
-  const enElAire = gameState?.active_game === "suma";
-  const enJuego  = round?.status === "playing";
+  const enElAire   = gameState?.active_game === "suma";
+  const anunciando = !enElAire && gameState?.active_placa === "game_suma";
+  const enJuego    = round?.status === "playing";
+  // Ronda histórica cerrada con grupo ganador. El flujo V1 ya no produce
+  // `finished` —no hay validación digital— pero en la base pueden quedar rondas
+  // de antes, y la fase tiene que saber pintarlas en vez de ignorarlas.
   const conGanador = round?.status === "finished" && !!round?.winner_group;
+  const cancelada  = round?.status === "cancelled";
 
   // Presencia: misma ventana de 2 minutos y misma tabla que usa Rey del Orto.
-  // No se inventa una fuente nueva de "tiene la app abierta".
   const leerConectados = useCallback(async () => {
     if (!sessionId) { setConectados(null); return; }
     const { data, error } = await supabase
@@ -2696,9 +2796,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
   useEffect(() => { leerConectados(); }, [leerConectados, round?.id]);
   const activos = (conectados || []).filter(reyActivo).length;
 
-  // Al cambiar de ronda se suelta la selección: los user_id de la anterior no
-  // valen nada en la nueva.
-  useEffect(() => { setSeleccion([]); }, [round?.id]);
+  useEffect(() => { setObjetivoPosible(null); }, [round?.id]);
 
   const correr = async (fn) => {
     if (busy) return;
@@ -2708,61 +2806,123 @@ function SumaPanel({sec, controls, sessionId, gameState}){
     finally { setBusy(false); }
   };
 
-  const lanzar = () => correr(async () => {
-    // El juego al aire y la ronda son dos cosas: sin active_game la TV no
-    // proyecta nada aunque la ronda exista.
-    const r = await lanzarRonda();
-    const e = await controls?.activateGame("suma");
+  // ── Objetivo imposible ────────────────────────────────────────────────────
+  // SÓLO LECTURA, y no tiene nada que ver con elegir ganador: pregunta si
+  // todavía existe ALGÚN grupo de 2 o más presentes cuya suma dé el objetivo.
+  // No cancela, no recalcula el objetivo, no reasigna números.
+  const chequearObjetivo = useCallback(async (silencioso = true) => {
+    const res = await verificarObjetivo();
+    if (res?.ok) { setObjetivoPosible(res.code === "TARGET_POSSIBLE"); return res; }
+    setObjetivoPosible(null);
+    if (!silencioso) setErr(mensajeSumate(res));
+    return res;
+  }, [verificarObjetivo]);
+
+  useEffect(() => {
+    if (!enJuego || !round?.id) return;
+    chequearObjetivo(true);
+  }, [enJuego, round?.id, activos, assignments.length, chequearObjetivo]);
+
+  // ── Acciones ──────────────────────────────────────────────────────────────
+
+  // ANUNCIAR: sólo pone la placa. No crea ronda, no reparte números, no activa
+  // el juego. Mismo mecanismo que Desafío Demente y Arma la Palabra.
+  const anunciar = () => correr(async () => {
+    const e = await controls?.announceGame("suma");
     if (e?.error) throw new Error(e.error.message || String(e.error));
-    setNota(`🚀 Ronda lanzada — objetivo ${r?.target_number} con ${r?.participants} jugadores.`);
+    setNota("📢 Placa de Sumate en pantalla. Todavía no hay ronda.");
   });
 
-  const toggle = (userId) => setSeleccion((s) =>
-    s.includes(userId) ? s.filter((x) => x !== userId) : [...s, userId]);
-
-  const validar = () => correr(async () => {
-    const res = await validarGrupo(seleccion);
-    if (res?.ok) setNota("🎯 ¡Suma exacta! Grupo validado.");
-    else setErr(`No suman el objetivo: ${res?.sum} / ${res?.target}.`);
-  });
-
-  const nuevaRonda = () => correr(async () => {
+  // LANZAR / NUEVA RONDA: una sola RPC. El backend cierra la ronda anterior con
+  // cancel_reason='new_round', reparte, calcula y pone el juego al aire.
+  const lanzar = (esNueva = false) => correr(async () => {
     const r = await lanzarRonda();
-    setSeleccion([]);
-    setNota(`🔁 Ronda nueva — objetivo ${r?.target_number}.`);
+    if (!r?.ok) { setErr(mensajeSumate(r)); return; }
+    setObjetivoPosible(null);
+    const objetivoNuevo = typeof r.target_number === "number" ? r.target_number : "—";
+    const jugadores = typeof r.participants === "number" ? r.participants : "—";
+    setNota(esNueva
+      ? `🔁 Ronda nueva — objetivo ${objetivoNuevo} con ${jugadores} jugadores.`
+      : `🚀 Ronda lanzada — objetivo ${objetivoNuevo} con ${jugadores} jugadores.`);
   });
 
-  // Cierra el juego: cancela la ronda viva (si la hay) y lo saca del aire. La
-  // TV vuelve sola a DJ Democracy — mismo contrato que Trivia y Rey del Orto,
-  // sin avanzar la canción del DJ.
+  // FINALIZAR: una sola RPC cancela la ronda viva y saca Sumate del aire.
+  // Una ronda terminada operativamente por el staff NO necesita winner_group:
+  // el resultado pasó en el escenario, no en la plataforma.
   const finalizarJuego = () => correr(async () => {
-    if (enJuego) await cancelarRonda();
-    const e = await controls?.deactivateGame();
-    if (e?.error) throw new Error(e.error.message || String(e.error));
-    setSeleccion([]);
-    setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
+    if (!round?.id) {
+      const e = await controls?.deactivateGame();
+      if (e?.error) throw new Error(e.error.message || String(e.error));
+      setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
+      return;
+    }
+    const res = await cancelarRonda(true);
+    // ROUND_ALREADY_FINISHED devuelve ok:false PERO igual puede haber cerrado
+    // el juego: lo que manda para el cartel es `game_closed`, no `ok`.
+    if (res?.game_closed) {
+      setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
+    } else if (res?.ok) {
+      setNota("⏹ Ronda cerrada. Sumate no estaba al aire.");
+    } else {
+      setErr(mensajeSumate(res));
+    }
   });
 
-  const suma = assignments
-    .filter((a) => seleccion.includes(a.user_id))
-    .reduce((t, a) => t + a.assigned_number, 0);
-  const objetivo = round?.target_number ?? 0;
-  // El botón de validar exige lo mismo que exige el servidor: grupo de 2 o
-  // más, suma exacta y ronda abierta. La decisión final igual la toma el RPC.
-  const exacta = seleccion.length >= 2 && suma === objetivo;
-  const puedeValidar = exacta && enJuego && !busy;
+  const objetivo = typeof round?.target_number === "number" ? round.target_number : null;
 
   const salida = (
     <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
-      🎵 Finalizar juego y volver a DJ Democracy
+      ⏹ Finalizar juego y volver a DJ Democracy
     </button>
+  );
+
+  // Lista informativa de participantes. NO seleccionable: acá no se valida nada.
+  const listaParticipantes = (
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
+        <div className="ctitle" style={{margin:0}}>Participantes</div>
+        <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
+          {assignments.length} con número
+        </div>
+      </div>
+      {assignments.length === 0 && (
+        <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"12px 0"}}>
+          Todavía nadie tiene número. Los celulares lo reciben solos al abrir el juego.
+        </div>
+      )}
+      <div style={{maxHeight:260, overflowY:"auto"}}>
+        {assignments.map((a) => {
+          const presente = a.last_seen ? reyActivo(a) : false;
+          return (
+            <div key={a.user_id}
+              style={{display:"flex", alignItems:"center", gap:9, padding:"7px 9px",
+                marginBottom:4, borderRadius:10, opacity: presente ? 1 : .45,
+                background:"rgba(240,232,255,.03)", border:"1px solid rgba(240,232,255,.08)"}}>
+              <div style={{fontSize:17, flexShrink:0}}>{a.avatar_emoji || "👤"}</div>
+              <div style={{flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"#F0E8FF",
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                {a.name}
+                {!presente && (
+                  <span style={{fontSize:9, fontWeight:400, color:"rgba(240,232,255,.3)"}}> · inactivo</span>
+                )}
+              </div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:19,
+                color:"rgba(240,232,255,.45)"}}>{a.assigned_number}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{fontSize:9.5, color:"rgba(240,232,255,.26)", marginTop:8, lineHeight:1.5}}>
+        Sólo informativo. El grupo se resuelve en el escenario, no desde acá.
+      </div>
+    </div>
   );
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
       {err && (
         <div className="card" style={{borderColor:"rgba(255,45,120,.4)", marginBottom:10}}>
-          <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700}}>✕ {err}</div>
+          <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700, lineHeight:1.5}}>{err}</div>
         </div>
       )}
       {!err && nota && (
@@ -2771,15 +2931,32 @@ function SumaPanel({sec, controls, sessionId, gameState}){
         </div>
       )}
 
-      {/* ── Sin ronda viva ── */}
+      {/* ── Preparación: sin ronda viva ── */}
       {!enJuego && !conGanador && (
         <div className="card">
           <div className="ctitle">🔢 Sumate que sumamos</div>
           <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
             Cada celular conectado recibe automáticamente un número del 1 al 9.
             La TV muestra un objetivo que el servidor arma sumando números reales,
-            así siempre existe al menos un grupo posible.
+            así siempre existe al menos un grupo posible. La gente se junta y se
+            acerca al escenario.
           </p>
+
+          {/* Ronda cerrada sin ganador. Texto NEUTRO: no salió nada mal —
+              simplemente terminó o se cerró para dar lugar a la siguiente. */}
+          {cancelada && (
+            <div style={{padding:"11px 12px", borderRadius:11, marginBottom:12,
+              background:"rgba(255,149,0,.08)", border:"1px solid rgba(255,149,0,.28)"}}>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:12.5,
+                color:COL, marginBottom:3}}>
+                RONDA FINALIZADA
+              </div>
+              <div style={{fontSize:10.5, color:"rgba(240,232,255,.45)", lineHeight:1.5}}>
+                {MOTIVO_CANCELACION[round?.cancel_reason] || "La ronda se cerró."}
+              </div>
+            </div>
+          )}
+
           <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:12,
             padding:"10px", borderRadius:11, background:"rgba(240,232,255,.04)",
             border:"1px solid rgba(240,232,255,.08)"}}>
@@ -2791,7 +2968,21 @@ function SumaPanel({sec, controls, sessionId, gameState}){
             <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
               onClick={leerConectados}>↻</button>
           </div>
-          <button className="btn btn-p btn-full" disabled={busy || activos < 2} onClick={lanzar}>
+
+          {!enElAire && (
+            <button className="btn btn-g btn-full" style={{marginBottom:7}}
+              disabled={busy} onClick={anunciar}>
+              📢 Anunciar → mostrar placa en pantalla
+            </button>
+          )}
+          {anunciando && (
+            <div style={{fontSize:10, color:"rgba(240,232,255,.35)", textAlign:"center",
+              marginBottom:7, lineHeight:1.5}}>
+              Placa en pantalla. Todavía no hay ronda ni números repartidos.
+            </div>
+          )}
+
+          <button className="btn btn-p btn-full" disabled={busy} onClick={() => lanzar(false)}>
             🚀 Lanzar juego
           </button>
           {activos < 2 && (
@@ -2800,118 +2991,234 @@ function SumaPanel({sec, controls, sessionId, gameState}){
               <span style={{opacity:.75}}>Con 3 o más el juego se pone bueno.</span>
             </div>
           )}
-          {enElAire && <div style={{marginTop:8}}>{salida}</div>}
+          {(enElAire || anunciando) && <div style={{marginTop:8}}>{salida}</div>}
         </div>
       )}
 
-      {/* ── Ronda en curso: seleccionar y validar ── */}
+      {/* ── Ronda en curso: información operativa, no un validador ── */}
       {enJuego && (
         <>
           <div className="card" style={{marginBottom:10, borderColor:"rgba(255,149,0,.3)"}}>
             <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
-              <div className="chip chip-live"><div className="dot-live"/>Ronda activa</div>
+              <div className="chip chip-live"><div className="dot-live"/>Juego activo</div>
               <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
                 {assignments.length} con número
               </div>
             </div>
-            <div style={{textAlign:"center", padding:"6px 0 10px"}}>
+            <div style={{textAlign:"center", padding:"6px 0 12px"}}>
               <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>OBJETIVO</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:52, color:COL, lineHeight:1}}>
-                {objetivo}
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:64, color:COL, lineHeight:1}}>
+                {objetivo ?? "—"}
               </div>
             </div>
-
-            {/* Marcador de la selección. Es ayuda visual: el ganador lo decide
-                el servidor con los números reales. */}
-            <div style={{padding:"11px", borderRadius:11, textAlign:"center",
-              background: exacta ? "rgba(0,245,160,.1)" : "rgba(240,232,255,.04)",
-              border: `1px solid ${exacta ? "#00F5A0" : "rgba(240,232,255,.1)"}`}}>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20,
-                color: exacta ? "#00F5A0" : "#F0E8FF"}}>
-                {suma} / {objetivo}
+            <div style={{display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
+              borderRadius:10, background:"rgba(240,232,255,.04)",
+              border:"1px solid rgba(240,232,255,.08)"}}>
+              <div style={{flex:1, fontSize:11, color:"rgba(240,232,255,.55)"}}>
+                Participantes conectados
               </div>
-              <div style={{fontSize:10.5, marginTop:3,
-                color: exacta ? "#00F5A0" : suma > objetivo ? "#FF2D78" : "rgba(240,232,255,.4)"}}>
-                {seleccion.length === 0 ? "Seleccioná a los que se presentaron"
-                  : seleccion.length === 1 ? "El grupo necesita al menos 2 personas"
-                  : exacta ? "🎯 ¡SUMA EXACTA!"
-                  : suma > objetivo ? `Se pasaron por ${suma - objetivo}`
-                  : `Faltan ${objetivo - suma}`}
-              </div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:16, color:COL}}>{activos}</div>
+              <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                onClick={leerConectados}>↻</button>
+            </div>
+            <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", marginTop:10, lineHeight:1.5}}>
+              La gente se junta en el bar y se acerca al escenario. Cuando el staff
+              resuelva, lanzá una ronda nueva o cerrá el juego.
             </div>
           </div>
 
-          <div className="card" style={{marginBottom:10}}>
-            <div className="ctitle">Participantes</div>
-            {assignments.length === 0 && (
-              <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"12px 0"}}>
-                Todavía nadie tiene número. Los celulares lo reciben solos al abrir el juego.
+          {/* ── Objetivo imposible ──
+              El objetivo se garantiza en el instante del lanzamiento: se arma
+              con los números de k personas concretas. Si esa gente se va del
+              bar, puede no quedar NINGUNA combinación válida y la ronda se
+              vuelve injugable sin que nada lo cante. No se cancela sola. */}
+          {objetivoPosible === false && (
+            <div className="card" style={{marginBottom:10, borderColor:"rgba(255,45,120,.45)"}}>
+              <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700, lineHeight:1.5, marginBottom:8}}>
+                ⚠️ El objetivo ya no puede formarse con los participantes presentes.
               </div>
-            )}
-            <div style={{maxHeight:280, overflowY:"auto"}}>
-              {assignments.map((a) => {
-                const marcado = seleccion.includes(a.user_id);
-                return (
-                  <button key={a.user_id} onClick={() => toggle(a.user_id)} disabled={busy}
-                    style={{display:"flex", alignItems:"center", gap:9, width:"100%", textAlign:"left",
-                      padding:"8px 9px", marginBottom:5, borderRadius:10, cursor: busy?"wait":"pointer",
-                      background: marcado ? "rgba(255,149,0,.12)" : "rgba(240,232,255,.03)",
-                      border: `1px solid ${marcado ? COL : "rgba(240,232,255,.08)"}`}}>
-                    <div style={{fontSize:13, width:16, flexShrink:0,
-                      color: marcado ? COL : "rgba(240,232,255,.25)"}}>{marcado ? "☑" : "☐"}</div>
-                    <div style={{fontSize:17, flexShrink:0}}>{a.avatar_emoji || "👤"}</div>
-                    <div style={{flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"#F0E8FF",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{a.name}</div>
-                    <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20,
-                      color: marcado ? COL : "rgba(240,232,255,.45)"}}>{a.assigned_number}</div>
-                  </button>
-                );
-              })}
+              <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:10}}>
+                Se fue gente que hacía falta para llegar a {objetivo ?? "el objetivo"}.
+                La ronda sigue abierta por si vuelven, pero lo razonable es lanzar una nueva.
+              </div>
+              <button className="btn btn-p btn-full" disabled={busy} onClick={() => lanzar(true)}>
+                🔄 Nueva ronda
+              </button>
             </div>
-          </div>
+          )}
 
-          <button className="btn btn-p btn-full" style={{marginBottom:8}}
-            disabled={!puedeValidar} onClick={validar}>
-            🏆 Validar grupo ganador
+          {listaParticipantes}
+
+          <button className="btn btn-g btn-full" style={{marginBottom:7}}
+            disabled={busy} onClick={() => chequearObjetivo(false)}>
+            🎯 Verificar objetivo
           </button>
-          <div style={{fontSize:10, color:"rgba(240,232,255,.3)", textAlign:"center", marginBottom:10, lineHeight:1.5}}>
-            La suma la vuelve a hacer el servidor con los números reales.
+          <div style={{fontSize:9.5, color:"rgba(240,232,255,.28)", textAlign:"center",
+            marginBottom:10, lineHeight:1.5}}>
+            Comprueba si todavía existe algún grupo posible con los presentes.
+            No elige ganador.
           </div>
+          <button className="btn btn-p btn-full" style={{marginBottom:8}}
+            disabled={busy} onClick={() => lanzar(true)}>
+            🔄 Nueva ronda
+          </button>
           {salida}
         </>
       )}
 
-      {/* ── Ganador ── */}
+      {/* ── Ronda histórica con grupo ganador ──
+          El flujo V1 ya NO produce este estado: no hay validación digital. Se
+          mantiene para que una ronda `finished` de antes se vea bien en vez de
+          caer en la pantalla de preparación como si no hubiera pasado nada. */}
       {conGanador && (
-        <div className="card" style={{borderColor:"rgba(0,245,160,.3)"}}>
+        <div className="card" style={{borderColor:"rgba(0,245,160,.35)"}}>
           <div style={{textAlign:"center", marginBottom:12}}>
             <div style={{fontSize:34, lineHeight:1}}>🏆</div>
             <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:17, color:"#00F5A0", marginTop:6}}>
-              ¡Sumaron exacto!
+              ¡SUMARON EXACTO!
+            </div>
+            <div style={{fontSize:10, color:"rgba(240,232,255,.3)", marginTop:4}}>
+              Ronda histórica, validada con el flujo anterior.
             </div>
           </div>
           {(round.winner_group || []).map((g) => (
-            <div key={g.user_id} className="qrow">
-              <div className="qavatar">{g.avatar_emoji || "👤"}</div>
-              <div className="qname" style={{flex:1}}>{g.name}</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:18, color:"#00F5A0"}}>
+            <div key={g.user_id} style={{display:"flex", alignItems:"center", gap:9,
+              padding:"9px 10px", marginBottom:5, borderRadius:10,
+              background:"rgba(0,245,160,.08)", border:"1px solid rgba(0,245,160,.25)"}}>
+              <div style={{fontSize:19, flexShrink:0}}>{g.avatar_emoji || "👤"}</div>
+              <div style={{flex:1, minWidth:0, fontSize:12.5, fontWeight:700, color:"#F0E8FF",
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{g.name}</div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20, color:"#00F5A0"}}>
                 {g.assigned_number}
               </div>
             </div>
           ))}
           <div style={{textAlign:"center", fontFamily:"Syne,sans-serif", fontWeight:900,
-            fontSize:22, color:COL, margin:"12px 0"}}>
-            = {round.target_number}
+            fontSize:19, color:"#FFD600", margin:"14px 0 16px", lineHeight:1.4}}>
+            {(round.winner_group || []).map((g) => g.assigned_number).join(" + ")} = {objetivo ?? "—"}
           </div>
-          <button className="btn btn-g btn-full" style={{marginBottom:4}} disabled={busy} onClick={nuevaRonda}>
-            🔁 Nueva ronda
+          <button className="btn btn-g btn-full" style={{marginBottom:10}}
+            disabled={busy} onClick={() => lanzar(true)}>
+            🔄 Nueva ronda
           </button>
-          <div style={{fontSize:9.5, color:"rgba(240,232,255,.28)", margin:"0 0 10px", textAlign:"center", lineHeight:1.5}}>
-            Números nuevos y objetivo nuevo. La ronda anterior queda en el histórico.
-          </div>
           {salida}
         </div>
       )}
+
+      {/* ── Configuración ──
+          SIEMPRE visible, en cualquier fase. Antes vivía dentro de la rama de
+          preparación, así que con una ronda activa —o con la ronda histórica
+          `finished` que hay en producción— quedaba oculta y el operador no podía
+          llegar a ella. Es configuración del juego, no de la ronda. */}
+      <div style={{marginTop:10}}>
+        <SumaReglasCard col={COL}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Configuración de reglas de Sumate ───────────────────────────────────────
+// Mismo contrato visual y funcional que la card de Rey del Orto, pero sobre
+// `sumate_reglas_config`. Componente aparte para que el panel de arriba no se
+// llene de estado que no usa.
+function SumaReglasCard({col}){
+  const {
+    loading, error: reglasError, reglaPorKey, actualizarRegla,
+  } = useReglasSumate();
+
+  const [minInput, setMinInput] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [errorInline, setErrorInline] = useState(null);
+
+  const regla = reglaPorKey(REGLA_SUMATE_MINIMOS);
+  const minGuardado = typeof regla?.value?.min === "number" ? regla.value.min : null;
+
+  // El input arranca y se resincroniza con lo PERSISTIDO. Apagar la regla no
+  // toca `value`, así que el número sigue acá aunque la regla esté en OFF.
+  useEffect(() => {
+    setMinInput(minGuardado == null ? "" : String(minGuardado));
+  }, [minGuardado]);
+
+  const motivo = motivoMinimoSumateInvalido(minInput);
+  const sucio  = minInput !== (minGuardado == null ? "" : String(minGuardado));
+
+  const guardar = async (patch) => {
+    if (guardando || !regla) return;
+    setGuardando(true); setErrorInline(null);
+    try { await actualizarRegla(REGLA_SUMATE_MINIMOS, patch); }
+    catch (e) { setErrorInline(e?.message || String(e)); }
+    finally { setGuardando(false); }
+  };
+
+  if (loading) return (
+    <div className="card"><div className="ctitle">⚙️ Configuración</div>
+      <div style={{fontSize:11, color:"rgba(240,232,255,.3)"}}>Cargando configuración…</div>
+    </div>
+  );
+
+  if (reglasError || !regla) return (
+    <div className="card"><div className="ctitle">⚙️ Configuración</div>
+      <div style={{fontSize:11, color:"#FCA5A5", lineHeight:1.5}}>
+        {reglasError || "Falta la regla de participantes mínimos en la base."}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="card">
+      <div className="ctitle">⚙️ Configuración de reglas</div>
+      <div className="rey-regla">
+        <div className="rey-regla-hdr">
+          <div className="rey-regla-t">Participantes mínimos</div>
+          <div className={`rey-regla-estado ${regla.enabled ? "rey-regla-on" : "rey-regla-off"}`}>
+            {regla.enabled ? "ACTIVA" : "INACTIVA"}
+          </div>
+          <Toggle on={regla.enabled} color={col}
+            label={guardando ? "Guardando…" : ""}
+            onToggle={() => guardar({ enabled: !regla.enabled })}/>
+        </div>
+        <div className="rey-regla-d">
+          Cuántos participantes conectados hacen falta para poder lanzar una ronda.
+        </div>
+
+        <div style={{display:"flex", gap:7, alignItems:"center", marginTop:9}}>
+          <input value={minInput} onChange={(e) => setMinInput(e.target.value)}
+            inputMode="numeric" placeholder="2"
+            style={{width:74, padding:"7px 9px", borderRadius:9, fontSize:13,
+              fontFamily:"Syne,sans-serif", fontWeight:800, textAlign:"center",
+              background:"rgba(240,232,255,.05)", border:"1px solid rgba(240,232,255,.12)",
+              color:"#F0E8FF"}}/>
+          <button className="btn btn-g" style={{padding:"7px 14px", fontSize:11}}
+            disabled={guardando || !!motivo || !sucio}
+            onClick={() => guardar({ value: { min: Number(minInput.trim()) } })}>
+            {guardando ? "…" : "Guardar"}
+          </button>
+          <div style={{flex:1, fontSize:10, color:"rgba(240,232,255,.3)", lineHeight:1.4}}>
+            Entre {SUMATE_MIN_PISO} y {SUMATE_MIN_TECHO}.
+          </div>
+        </div>
+        {motivo && minInput.trim() !== "" && (
+          <div style={{fontSize:10, color:"#FCA5A5", marginTop:6}}>{motivo}</div>
+        )}
+
+        {/* El mínimo real no es sólo el configurado: sin dos números no existe
+            una suma que formar, así que el backend aplica GREATEST(2, config).
+            Decirlo evita que el operador configure 1 y crea que alcanza. */}
+        {(minGuardado !== null && minGuardado < SUMATE_MIN_ESTRUCTURAL) && (
+          <div style={{fontSize:10, color:"#FFD600", marginTop:7, lineHeight:1.5}}>
+            ⚠️ El juego siempre necesita al menos {SUMATE_MIN_ESTRUCTURAL} participantes.
+            Con {minGuardado} configurado, el servidor igual va a exigir {SUMATE_MIN_ESTRUCTURAL}.
+          </div>
+        )}
+        {!regla.enabled && (
+          <div style={{fontSize:10, color:"rgba(240,232,255,.35)", marginTop:7, lineHeight:1.5}}>
+            Con la regla desactivada se aplica el mínimo del juego: {SUMATE_MIN_ESTRUCTURAL}.
+          </div>
+        )}
+        {errorInline && (
+          <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:8, lineHeight:1.5}}>{errorInline}</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2929,7 +3236,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
 // La palabra la escribe el operador; las letras las reparte el servidor.
 function PalabraPanel({sec, controls, sessionId, gameState}){
   const COL = "#A855F7";
-  const { round, assignments, lanzarRonda, validarGrupo, cancelarRonda } =
+  const { round, assignments, lanzarRonda, cancelarRonda } =
     useArmaPalabraRound(sessionId, { admin: true });
 
   // 📚 Biblioteca: la fuente de verdad es `palabra_biblioteca` en Supabase, no
@@ -2949,7 +3256,6 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   // persiste, no toca game_state, no crea ronda y no llega ni a la TV ni a los
   // celulares. Seleccionar y lanzar son dos cosas distintas.
   const [elegidaId, setElegidaId] = useState(null);
-  const [seleccion, setSeleccion] = useState([]);   // user_ids EN ORDEN
   const [conectados, setConectados] = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState(null);
@@ -2974,10 +3280,6 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   }, [sessionId]);
   useEffect(() => { leerConectados(); }, [leerConectados, round?.id]);
   const activos = (conectados || []).filter(reyActivo).length;
-
-  // Al cambiar de ronda se suelta la selección: los user_id de la anterior no
-  // valen nada en la nueva.
-  useEffect(() => { setSeleccion([]); }, [round?.id]);
 
   const correr = async (fn) => {
     if (busy) return;
@@ -3063,22 +3365,10 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
     setNota(`🚀 Ronda lanzada — ${r?.target_word} (${r?.letters} letras) entre ${r?.participants} jugadores.`);
   });
 
-  // Toggle que CONSERVA EL ORDEN: al agregar, va al final; al sacar, se cierra
-  // el hueco y los que siguen suben una posición.
-  const toggle = (userId) => setSeleccion((s) =>
-    s.includes(userId) ? s.filter((x) => x !== userId) : [...s, userId]);
-
-  const validar = () => correr(async () => {
-    const res = await validarGrupo(seleccion);
-    if (res?.ok) setNota(`🎯 ¡Armaron ${res.target}!`);
-    else setErr(`Formaron "${res?.formed}" y la palabra es "${res?.target}".`);
-  });
-
   // Vuelve a la pantalla de selección SIN salir del juego: la TV queda en el
   // standby y el operador elige la palabra siguiente de la lista.
   const nuevaPalabra = () => correr(async () => {
     if (enJuego) await cancelarRonda();
-    setSeleccion([]);
     setNota("🔁 Elegí la palabra siguiente.");
   });
 
@@ -3089,42 +3379,25 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
     if (enJuego) await cancelarRonda();
     const e = await controls?.deactivateGame();
     if (e?.error) throw new Error(e.error.message || String(e.error));
-    setSeleccion([]);
     setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
   });
 
   const objetivo = round?.target_word || "";
-  const porId = new Map(assignments.map((a) => [a.user_id, a]));
-  // La palabra que se está formando, en el orden de selección.
-  const formada = seleccion.map((id) => porId.get(id)?.assigned_letter || "?").join("");
-  const completa = formada.length === objetivo.length;
-  const coincide = completa && formada === objetivo;
-  const puedeValidar = coincide && enJuego && !busy;
+
+  // Cuántas personas tienen cada letra. Es la única información de reparto que
+  // el operador necesita: le dice de un vistazo si la palabra es formable y por
+  // dónde viene floja. Reemplaza al validador — ya no hay que reconstruir la
+  // palabra con usuarios, sólo saber que las letras están repartidas.
+  const distribucion = (() => {
+    const m = new Map();
+    assignments.forEach((a) => m.set(a.assigned_letter, (m.get(a.assigned_letter) || 0) + 1));
+    return objetivo.split("").map((l) => ({ letra: l, cuantos: m.get(l) || 0 }));
+  })();
 
   const salida = (
     <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
       🎵 Finalizar juego y volver a DJ Democracy
     </button>
-  );
-
-  // Casilleros de la palabra: se van llenando con lo que el operador arma.
-  const casilleros = (
-    <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginBottom:10}}>
-      {objetivo.split("").map((letraObj, i) => {
-        const puesta = formada[i];
-        const bien = puesta === letraObj;
-        return (
-          <div key={i} style={{width:34,height:42,borderRadius:9,display:"flex",
-            alignItems:"center",justifyContent:"center",
-            fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,
-            background: puesta ? (bien ? "rgba(0,245,160,.14)" : "rgba(255,45,120,.12)") : "rgba(240,232,255,.04)",
-            border: `1.5px solid ${puesta ? (bien ? "#00F5A0" : "#FF2D78") : "rgba(240,232,255,.12)"}`,
-            color: puesta ? (bien ? "#00F5A0" : "#FF2D78") : "rgba(240,232,255,.2)"}}>
-            {puesta || "_"}
-          </div>
-        );
-      })}
-    </div>
   );
 
   return(
@@ -3384,45 +3657,71 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
           </div>
         </div>
       )}
-      {/* ── Ronda en curso: seleccionar EN ORDEN y validar ── */}
+      {/* ── EN JUEGO: información operativa, no un validador ──
+          La palabra se resuelve FÍSICAMENTE: la gente se busca en el bar, se
+          junta y se acerca al escenario, y el staff resuelve ahí. La plataforma
+          no necesita saber qué personas la formaron, así que acá no hay
+          selección de jugadores, ni casilleros, ni botón de validar, y no se
+          llama a `validate_arma_palabra_group`. La RPC sigue en Supabase, sin
+          consumidor. */}
       {enJuego && (
         <>
           <div className="card" style={{marginBottom:10, borderColor:"rgba(168,85,247,.3)"}}>
             <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
-              <div className="chip chip-live"><div className="dot-live"/>Ronda activa</div>
+              <div className="chip chip-live"><div className="dot-live"/>Juego activo</div>
               <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
                 {assignments.length} con letra
               </div>
             </div>
-            <div style={{textAlign:"center", padding:"4px 0 8px"}}>
-              <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>PALABRA OBJETIVO</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:30, color:COL,
-                letterSpacing:3, lineHeight:1.3}}>
-                {objetivo}
+
+            {/* La palabra sí se le muestra al OPERADOR: la necesita para
+                resolver en el escenario. Al cliente no, sólo a la TV. */}
+            <div style={{textAlign:"center", padding:"4px 0 12px"}}>
+              <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>PALABRA EN JUEGO</div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:38, color:COL,
+                letterSpacing:4, lineHeight:1.2}}>
+                {objetivo || "—"}
               </div>
             </div>
 
-            {casilleros}
-
-            <div style={{padding:"9px", borderRadius:11, textAlign:"center",
-              background: coincide ? "rgba(0,245,160,.1)" : "rgba(240,232,255,.04)",
-              border: `1px solid ${coincide ? "#00F5A0" : "rgba(240,232,255,.1)"}`}}>
-              <div style={{fontSize:10.5,
-                color: coincide ? "#00F5A0" : completa ? "#FF2D78" : "rgba(240,232,255,.4)"}}>
-                {seleccion.length === 0 ? "Tocá a los jugadores EN EL ORDEN de la palabra"
-                  : coincide ? "🎯 ¡PALABRA CORRECTA!"
-                  : completa ? "Las letras no coinciden — revisá el orden"
-                  : `${formada.length} de ${objetivo.length} letras`}
+            <div style={{display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
+              borderRadius:10, background:"rgba(240,232,255,.04)",
+              border:"1px solid rgba(240,232,255,.08)", marginBottom:10}}>
+              <div style={{flex:1, fontSize:11, color:"rgba(240,232,255,.55)"}}>
+                Participantes conectados
               </div>
+              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:16, color:COL}}>{activos}</div>
+              <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                onClick={leerConectados}>↻</button>
             </div>
-            {seleccion.length > 0 && (
-              <button className="btn btn-g btn-full" style={{marginTop:8, fontSize:10, padding:"5px"}}
-                disabled={busy} onClick={()=>setSeleccion([])}>
-                ✕ Limpiar selección
-              </button>
-            )}
+
+            {/* Distribución de letras. Es lo único que el operador necesita
+                saber del reparto: que cada letra de la palabra está en manos de
+                alguien. Un 0 significa que esa letra no salió y la palabra no
+                se puede formar. */}
+            <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4, marginBottom:7}}>
+              DISTRIBUCIÓN
+            </div>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:10}}>
+              {distribucion.map(({letra, cuantos}, i) => (
+                <div key={`${letra}-${i}`} style={{display:"flex", alignItems:"center", gap:5,
+                  padding:"5px 10px", borderRadius:9,
+                  background: cuantos > 0 ? "rgba(168,85,247,.12)" : "rgba(255,45,120,.1)",
+                  border: `1px solid ${cuantos > 0 ? "rgba(168,85,247,.35)" : "rgba(255,45,120,.4)"}`}}>
+                  <span style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:15,
+                    color: cuantos > 0 ? COL : "#FF2D78"}}>{letra}</span>
+                  <span style={{fontSize:11, color:"rgba(240,232,255,.45)"}}>× {cuantos}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
+              La gente se busca en el bar y se acerca al escenario. Cuando el staff
+              resuelva, elegí la palabra siguiente o cerrá el juego.
+            </div>
           </div>
 
+          {/* Lista informativa. NO seleccionable: acá no se valida nada. */}
           <div className="card" style={{marginBottom:10}}>
             <div className="ctitle">Participantes</div>
             {assignments.length === 0 && (
@@ -3430,43 +3729,37 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                 Todavía nadie tiene letra. Los celulares la reciben solos al abrir el juego.
               </div>
             )}
-            <div style={{maxHeight:280, overflowY:"auto"}}>
+            <div style={{maxHeight:260, overflowY:"auto"}}>
               {assignments.map((a) => {
-                const pos = seleccion.indexOf(a.user_id);
-                const marcado = pos >= 0;
+                const presente = a.last_seen ? reyActivo(a) : true;
                 return (
-                  <button key={a.user_id} onClick={() => toggle(a.user_id)} disabled={busy}
-                    style={{display:"flex", alignItems:"center", gap:9, width:"100%", textAlign:"left",
-                      padding:"8px 9px", marginBottom:5, borderRadius:10, cursor: busy?"wait":"pointer",
-                      background: marcado ? "rgba(168,85,247,.14)" : "rgba(240,232,255,.03)",
-                      border: `1px solid ${marcado ? COL : "rgba(240,232,255,.08)"}`}}>
-                    {/* El número es la POSICIÓN en la palabra, no un check: es lo
-                        que le dice al operador en qué orden los fue tomando. */}
-                    <div style={{width:20, height:20, borderRadius:"50%", flexShrink:0,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:10, fontWeight:900,
-                      background: marcado ? COL : "rgba(240,232,255,.06)",
-                      color: marcado ? "#fff" : "rgba(240,232,255,.25)"}}>
-                      {marcado ? pos + 1 : "·"}
-                    </div>
+                  <div key={a.user_id}
+                    style={{display:"flex", alignItems:"center", gap:9, padding:"7px 9px",
+                      marginBottom:4, borderRadius:10, opacity: presente ? 1 : .45,
+                      background:"rgba(240,232,255,.03)", border:"1px solid rgba(240,232,255,.08)"}}>
                     <div style={{fontSize:17, flexShrink:0}}>{a.avatar_emoji || "👤"}</div>
                     <div style={{flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"#F0E8FF",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{a.name}</div>
-                    <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20,
-                      color: marcado ? COL : "rgba(240,232,255,.45)"}}>{a.assigned_letter}</div>
-                  </button>
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                      {a.name}
+                      {!presente && (
+                        <span style={{fontSize:9, fontWeight:400, color:"rgba(240,232,255,.3)"}}> · inactivo</span>
+                      )}
+                    </div>
+                    <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:19,
+                      color:"rgba(240,232,255,.45)"}}>{a.assigned_letter}</div>
+                  </div>
                 );
               })}
+            </div>
+            <div style={{fontSize:9.5, color:"rgba(240,232,255,.26)", marginTop:8, lineHeight:1.5}}>
+              Sólo informativo. El grupo se resuelve en el escenario, no desde acá.
             </div>
           </div>
 
           <button className="btn btn-p btn-full" style={{marginBottom:8}}
-            disabled={!puedeValidar} onClick={validar}>
-            🏆 Validar grupo ganador
+            disabled={busy} onClick={nuevaPalabra}>
+            🔄 Nueva palabra
           </button>
-          <div style={{fontSize:10, color:"rgba(240,232,255,.3)", textAlign:"center", marginBottom:10, lineHeight:1.5}}>
-            La palabra la vuelve a armar el servidor con las letras reales, en este orden.
-          </div>
           {salida}
         </>
       )}
@@ -3502,6 +3795,93 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
           {salida}
         </div>
       )}
+
+      {/* ── Configuración ── SIEMPRE visible, en cualquier fase. */}
+      <div style={{marginTop:10}}>
+        <PalabraReglasCard col={COL} objetivo={objetivo}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Configuración de reglas de Arma la Palabra ──────────────────────────────
+// ⚠️ SIN BACKEND. A diferencia de Rey del Orto (`rey_reglas_config`) y de
+// Sumate (`sumate_reglas_config`), Arma la Palabra NO tiene tabla de reglas en
+// Supabase. Esta card existe para dejar el lugar hecho y para mostrar lo que SÍ
+// es cierto hoy — el mínimo estructural —, no para simular una configuración
+// que no se guarda en ningún lado.
+//
+// El toggle y el número están DESHABILITADOS a propósito. No hay localStorage,
+// no hay estado que finja persistir: si el operador lo mueve y refresca, no
+// pasó nada, y mentirle sobre eso es peor que no ofrecerlo. Se habilita cuando
+// exista el contrato en la base (ver el informe: hace falta una tanda de
+// Supabase).
+//
+// ── MÍNIMO ESTRUCTURAL vs MÍNIMO CONFIGURABLE ──
+// En Arma la Palabra el mínimo estructural NO es un número fijo: es la CANTIDAD
+// DE LETRAS de la palabra en juego. `arma_palabra_launch_round` rechaza con
+// `necesitás al menos <length(palabra)> participantes`, porque cada letra tiene
+// que estar en manos de alguien. Con una palabra de 3 letras hacen falta 3
+// personas; con una de 6, seis. Por eso con 2 participantes el juego no lanza
+// nunca: ninguna palabra válida tiene menos de 3 letras.
+//
+// El mínimo configurable sería una restricción ADICIONAL encima de ese piso, y
+// apagarla no podría bajar del estructural — igual que en Sumate, donde la RPC
+// aplica GREATEST(2, configurado).
+function PalabraReglasCard({col, objetivo}){
+  const letras = (objetivo || "").length;
+
+  return (
+    <div className="card">
+      <div className="ctitle">⚙️ Configuración de reglas</div>
+
+      {/* Lo que SÍ es cierto hoy, leído de la mecánica real. */}
+      <div className="rey-regla">
+        <div className="rey-regla-hdr">
+          <div className="rey-regla-t">Mínimo estructural del juego</div>
+          <div className="rey-regla-estado rey-regla-on">SIEMPRE</div>
+        </div>
+        <div className="rey-regla-d">
+          Hacen falta tantos participantes como letras tenga la palabra: cada letra
+          tiene que estar en manos de alguien. Las palabras válidas tienen entre 3 y
+          6 letras, así que con 2 participantes el juego nunca puede lanzarse.
+        </div>
+        {letras > 0 && (
+          <div style={{fontSize:10.5, color:col, marginTop:7, lineHeight:1.5}}>
+            Palabra en juego: <strong>{objetivo}</strong> → mínimo {letras} participantes.
+          </div>
+        )}
+      </div>
+
+      {/* El lugar reservado, dicho como lo que es. */}
+      <div className="rey-regla" style={{opacity:.55}}>
+        <div className="rey-regla-hdr">
+          <div className="rey-regla-t">Participantes mínimos (operativo)</div>
+          <div className="rey-regla-estado rey-regla-off">SIN CONECTAR</div>
+          <Toggle on={false} color={col} label="" onToggle={() => {}}/>
+        </div>
+        <div className="rey-regla-d">
+          Restricción adicional encima del mínimo estructural, para pedir más gente
+          de la que la palabra exige.
+        </div>
+        <div style={{display:"flex", gap:7, alignItems:"center", marginTop:9}}>
+          <input value="" readOnly disabled placeholder="—"
+            style={{width:74, padding:"7px 9px", borderRadius:9, fontSize:13,
+              fontFamily:"Syne,sans-serif", fontWeight:800, textAlign:"center",
+              background:"rgba(240,232,255,.03)", border:"1px solid rgba(240,232,255,.08)",
+              color:"rgba(240,232,255,.3)", cursor:"not-allowed"}}/>
+          <button className="btn btn-g" style={{padding:"7px 14px", fontSize:11}} disabled>
+            Guardar
+          </button>
+        </div>
+      </div>
+
+      <div style={{fontSize:10, color:"#FFD600", marginTop:10, lineHeight:1.5,
+        borderTop:"1px solid rgba(240,232,255,.06)", paddingTop:9}}>
+        ⚠️ Arma la Palabra todavía no tiene tabla de reglas en la base. Este control
+        está a la vista pero desconectado: no guarda nada. Se habilita cuando se
+        cree el contrato en Supabase.
+      </div>
     </div>
   );
 }

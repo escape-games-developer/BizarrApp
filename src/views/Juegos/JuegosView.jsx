@@ -261,18 +261,36 @@ function DesafioDemente({ user, sessionId, gameState }) {
   );
 }
 
-// ─── Sumá el Número ────────────────────────────────────────────────────────
+// ─── Sumate que sumamos ────────────────────────────────────────────────────
 function SumaElNumero({ user, sessionId }) {
   // La ronda y el número vienen de la base, no de game_state: antes el número
   // salía de `minijuego_payload.assigned_number`, que es UNO para toda la
   // sesión — todos los celulares mostraban el mismo. Ahora es por persona.
   //
-  // El número se asigna SOLO: no hay ningún botón que tocar. Si el usuario
-  // entra con la ronda ya empezada, el hook le pide el suyo al servidor.
-  const { round, miNumero, loading } = useSumateRound(sessionId, { userId: user?.id ?? null });
+  // El número se asigna SOLO: no hay ningún botón que tocar. `sumate_obtener_numero`
+  // es idempotente, así que un F5, dos pestañas o una reconexión devuelven
+  // SIEMPRE el mismo número (`already_assigned: true`). El frontend no genera
+  // ningún número: sólo muestra el que dio el servidor.
+  const { round, miNumero, miNumeroRes, loading } =
+    useSumateRound(sessionId, { userId: user?.id ?? null });
 
   const header = (
     <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔢</span><h3>Sumate que sumamos</h3></div>
+  );
+
+  const aviso = (emoji, titulo, texto, color = "rgba(245,230,192,.6)") => (
+    <div>{header}
+      <div style={{
+        textAlign:"center", padding:"34px 20px", borderRadius:18,
+        background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)",
+      }}>
+        <div style={{fontSize:40,marginBottom:10}}>{emoji}</div>
+        <div style={{fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:16,color,marginBottom:6}}>
+          {titulo}
+        </div>
+        <div style={{fontSize:12.5,color:"rgba(245,230,192,.4)",lineHeight:1.5}}>{texto}</div>
+      </div>
+    </div>
   );
 
   if (loading) return (
@@ -295,6 +313,7 @@ function SumaElNumero({ user, sessionId }) {
   if (round.status !== "playing") {
     const grupo = round.winner_group || [];
     const gane  = grupo.some((g) => g.user_id === user?.id);
+
     if (round.status === "finished" && gane) return (
       <div>{header}
         <div style={{
@@ -312,56 +331,106 @@ function SumaElNumero({ user, sessionId }) {
         </div>
       </div>
     );
+
+    if (round.status === "finished") {
+      return aviso("🏁", "Ronda terminada", "Encontraron la combinación correcta.");
+    }
+    // Cancelada: nunca hay ganador que mostrar, y el motivo técnico
+    // (`cancel_reason`) es información del staff, no del cliente.
+    return aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
+  }
+
+  // ── Ronda en curso ────────────────────────────────────────────────────────
+  // Sin número todavía: el motivo importa. `NOT_PRESENT` es el único accionable
+  // por la persona (tiene que estar dentro del bar con la app abierta); el
+  // resto son estados de la ronda que Realtime va a corregir solo.
+  if (miNumero == null) {
+    const code = miNumeroRes?.code;
+    if (code === "NOT_PRESENT") {
+      return aviso("📍", "No estás en la lista",
+        "Verificá tu ubicación en el bar y volvé a entrar para recibir tu número.", "#FCD34D");
+    }
+    if (code === "ROUND_EXPIRED" || code === "ROUND_ALREADY_CANCELLED") {
+      return aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
+    }
+    if (code === "ROUND_ALREADY_FINISHED") {
+      return aviso("🏁", "Ronda terminada", "Encontraron la combinación correcta.");
+    }
+    if (code === "ROUND_NOT_FOUND") {
+      return aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
+    }
+    if (miNumeroRes && !miNumeroRes.ok) {
+      // Fallo técnico (red, permisos). Antes esto dejaba "TU NÚMERO …" colgado
+      // para siempre, sin decir nada y sin salida.
+      return aviso("📡", "No pudimos traer tu número",
+        "Revisá tu conexión. Se reintenta solo al volver a entrar.", "#FCA5A5");
+    }
+    // Todavía en vuelo: se muestra el esqueleto, no un error.
     return (
       <div>{header}
-        <div style={{
-          textAlign:"center", padding:"34px 20px", borderRadius:18,
-          background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.1)",
-        }}>
-          <div style={{fontSize:40,marginBottom:10}}>🏁</div>
-          <div style={{fontFamily:"Syne, sans-serif",fontWeight:800,fontSize:16,color:"rgba(245,230,192,.6)",marginBottom:6}}>
-            Ronda terminada
-          </div>
-          <div style={{fontSize:12.5,color:"rgba(245,230,192,.4)"}}>
-            {round.status === "finished"
-              ? "Encontraron la combinación correcta."
-              : "El staff cerró la ronda."}
-          </div>
+        <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
+          Pidiendo tu número…
         </div>
       </div>
     );
   }
 
-  // ── Ronda en curso ────────────────────────────────────────────────────────
-  // El OBJETIVO no se dibuja acá: vive sólo en la pantalla gigante. Si el
-  // celular lo mostrara, el juego se resolvería desde la mesa — hay que
-  // levantar la vista, mirar la TV y buscar gente. `round.target_number` sigue
-  // llegando en el estado de la ronda (lo necesitan /tv y el panel), pero esta
-  // vista no lo renderiza en ningún momento mientras la ronda está viva.
+  const objetivo = typeof round.target_number === "number" ? round.target_number : null;
+
   return (
     <div>
       {header}
+
+      {/* TU NÚMERO — la pieza central del celular. Grande y legible de un
+          vistazo: la persona tiene que poder mostrarlo levantando el teléfono
+          mientras camina por el bar. */}
       <div style={{
-        textAlign:"center", padding:"22px 16px", marginBottom:12, borderRadius:16,
+        textAlign:"center", padding:"26px 16px", marginBottom:10, borderRadius:16,
         background:"rgba(0,229,255,.08)", border:"1px solid rgba(0,229,255,.28)",
       }}>
-        <div style={{fontSize:11,color:"rgba(0,229,255,.75)",letterSpacing:".14em",fontWeight:700,marginBottom:6}}>
+        <div style={{fontSize:11,color:"rgba(0,229,255,.75)",letterSpacing:".14em",fontWeight:700,marginBottom:4}}>
           TU NÚMERO
         </div>
-        <div style={{fontFamily:"Syne, sans-serif",fontSize:88,fontWeight:900,color:"#00E5FF",lineHeight:1}}>
-          {miNumero ?? "…"}
+        <div style={{fontFamily:"Syne, sans-serif",fontSize:120,fontWeight:900,color:"#00E5FF",lineHeight:1}}>
+          {miNumero}
         </div>
       </div>
 
-      {/* Ni el objetivo, ni números ajenos, ni nombres, ni combinaciones
-          sugeridas: hay que mirar la TV y encontrarse en el bar. */}
+      {/* El objetivo también acá: sin esto la persona depende de tener la TV a
+          la vista para saber a qué número apuntar. */}
+      {objetivo !== null && (
+        <div style={{
+          display:"flex", alignItems:"center", justifyContent:"center", gap:10,
+          padding:"12px 14px", marginBottom:10, borderRadius:14,
+          background:"rgba(255,149,0,.09)", border:"1px solid rgba(255,149,0,.3)",
+        }}>
+          <div style={{fontSize:11,color:"rgba(255,149,0,.8)",letterSpacing:".12em",fontWeight:700}}>
+            OBJETIVO
+          </div>
+          <div style={{fontFamily:"Syne, sans-serif",fontSize:38,fontWeight:900,color:"#FF9500",lineHeight:1}}>
+            {objetivo}
+          </div>
+        </div>
+      )}
+
+      {/* Ni números ajenos, ni nombres, ni combinaciones sugeridas: hay que
+          encontrarse en el bar.
+
+          La consigna termina en el ESCENARIO, no en la app: el grupo se junta y
+          se acerca, y el staff resuelve ahí. No hay nada que confirmar desde el
+          celular ni desde el panel. */}
       <div style={{
         padding:"14px", borderRadius:12, textAlign:"center", lineHeight:1.6,
         background:"rgba(255,215,0,.06)", border:"1px solid rgba(255,215,0,.14)",
         fontSize:12.5, color:"rgba(255,215,0,.6)",
       }}>
-        Mirá la pantalla gigante y buscá a otros jugadores.<br/>
-        Júntense hasta llegar exactamente al número objetivo, y preséntense al staff.
+        Buscá a otras personas y sumen sus números hasta llegar al objetivo.
+        <div style={{
+          marginTop:10, paddingTop:10, borderTop:"1px solid rgba(255,215,0,.14)",
+          fontFamily:"Syne, sans-serif", fontWeight:900, fontSize:13.5, color:"#FFD600",
+        }}>
+          ¡Júntense y acérquense al escenario!
+        </div>
       </div>
     </div>
   );
@@ -455,8 +524,24 @@ function FormaLaPalabra({ user, sessionId }) {
         <div style={{fontSize:11,color:"rgba(168,85,247,.8)",letterSpacing:".14em",fontWeight:700,marginBottom:6}}>
           TU LETRA
         </div>
-        <div style={{fontFamily:"Syne, sans-serif",fontSize:96,fontWeight:900,color:"#A855F7",lineHeight:1}}>
+        <div style={{fontFamily:"Syne, sans-serif",fontSize:110,fontWeight:900,color:"#A855F7",lineHeight:1}}>
           {miLetra ?? "…"}
+        </div>
+      </div>
+
+      {/* La consigna termina en el ESCENARIO, no en la app: el grupo se junta y
+          se acerca, y el staff resuelve ahí. No hay validación digital. */}
+      <div style={{
+        marginTop:10, padding:"14px", borderRadius:12, textAlign:"center", lineHeight:1.6,
+        background:"rgba(168,85,247,.07)", border:"1px solid rgba(168,85,247,.18)",
+        fontSize:12.5, color:"rgba(240,232,255,.55)",
+      }}>
+        Encontrá a las personas que necesitás para formar la palabra.
+        <div style={{
+          marginTop:10, paddingTop:10, borderTop:"1px solid rgba(168,85,247,.18)",
+          fontFamily:"Syne, sans-serif", fontWeight:900, fontSize:13.5, color:"#C084FC",
+        }}>
+          ¡Júntense y acérquense al escenario!
         </div>
       </div>
     </div>

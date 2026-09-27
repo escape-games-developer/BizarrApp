@@ -128,5 +128,36 @@ export async function iniciarJornada(sessionId = null) {
     .in("status", ["waiting", "called"]);
   if (eCola) throw new Error(eCola.message);
 
-  return { session_id: id };
+  // ── Sumate que Sumamos ────────────────────────────────────────────────────
+  // Una ronda 'playing' no rota sola: como en producción hay UNA sola sesión,
+  // "la última ronda de la sesión" es "la última ronda que existió", y sin esto
+  // la jornada nueva abre el panel mostrando una ronda activa de anoche, con su
+  // objetivo y sus números viejos. Es el mismo fantasma que ya se limpia arriba
+  // para la cola de escenario.
+  //
+  // NO ES FATAL, a diferencia de los pasos anteriores, y la diferencia es
+  // deliberada: aquéllos son UPDATE directos sobre tablas cuyo estado sucio
+  // rompe la pantalla, mientras que esto es limpieza EXPLÍCITA de algo que el
+  // backend ya protege por su cuenta — `validate_sumate_group`,
+  // `sumate_obtener_numero` y `sumate_check_target` rechazan por ROUND_EXPIRED
+  // cualquier ronda de una jornada anterior. Voltear el arranque de la noche
+  // entera porque no se pudo cancelar una ronda vieja sería peor que el
+  // problema. Se informa en `avisos` para que el panel lo pueda decir.
+  const avisos = [];
+  try {
+    const { data, error: eSumate } = await supabase
+      .rpc("sumate_cerrar_jornada", { p_session: id });
+    if (eSumate) {
+      avisos.push("No se pudo cerrar la ronda de Sumate que quedó abierta.");
+    } else if (data && data.ok !== true) {
+      // UNAUTHORIZED / INVALID_REQUEST: el backend contesta estructurado, no tira.
+      avisos.push(data.code === "UNAUTHORIZED"
+        ? "No se cerró la ronda de Sumate: tu usuario no figura como administrador."
+        : "No se pudo cerrar la ronda de Sumate que quedó abierta.");
+    }
+  } catch {
+    avisos.push("No se pudo cerrar la ronda de Sumate que quedó abierta.");
+  }
+
+  return { session_id: id, avisos };
 }

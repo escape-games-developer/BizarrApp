@@ -105,6 +105,78 @@ export const BIGSCREEN_CSS = `
   .rey-cancel-next{font-family:'Syne',sans-serif;font-size:clamp(12px,1.25vw,20px);font-weight:700;
     letter-spacing:2px;text-transform:uppercase;color:rgba(240,232,255,.3);
     margin-top:26px;text-align:center;}
+
+  /* ── SUMATE QUE SUMAMOS ──
+     Clases propias, no compartidas con Rey del Orto ni con Arma la Palabra: el
+     día que uno cambie de estética, el otro no se entera. Todo dimensionado en
+     vw/vh porque esto se ve desde el fondo del bar, no desde un escritorio. */
+  .sum-play{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:1.4vh;padding:4vh 5vw;overflow:hidden;
+    background:radial-gradient(ellipse at center,rgba(255,149,0,.12),#08040F 70%);}
+  .sum-play-title{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:clamp(20px,3vw,56px);color:#FF9500;letter-spacing:.04em;
+    text-align:center;z-index:2;}
+  .sum-play-lbl{font-family:'Syne',sans-serif;font-weight:800;
+    font-size:clamp(13px,1.7vw,30px);color:#FFD600;letter-spacing:.22em;
+    margin-top:.6vh;z-index:2;}
+  /* line-height 1 y no .9: con .9 la caja queda MÁS CHICA que el glifo y el
+     subtítulo se le monta encima al número. */
+  .sum-play-target{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:min(34vh,32vw);line-height:1;color:#FF9500;
+    text-shadow:0 0 70px rgba(255,149,0,.55);z-index:2;}
+  .sum-play-sub{font-family:'Space Grotesk',sans-serif;font-weight:600;
+    font-size:clamp(14px,1.8vw,32px);color:rgba(240,232,255,.72);
+    text-align:center;max-width:26ch;line-height:1.35;margin-top:1.4vh;
+    text-wrap:balance;z-index:2;}
+  /* La llamada a la acción: es lo que la sala tiene que hacer cuando cree
+     haberlo logrado. Va en amarillo y en Syne para que pese más que el
+     subtítulo, sin competir con el número. */
+  .sum-play-cta{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:clamp(15px,2vw,36px);color:#FFD600;text-align:center;
+    margin-top:1.2vh;text-shadow:0 0 40px rgba(255,214,0,.3);z-index:2;}
+  .sum-play-foot{font-family:'Space Grotesk',sans-serif;font-weight:600;
+    font-size:clamp(11px,1.25vw,22px);color:rgba(240,232,255,.42);
+    letter-spacing:.12em;margin-top:1.2vh;z-index:2;}
+
+  /* Ronda cancelada: mismo escenario, sin el número. Quieto a propósito —
+     no hay nada que festejar ni que apurar. */
+  .sum-cancel{background:radial-gradient(ellipse at center,rgba(255,149,0,.07),#08040F 70%);}
+  .sum-cancel-t{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:clamp(26px,4.4vw,74px);color:#FFD600;letter-spacing:-.5px;
+    text-transform:uppercase;text-align:center;line-height:1.05;max-width:100%;
+    margin-top:1vh;text-shadow:0 0 50px rgba(255,214,0,.22);animation:fadeIn .5s ease;}
+  .sum-cancel-rule{width:clamp(90px,14vw,220px);height:2px;margin-top:2.2vh;flex:none;
+    background:linear-gradient(90deg,transparent,rgba(255,214,0,.45),transparent);}
+  .sum-cancel-d{font-family:'Space Grotesk',sans-serif;font-weight:600;
+    font-size:clamp(14px,1.7vw,30px);color:rgba(240,232,255,.5);
+    margin-top:2.2vh;text-align:center;}
+
+  /* Grupo ganador. El verde es el mismo del ganador de Rey del Orto: en el bar
+     "verde" ya significa "ganaron", y cambiarlo por juego sería ruido. */
+  .sum-win{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2vh;padding:4vh 4vw;overflow:hidden;
+    background:radial-gradient(ellipse at center,rgba(0,245,160,.16),#08040F 70%);}
+  .sum-win-tag{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:clamp(24px,4vw,76px);color:#00F5A0;text-align:center;
+    text-shadow:0 0 60px rgba(0,245,160,.45);animation:fadeIn .5s ease;z-index:2;}
+  /* line-height 1, misma razón que en .sum-play-target: con .9 el glifo se
+     desborda de su caja y se monta sobre las tarjetas de los ganadores. */
+  .sum-win-target{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:min(24vh,22vw);line-height:1;color:#00F5A0;
+    text-shadow:0 0 80px rgba(0,245,160,.5);animation:nameReveal .8s ease;z-index:2;}
+  .sum-win-row{display:flex;flex-wrap:wrap;justify-content:center;gap:1.2vw;z-index:2;}
+  .sum-win-card{display:flex;flex-direction:column;align-items:center;gap:.5vh;
+    padding:1.4vh 1.8vw;border-radius:1.4vh;background:rgba(0,245,160,.1);
+    border:2px solid rgba(0,245,160,.45);animation:fadeIn .6s ease;}
+  .sum-win-avatar{font-size:clamp(22px,3.2vh,54px);line-height:1;}
+  .sum-win-name{font-family:'Syne',sans-serif;font-weight:800;
+    font-size:clamp(12px,1.4vw,26px);color:#F0E8FF;text-transform:uppercase;
+    letter-spacing:.04em;max-width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sum-win-num{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:clamp(24px,2.8vw,54px);color:#00F5A0;line-height:1;}
+  .sum-win-eq{font-family:'Syne',sans-serif;font-weight:900;
+    font-size:clamp(18px,2.4vw,44px);color:#FFD600;text-align:center;
+    letter-spacing:.02em;z-index:2;}
   .winner-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;
     height:100%;gap:24px;animation:fadeIn .6s ease;}
   .winner-avatar{width:clamp(120px,15vw,200px);height:clamp(120px,15vw,200px);border-radius:50%;
@@ -476,9 +548,18 @@ export function TriviaScreen({ gameState, sessionId }) {
 // Toda la información sale de `sumate_rounds`: el objetivo y, cuando el
 // operador valida, el grupo ganador. Los números de cada persona NO se
 // proyectan mientras la ronda está viva — el juego es encontrarse en el bar,
-// no leer la pantalla.
-export function SumaScreen({ sessionId }) {
-  const { round } = useSumateRound(sessionId, { admin: false, userId: null });
+// no leer la pantalla. Sólo se muestran DESPUÉS, en el grupo ganador, donde ya
+// no hay nada que revelar.
+//
+// Tres estados, y los tres salen del `status` de la ronda. No hay un segundo
+// estado paralelo: si la TV muestra el objetivo es porque la ronda está
+// 'playing' en la base, y punto.
+export function SumaScreen({ sessionId, demoRound = null }) {
+  const { round: roundVivo } = useSumateRound(sessionId, { admin: false, userId: null });
+  // `demoRound` existe sólo para el Diseñador: sin él estas pantallas no se
+  // pueden previsualizar, porque su contenido no está en game_state. En
+  // producción llega siempre null y manda la ronda real.
+  const round = demoRound ?? roundVivo;
 
   if (!round) return (
     <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
@@ -486,73 +567,70 @@ export function SumaScreen({ sessionId }) {
     </div>
   );
 
+  const objetivo = typeof round.target_number === "number" ? round.target_number : null;
+
   // ── Ganador ──
   if (round.status === "finished" && round.winner_group?.length) {
     const grupo = round.winner_group;
     return (
-      <div style={{position:"absolute",inset:0,
-        background:"radial-gradient(ellipse at center,rgba(0,245,160,.14),#08040F 70%)",
-        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2.4vh",
-        padding:"4vh 4vw",overflow:"hidden"}}>
-        <Orbs colors={["rgba(0,245,160,.2)","rgba(255,214,0,.1)","rgba(0,229,255,.08)"]}/>
+      <div className="sum-win">
+        <Orbs colors={["rgba(0,245,160,.22)","rgba(255,214,0,.12)","rgba(0,229,255,.08)"]}/>
         <Confetti/>
-        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
-          fontSize:"clamp(30px,4.6vw,86px)",color:"#00F5A0",textAlign:"center",zIndex:2}}>
-          🏆 ¡SUMARON EXACTO!
-        </div>
-        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:"1.2vw",zIndex:2}}>
+
+        <div className="sum-win-tag">🎉 ¡LO LOGRARON! 🎉</div>
+
+        {/* El objetivo alcanzado manda: es el número que el bar estuvo mirando
+            los últimos minutos, y verlo de nuevo en verde es el remate. */}
+        <div className="sum-win-target">{objetivo ?? "—"}</div>
+
+        <div className="sum-win-row">
           {grupo.map((g) => (
-            <div key={g.user_id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"0.6vh",
-              padding:"1.4vh 1.6vw",borderRadius:"1.4vh",background:"rgba(0,245,160,.1)",
-              border:"2px solid rgba(0,245,160,.45)"}}>
-              <div style={{fontSize:"3.4vh"}}>{g.avatar_emoji || "👤"}</div>
-              <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
-                fontSize:"clamp(13px,1.5vw,26px)",color:"#F0E8FF",textTransform:"uppercase"}}>{g.name}</div>
-              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
-                fontSize:"clamp(24px,2.8vw,52px)",color:"#00F5A0",lineHeight:1}}>{g.assigned_number}</div>
+            <div key={g.user_id} className="sum-win-card">
+              <div className="sum-win-avatar">{g.avatar_emoji || "👤"}</div>
+              <div className="sum-win-name">{g.name}</div>
+              <div className="sum-win-num">{g.assigned_number}</div>
             </div>
           ))}
         </div>
-        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
-          fontSize:"clamp(20px,2.6vw,46px)",color:"#FFD600",zIndex:2}}>
-          {grupo.map((g) => g.assigned_number).join(" + ")} = {round.target_number}
+
+        {/* La cuenta, escrita como la haría alguien en una servilleta. */}
+        <div className="sum-win-eq">
+          {grupo.map((g) => g.assigned_number).join(" + ")} = {objetivo ?? "—"}
         </div>
-        <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
-          fontSize:"clamp(16px,2vw,34px)",color:"#F0E8FF",opacity:.85,zIndex:2}}>
-          🎉 GANADORES 🎉
-        </div>
+      </div>
+    );
+  }
+
+  // ── Ronda cancelada ──
+  // Terminó sin ganador. No se muestra el grupo de una ronda anterior ni se
+  // vuelve sola al logo del bar: Sumate sigue siendo el juego al aire y el
+  // operador puede lanzar otra ronda en cualquier momento. Sin temporizador.
+  if (round.status === "cancelled") {
+    return (
+      <div className="sum-play sum-cancel">
+        <Orbs colors={["rgba(255,149,0,.10)","rgba(168,85,247,.07)","rgba(0,229,255,.05)"]}/>
+        <div className="sum-play-title">🔢 SUMATE QUE SUMAMOS</div>
+        <div className="sum-cancel-t">RONDA FINALIZADA</div>
+        <div className="sum-cancel-rule"/>
+        <div className="sum-cancel-d">Preparando la próxima ronda…</div>
       </div>
     );
   }
 
   // ── Ronda en curso: el objetivo manda la pantalla ──
   return (
-    <div style={{position:"absolute",inset:0,
-      background:"radial-gradient(ellipse at center,rgba(255,149,0,.12),#08040F 70%)",
-      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1.6vh",
-      padding:"4vh 4vw",overflow:"hidden"}}>
+    <div className="sum-play">
       <Orbs colors={["rgba(255,149,0,.18)","rgba(168,85,247,.12)","rgba(0,229,255,.06)"]}/>
-      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
-        fontSize:"clamp(22px,3.4vw,62px)",color:"#FF9500",letterSpacing:".04em",zIndex:2}}>
-        🔢 SUMATE QUE SUMAMOS
-      </div>
-      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
-        fontSize:"clamp(13px,1.6vw,28px)",color:"rgba(240,232,255,.6)",letterSpacing:".08em",zIndex:2}}>
-        ENCONTRÁ A LOS QUE NECESITÁS
-      </div>
-      <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,
-        fontSize:"clamp(14px,1.8vw,32px)",color:"#FFD600",letterSpacing:".1em",marginTop:"1.4vh",zIndex:2}}>
-        SUMEN EXACTAMENTE
-      </div>
-      {/* El objetivo es el elemento dominante de la pantalla. */}
-      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:"min(38vh,34vw)",
-        lineHeight:.92,color:"#FF9500",textShadow:"0 0 60px rgba(255,149,0,.5)",zIndex:2}}>
-        {round.target_number}
-      </div>
-      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
-        fontSize:"clamp(13px,1.5vw,26px)",color:"rgba(240,232,255,.55)",letterSpacing:".05em",zIndex:2}}>
-        MIRÁ TU NÚMERO EN EL CELULAR
-      </div>
+      <div className="sum-play-title">🔢 SUMATE QUE SUMAMOS</div>
+      <div className="sum-play-lbl">OBJETIVO</div>
+      {/* El elemento dominante de la pantalla: tiene que leerse desde el fondo
+          del bar, de reojo y con poca luz. */}
+      <div className="sum-play-target">{objetivo ?? "—"}</div>
+      <div className="sum-play-sub">Busquen personas y sumen sus números.</div>
+      {/* El remate de la consigna: la ronda se resuelve en el escenario, no en
+          la app. Nadie valida nada desde un panel. */}
+      <div className="sum-play-cta">¡Júntense y acérquense al escenario!</div>
+      <div className="sum-play-foot">MIRÁ TU NÚMERO EN EL CELULAR</div>
     </div>
   );
 }
@@ -564,8 +642,12 @@ export function SumaScreen({ sessionId }) {
 // valida, el grupo ganador EN ORDEN. Las letras individuales no se proyectan
 // mientras la ronda vive — el juego es encontrarse en el bar, no leer la
 // pantalla. La palabra es el elemento visual principal.
-export function PalabraScreen({ sessionId }) {
-  const { round } = useArmaPalabraRound(sessionId, { admin: false, userId: null });
+export function PalabraScreen({ sessionId, demoRound = null }) {
+  const { round: roundVivo } = useArmaPalabraRound(sessionId, { admin: false, userId: null });
+  // `demoRound` existe sólo para el Diseñador, igual que en SumaScreen: el
+  // contenido vive en `arma_palabra_rounds`, no en game_state, así que sin esto
+  // la pantalla no se puede previsualizar. En producción llega siempre null.
+  const round = demoRound ?? roundVivo;
 
   if (!round) return (
     <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
@@ -680,6 +762,13 @@ export function PalabraScreen({ sessionId }) {
             color:"#C77DFF", textShadow:"0 0 40px rgba(168,85,247,.7)",
           }}>{l}</div>
         ))}
+      </div>
+      {/* El remate de la consigna: la ronda se resuelve en el escenario, no en
+          la app. Nadie valida nada desde un panel. */}
+      <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,
+        fontSize:"clamp(15px,2vw,36px)",color:"#FFD600",textAlign:"center",zIndex:2,
+        textShadow:"0 0 40px rgba(255,214,0,.3)"}}>
+        ¡Júntense y acérquense al escenario!
       </div>
       <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:600,
         fontSize:"clamp(13px,1.5vw,26px)",color:"rgba(240,232,255,.55)",letterSpacing:".05em",zIndex:2}}>
@@ -1028,11 +1117,39 @@ export default function PantallaGigante() {
     // Rey del Orto / Sorteo cancelado — ?designerState=raffleCancelled
     if (designerState === "raffleCancelled") return { active_game:"rey del orto", raffle_state:"cancelled", raffle_cancel:{ code:"MIN_PARTICIPANTS", connected_count:4, required_count:5 } };
     if (designerState === "trivia") return { active_game:"trivia", trivia_question:"¿Cuál es el mejor bar de Buenos Aires?", bata_pct:58, memb_pct:42 };
+    // Sumate: la ronda NO vive en game_state sino en `sumate_rounds`, así que
+    // acá sólo se monta la capa. La ronda de muestra viaja por `demoRound`
+    // (ver abajo), y es la única forma de previsualizar estas pantallas sin
+    // tener una ronda real abierta en la sesión.
+    if (["suma","sumaWinner","sumaCancelled"].includes(designerState)) return { active_game:"suma" };
+    if (["palabra","palabraStandby"].includes(designerState)) return { active_game:"palabra" };
     if (["duelo","ftl","pt","karaoke"].includes(designerState)) return { active_escenario:designerState, escenario_participant:"PARTICIPANTE", escenario_avatar:"🎤" };
     if (designerState.startsWith("placa:")) return { active_placa:designerState.slice(6) };
     return {};
   })();
   const gameState = designerGameState ?? liveGameState;
+  // Ronda de muestra para el Diseñador. Es lo único que permite previsualizar
+  // las tres pantallas de Sumate sin abrir una ronda de verdad en el bar,
+  // porque su contenido vive en `sumate_rounds` y no en `game_state`.
+  const demoSumaRound = (() => {
+    if (designerState === "suma") return { id:"demo", target_number:23, status:"playing" };
+    if (designerState === "sumaCancelled") return { id:"demo", target_number:23, status:"cancelled", cancel_reason:"manual" };
+    if (designerState === "sumaWinner") return {
+      id:"demo", target_number:23, status:"finished",
+      winner_group:[
+        { user_id:"d1", name:"SOFI",  avatar_emoji:"🦄", assigned_number:9 },
+        { user_id:"d2", name:"MARCE", avatar_emoji:"🍺", assigned_number:7 },
+        { user_id:"d3", name:"JUAN",  avatar_emoji:"🎸", assigned_number:7 },
+      ],
+    };
+    return null;
+  })();
+  // Misma razón que `demoSumaRound`: la palabra vive en `arma_palabra_rounds`.
+  const demoPalabraRound = (() => {
+    if (designerState === "palabra") return { id:"demo", target_word:"AVE", status:"playing" };
+    if (designerState === "palabraStandby") return { id:"demo", target_word:"AVE", status:"cancelled" };
+    return null;
+  })();
   const { approved: messages } = useMessages(session?.id ?? null, "screen");
   const { requests: videoRequests } = useVideoRequests(session?.id ?? null);
   const liveVideo = [...videoRequests]
@@ -1075,9 +1192,9 @@ export default function PantallaGigante() {
   } else if (gameState?.active_game === "trivia") {
     content = <TriviaScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (gameState?.active_game === "suma") {
-    content = <SumaScreen sessionId={session?.id ?? null}/>;
+    content = <SumaScreen sessionId={session?.id ?? null} demoRound={demoSumaRound}/>;
   } else if (gameState?.active_game === "palabra") {
-    content = <PalabraScreen sessionId={session?.id ?? null}/>;
+    content = <PalabraScreen sessionId={session?.id ?? null} demoRound={demoPalabraRound}/>;
   } else if (hasEscenario) {
     content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (liveVideo && !hasGame) {

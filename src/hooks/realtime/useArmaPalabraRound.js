@@ -191,19 +191,20 @@ export function useArmaPalabraRound(sessionId, { admin = false, userId = null } 
     return data;
   }, [sessionId, leerRonda]);
 
-  // El admin manda USUARIOS EN ORDEN, no letras: el servidor lee las letras
-  // reales y reconstruye la palabra respetando ese orden.
-  // Devuelve { ok, formed, target }.
-  const validarGrupo = useCallback(async (userIdsEnOrden) => {
-    if (!roundId) throw new Error("No hay ronda abierta");
-    const { data, error: e } = await supabase
-      .rpc("validate_arma_palabra_group", {
-        p_round_id: roundId, p_user_ids: userIdsEnOrden,
-      });
-    if (e) throw new Error(e.message);
-    await leerRonda();
-    return data;
-  }, [roundId, leerRonda]);
+  // ⚠️ NO HAY `validarGrupo`, y es la decisión central de esta versión.
+  //
+  // Arma la Palabra se resuelve FÍSICAMENTE: la gente se busca en el bar, se
+  // junta y se acerca al escenario, y el staff resuelve ahí. La plataforma no
+  // necesita saber qué personas formaron la palabra, así que el operador no
+  // selecciona a nadie en ningún orden y no hay validación digital del ganador.
+  //
+  // `validate_arma_palabra_group` sigue existiendo en Supabase —no se borró
+  // ninguna RPC— pero quedó SIN CONSUMIDOR en el frontend. Se saca el wrapper
+  // de acá en vez de dejarlo colgando para que nadie lo llame por inercia
+  // creyendo que es parte del flujo.
+  //
+  // Consecuencia: el flujo normal ya no produce `status='finished'`. Una ronda
+  // termina cancelada, que NO es un fracaso: es el cierre operativo normal.
 
   const cancelarRonda = useCallback(async () => {
     if (!roundId) return;
@@ -215,6 +216,6 @@ export function useArmaPalabraRound(sessionId, { admin = false, userId = null } 
 
   return {
     round, assignments, miLetra, loading, error,
-    lanzarRonda, validarGrupo, cancelarRonda, refresh: leerRonda,
+    lanzarRonda, cancelarRonda, refresh: leerRonda,
   };
 }
