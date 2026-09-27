@@ -33,7 +33,7 @@ function GameStandby() {
 
 // ─── Rey del Orto ──────────────────────────────────────────────────────────
 function ReyDelOrto({ user, gameState }) {
-  const { state, cd, color, dark, isStrobe, isWinner } = useRaffle(gameState);
+  const { state, cd, color, dark, isStrobe, isWinner, isCancelled } = useRaffle(gameState);
   const iWon = isWinner && user?.id && gameState?.raffle_winner_id === user.id;
   const prize = gameState?.raffle_prize || null;
 
@@ -51,6 +51,34 @@ function ReyDelOrto({ user, gameState }) {
           fontSize: 12, color: "rgba(255,215,0,.5)", textAlign: "center",
         }}>
           ⏳ Esperá que el staff lance el sorteo...
+        </div>
+      )}
+
+      {/* Ronda cancelada: el sorteo arrancó y el servidor rechazó la resolución
+          definitiva. Sin esta rama la tarjeta quedaba vacía —`state` no es
+          'idle', ni strobe, ni 'winner'— y el cliente veía sólo el título.
+
+          Acá NO va el motivo. El "por qué" (cuánta gente había, qué mínimo
+          estaba configurado, si las reglas dejaban participar) es información
+          OPERATIVA: le sirve al staff en el Admin para arreglarlo, y en el
+          celular del cliente sólo sonaría a excusa. Tampoco va el código
+          interno, ni el ganador de la ronda anterior — el bloque de ganador
+          está atado a `isWinner`, así que en 'cancelled' no puede aparecer. */}
+      {isCancelled && (
+        <div style={{
+          padding: "16px 14px", borderRadius: 12, textAlign: "center",
+          background: "rgba(255,215,0,.06)", border: "1px solid rgba(255,215,0,.16)",
+        }}>
+          <div style={{ fontSize: 30, marginBottom: 8 }}>👑</div>
+          <div style={{
+            fontFamily: "Syne, sans-serif", fontSize: 15, fontWeight: 900,
+            color: "#FCD34D", marginBottom: 6,
+          }}>
+            El sorteo fue cancelado.
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(245,230,192,.4)", lineHeight: 1.5 }}>
+            Esperá al próximo lanzamiento.
+          </div>
         </div>
       )}
 

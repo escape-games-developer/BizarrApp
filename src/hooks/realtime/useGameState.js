@@ -243,10 +243,29 @@ export function useAdminControls(sessionId) {
       // colgado el ganador de la ronda anterior.
       raffle_winner_id:   null,
       raffle_winner_name: null,
+      // Motivo de la cancelación anterior: se limpia al lanzar. Si no, el
+      // "SORTEO CANCELADO" de la ronda que se acaba de reintentar seguiría
+      // colgado en la base durante la ronda nueva.
+      raffle_cancel:      null,
       raffle_prize:       prize?.trim() || "Consumición libre para dos",
       minijuego_payload:  { ...base, raffle: { exclude_previous: !!excludePrevious } },
     });
   }, [update, dismissActiveVideo]);
+
+  // ⚠️ NO EXISTE un `cancelRaffle` en el frontend, y es a propósito.
+  //
+  // La cancelación del fallo tardío la hace `rey_resolver_sorteo` dentro de la
+  // MISMA transacción en la que rechaza la resolución, con la fila de
+  // game_state bloqueada, delegando en `rey_cancelar_ronda(session_id, cancel)`.
+  // Ese es el único lugar donde una ronda pasa de 'launched' a 'cancelled'.
+  //
+  // Hubo una versión de este hook con un UPDATE de contención acá, como red por
+  // si el rechazo llegaba sin la marca `cancelled`. Se eliminó: era una SEGUNDA
+  // autoridad escribiendo el mismo estado, con su propia forma de
+  // `raffle_cancel` y sin las guardas de la RPC. Si el Admin recibe un rechazo
+  // cancelable que dice que la ronda sigue lanzada, vuelve a PREGUNTAR —la RPC
+  // es idempotente— en vez de escribir por su cuenta. Ver `resolverSorteo` en
+  // ReyPanel.
 
   // ── Llamada cruda a launch-raffle ─────────────────────────────────────────
   // React → Edge Function → RPC `rey_resolver_sorteo`. La RPC NUNCA se llama
@@ -290,6 +309,13 @@ export function useAdminControls(sessionId) {
           connected_count: body?.connected_count,
           eligible_count:  body?.eligible_count,
           required_count:  body?.required_count,
+          // `cancelled` = la ronda YA quedó en 'cancelled'. La Edge lo deriva
+          // de `cancelled || already_cancelled`, porque el contrato de la RPC
+          // devuelve `cancelled:false` cuando la ronda ya venía cancelada.
+          cancelled:         body?.cancelled === true,
+          already_cancelled: body?.already_cancelled === true,
+          // Motivo estructurado completo (lo mismo que game_state.raffle_cancel).
+          cancel:            body?.cancel ?? null,
         };
       }
       return { ok: true, ...body };
@@ -331,6 +357,9 @@ export function useAdminControls(sessionId) {
       return {
         error:           r.error,
         code:            r.code,
+        cancelled:         r.cancelled,
+        already_cancelled: r.already_cancelled,
+        cancel:            r.cancel,
         connected_count: r.connected_count,
         eligible_count:  r.eligible_count,
         required_count:  r.required_count,
@@ -362,6 +391,7 @@ export function useAdminControls(sessionId) {
       raffle_state:       "idle",
       raffle_winner_id:   null,
       raffle_winner_name: null,
+      raffle_cancel:      null,
       active_game:        null,
       active_placa:       null,
       placa_custom:       null,
@@ -378,6 +408,7 @@ export function useAdminControls(sessionId) {
       raffle_state:       "idle",
       raffle_winner_id:   null,
       raffle_winner_name: null,
+      raffle_cancel:      null,
       active_game:        "rey del orto",
       active_placa:       null,
       placa_custom:       null,
@@ -798,7 +829,8 @@ export function useAdminControls(sessionId) {
   // ── Return — SIN gameState (ese lo da useGameState) ───────────────────────
   return {
     announceGame, activateGame, deactivateGame,
-    launchRaffle, validateRaffle, drawRaffleWinner, resetRaffle, nuevaRondaRaffle,
+    launchRaffle, validateRaffle, drawRaffleWinner,
+    resetRaffle, nuevaRondaRaffle,
     startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia, newTriviaRound,
     activateEscenario, deactivateEscenario,
     startDuelo, revealDuelo,

@@ -42,6 +42,10 @@ export const CAMPOS_NEUTROS_JORNADA = Object.freeze({
   raffle_state:          "idle",
   raffle_winner_id:      null,
   raffle_winner_name:    null,
+  // Motivo de la última ronda cancelada: es de UNA ronda, no configuración de
+  // la casa. Sin limpiarlo, la jornada nueva arrancaría arrastrando el
+  // "SORTEO CANCELADO" de anoche en la base.
+  raffle_cancel:         null,
   // Desafío Demente
   trivia_state:          "idle",
   trivia_question:       0,

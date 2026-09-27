@@ -1478,33 +1478,99 @@ const reyActivo = (c) =>
 // esa marca es legacy, Rey del Orto V1 ya no la lee.
 const reyPresentes = (rows) => (rows || []).filter(reyActivo);
 
+// ── Los dos desenlaces posibles de un rechazo del backend ──────────────────
+//
+// Esta clasificación es el corazón del manejo del FALLO TARDÍO. El dry-run
+// valida antes de encender el estroboscópico, pero diez segundos después la
+// resolución definitiva vuelve a validar y puede rechazar. Lo que el panel hace
+// con ese rechazo depende de UNA sola pregunta: ¿sabemos con certeza que no se
+// eligió ningún ganador?
+//
+// SEGURO — sí, con certeza. La transacción rechazó antes de elegir. Se cancela
+// la ronda (o se confirma que el backend ya la canceló), se apaga el
+// estroboscópico y el operador puede reintentar.
+const CODIGOS_CANCELABLES = new Set([
+  "MIN_PARTICIPANTS",
+  "NO_ELIGIBLE_PARTICIPANTS",
+  "RAFFLE_CONFIG_INCOMPLETE",
+  "INVALID_PRIZE",
+]);
+
+// INCIERTO — no sabemos. Un 500, un timeout o una conexión cortada pueden
+// significar que el backend SÍ eligió ganador y la respuesta se perdió. Mutar
+// acá sería destructivo: borraría un ganador real. No se toca nada; se avisa y
+// se ofrece VERIFICAR (volver a pedir la resolución, que es idempotente:
+// `rey_resolver_sorteo` devuelve el mismo ganador con `already_drawn`, o el
+// mismo motivo con `already_cancelled`).
+//
+// RAFFLE_CONFLICT entra acá no por ignorancia sino por lo contrario: la ronda ya
+// la resolvió otra transacción, y pisarla borraría su resultado.
+const CODIGOS_INCIERTOS = new Set([
+  "INTERNAL_ERROR",
+  "NETWORK_ERROR",
+  "UNAUTHORIZED",
+  "RAFFLE_CONFLICT",
+]);
+
+// Los demás códigos (ROUND_NOT_LAUNCHED, ROUND_NOT_FOUND, INVALID_REQUEST) no
+// son ninguna de las dos cosas: no hay ronda lanzada, así que no hay ni ganador
+// que proteger ni estroboscópico que apagar. Se informan y nada más.
+
 /**
- * Traduce la respuesta de error de `launch-raffle` v7 a algo que el operador
- * pueda leer y actuar. Los números salen SIEMPRE del backend: el mínimo es
+ * Traduce la respuesta de error de `launch-raffle` a algo que el operador pueda
+ * leer y actuar. Los números salen SIEMPRE del backend: el mínimo es
  * configurable desde el panel, así que hardcodearlo sería mentir.
+ *
+ * `cancelado` cambia el encabezado, no el motivo: el MISMO código significa
+ * "no se puede lanzar" cuando lo dice el dry-run (todavía no pasó nada) y
+ * "sorteo cancelado" cuando lo dice la resolución definitiva (el bar ya vio
+ * diez segundos de estroboscópico). Mezclarlos dejaba al operador sin saber si
+ * la ronda arrancó.
+ *
+ * `previo` distingue el otro par que no se puede confundir: un error de red en
+ * el DRY-RUN no tiene nada de incierto (no se abrió ronda, no hay ganador
+ * posible), mientras que el mismo error en la resolución sí. Decirle "no se
+ * pudo confirmar el resultado" antes de lanzar sería un susto inventado.
  *
  * `r.error` ya viene en castellano desde la Edge Function; se usa de respaldo
  * para los códigos que no tienen un texto propio acá. Nunca se muestra SQL,
  * stack trace ni el código interno.
  */
-const mensajeErrorSorteo = (r) => {
-  const conectados = r?.connected_count;
-  const minimo     = r?.required_count;
+const mensajeErrorSorteo = (r, { cancelado = false, previo = false } = {}) => {
+  // Los contadores se usan SÓLO si el backend los mandó de verdad. Un `?? 0`
+  // acá le diría al operador "quedaron 0 conectados" cuando lo que pasó es que
+  // no vino el dato — y 0 es un número que él puede ir a verificar al bar. Si
+  // falta, la frase se dice sin números.
+  const conectados = typeof r?.connected_count === "number" ? r.connected_count : null;
+  const minimo     = typeof r?.required_count  === "number" ? r.required_count  : null;
+  const cabeza     = cancelado ? "⚠️ Sorteo cancelado." : "⚠️ No se puede lanzar el sorteo.";
   switch (r?.code) {
     case "MIN_PARTICIPANTS":
-      return `⚠️ No se puede lanzar el sorteo. Hay ${conectados ?? 0} participantes conectados y el mínimo configurado es ${minimo ?? "—"}.`;
+      if (conectados === null || minimo === null) {
+        return cancelado
+          ? "⚠️ El sorteo se canceló porque no había suficientes participantes conectados."
+          : `${cabeza} No hay suficientes participantes conectados.`;
+      }
+      return cancelado
+        ? `⚠️ El sorteo se canceló porque quedaron ${conectados} participantes conectados y se requieren ${minimo}.`
+        : `${cabeza} Hay ${conectados} participantes conectados y el mínimo configurado es ${minimo}.`;
     case "NO_ELIGIBLE_PARTICIPANTS":
-      return typeof conectados === "number"
+      if (cancelado) {
+        return conectados !== null
+          ? `⚠️ El sorteo se canceló porque de los ${conectados} participantes conectados ninguno puede participar según las reglas actuales.`
+          : "⚠️ El sorteo se canceló porque no quedó ningún participante que pueda participar según las reglas actuales.";
+      }
+      return conectados !== null
         ? `⚠️ No hay participantes elegibles para este sorteo. Hay ${conectados} participantes conectados, pero ninguno puede participar según las reglas actuales.`
         : "⚠️ No hay participantes elegibles para este sorteo.";
     case "RAFFLE_CONFIG_INCOMPLETE":
-      return "⚠️ La configuración de Rey del Orto está incompleta. Revisá Configuración de reglas.";
+      return `${cabeza} La configuración de Rey del Orto está incompleta. Revisá Configuración de reglas.`;
     case "ROUND_NOT_LAUNCHED":
       return "⚠️ La ronda no está abierta. Volvé a lanzar el sorteo.";
     case "ROUND_NOT_FOUND":
       return "⚠️ No existe una ronda para esta sesión.";
     case "INVALID_PRIZE":
-      return "⚠️ El premio no es válido. Elegí uno de la biblioteca.";
+      return `${cabeza} El premio no es válido. Elegí uno de la biblioteca.`;
     case "INVALID_REQUEST":
       return "⚠️ No pudimos armar el pedido al servidor. Recargá el panel.";
     case "RAFFLE_CONFLICT":
@@ -1512,11 +1578,39 @@ const mensajeErrorSorteo = (r) => {
     case "UNAUTHORIZED":
       return r?.error || "⚠️ Tu sesión venció. Volvé a entrar al Admin.";
     case "NETWORK_ERROR":
-      return "⚠️ No se pudo contactar al servidor. Revisá la conexión.";
+    case "INTERNAL_ERROR":
+      // En el dry-run no hay nada que confirmar: la ronda no se abrió.
+      if (previo) {
+        return "⚠️ No se pudo validar el sorteo con el servidor. No se lanzó nada — revisá la conexión e intentá de nuevo.";
+      }
+      // En la resolución, mensaje explícito de INCERTIDUMBRE. No dice "falló":
+      // dice que no sabemos, y le prohíbe relanzar antes de verificar.
+      // Relanzar sobre una ronda que el backend resolvió en silencio sortearía
+      // dos veces el mismo premio.
+      return "⚠️ No se pudo confirmar el resultado del sorteo. No vuelvas a lanzar hasta verificar el estado.";
     default:
+      // Código desconocido (uno nuevo del backend, o un motivo guardado con
+      // otra forma): la ronda igual está cancelada y hay que decirlo así, no
+      // con un "no se pudo resolver" que suena a que sigue en curso.
+      if (cancelado) return r?.error || "⚠️ El sorteo se canceló.";
       return r?.error || "⚠️ No se pudo resolver el sorteo.";
   }
 };
+
+/**
+ * Motivo de una ronda YA cancelada, leído de `game_state.raffle_cancel`.
+ *
+ * La fuente es la base, no la respuesta del fetch: así el motivo sobrevive a un
+ * F5 del panel y aparece igual en la máquina de otro operador que abra el Admin
+ * después. `mensajeErrorSorteo` se reusa tal cual — un solo texto por código.
+ */
+const mensajeCancelacion = (cancel) =>
+  mensajeErrorSorteo({
+    code:            cancel?.code,
+    connected_count: cancel?.connected_count,
+    eligible_count:  cancel?.eligible_count,
+    required_count:  cancel?.required_count,
+  }, { cancelado: true });
 
 function ReyPanel({sec, controls, sessionId, gameState}){
   // 🎟️ Biblioteca: la fuente de verdad es `rey_premios_biblioteca` en Supabase.
@@ -1595,16 +1689,45 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   // (llegan en `reglas` pero ninguna fila de abajo las busca).
   const reglasFaltantes = REGLAS_CONOCIDAS.filter((k) => !reglaPorKey(k));
 
-  // Guarda contra doble sorteo: marca la ronda ya resuelta por ESTE panel.
-  const drawnRef = useRef(null);
+  // ── Dos guardas distintas contra la doble resolución ──────────────────────
+  // `drawnRef`     — qué RONDA ya resolvió este panel (clave = updated_at de la
+  //                  largada). Evita que el timer vuelva a pedir el sorteo de
+  //                  una ronda que ya se pidió.
+  // `resolvingRef` — si hay una resolución EN VUELO ahora mismo. Es la que
+  //                  faltaba: `drawnRef` se marca antes del await, pero el
+  //                  botón manual no lo miraba, así que un click en medio de la
+  //                  resolución del timer disparaba una segunda llamada.
+  //
+  // Son la primera línea. La última es el backend: `rey_resolver_sorteo`
+  // bloquea la fila (FOR UPDATE) y publica con `WHERE raffle_state='launched'`,
+  // así que ni dos pestañas ni dos operadores pueden producir dos ganadores.
+  const drawnRef     = useRef(null);
+  const resolvingRef = useRef(false);
+
+  // Resultado INCIERTO: la última resolución no se pudo confirmar (500, red).
+  // Bloquea el camino normal y ofrece VERIFICAR en vez de relanzar.
+  const [resultadoIncierto, setResultadoIncierto] = useState(false);
+  // Resolución en vuelo, para la UI. Espejo visible de `resolvingRef`: el ref es
+  // la guarda (síncrono, sin esperar un render) y este estado es el cartel.
+  // Deliberadamente NO se usa `busy`: `busy` lo comparten los botones de la
+  // biblioteca, y el timer puede resolver mientras el operador está editando un
+  // premio — apagarlo al terminar la resolución le habilitaría botones que la
+  // otra acción había bloqueado.
+  const [resolviendo, setResolviendo] = useState(false);
+  // Ganador RECUPERADO por una re-consulta (`already_drawn`): la ronda ya estaba
+  // resuelta y el panel no lo sabía. Se muestra en el acto en vez de esperar
+  // que Realtime traiga la fila.
+  const [resultadoRecuperado, setResultadoRecuperado] = useState(null);
 
   // Toda la fase sale de game_state — nada de estado local de fase. Un refresh
-  // del admin en cualquier punto del sorteo cae parado en la misma pantalla.
+  // del admin en cualquier punto del sorteo cae parado en la misma pantalla,
+  // incluida la cancelación: el motivo está en la base, no en esta memoria.
   const isRey      = gameState?.active_game === "rey del orto";
   const phase      = isRey ? (gameState?.raffle_state ?? "idle") : "idle";
   const announcing = !isRey && gameState?.active_placa === "game_rey";
   const livePrize  = gameState?.raffle_prize ?? "";
   const winnerName = gameState?.raffle_winner_name ?? null;
+  const cancelInfo = gameState?.raffle_cancel ?? null;
   const { cd } = useRaffle(gameState);   // la misma cuenta regresiva que ven cliente y TV
 
   // Lista de conectados, SÓLO informativa. Ya no se pide `excluded_raffle`:
@@ -1636,25 +1759,139 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   const controlsRef = useRef(controls);
   useEffect(() => { controlsRef.current = controls; });
 
+  // Misma razón que `controlsRef`: el estroboscópico re-renderiza cada 130ms y
+  // `resolverSorteo` tiene que ser estable para no re-armar el timer.
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; });
+
+  /**
+   * RESOLUCIÓN DEFINITIVA — un solo camino para el timer y para el botón.
+   *
+   * Antes esto estaba duplicado: el efecto del timer y `drawNow` hacían la misma
+   * llamada con manejos de error distintos, así que el fallo tardío se podía
+   * comportar de dos maneras según quién lo hubiera disparado. Ahora los dos
+   * entran acá y por eso no pueden divergir.
+   *
+   * El backend vuelve a validar TODO: el dry-run de hace 10 segundos no
+   * garantiza nada. Se pueden haber ido participantes y salir MIN_PARTICIPANTS
+   * o NO_ELIGIBLE_PARTICIPANTS ahora mismo. Eso es correcto, y lo que hay que
+   * hacer con ese rechazo es lo que decide `CODIGOS_CANCELABLES` /
+   * `CODIGOS_INCIERTOS` (ver arriba).
+   *
+   * `forzar` lo usa sólo el botón de VERIFICAR: saltea `drawnRef` para poder
+   * volver a preguntar por una ronda cuya respuesta no llegó. Es seguro porque
+   * la RPC es idempotente (`already_drawn` / `already_cancelled`).
+   *
+   * El ganador NO se elige acá ni en ningún lado del frontend: esta función
+   * pide, lee y muestra.
+   */
+  const resolverSorteo = useCallback(async ({ forzar = false } = {}) => {
+    const gs   = gameStateRef.current;
+    const key  = gs?.updated_at ?? "";
+    if (resolvingRef.current) return;                       // ya hay una en vuelo
+    if (!forzar && drawnRef.current === key) return;        // esta ronda ya se pidió
+    resolvingRef.current = true;
+    drawnRef.current = key;
+    setResolviendo(true); setActionError(null);
+    try {
+      const pedir = () => controlsRef.current?.drawRaffleWinner({ prize: gs?.raffle_prize });
+      let res = await pedir();
+
+      // ── UNA re-consulta, dos motivos, siempre segura ─────────────────────
+      // `rey_resolver_sorteo` es idempotente, así que volver a preguntar nunca
+      // produce un segundo ganador ni una segunda cancelación. Y preguntar es
+      // lo ÚNICO que el panel puede hacer: escribir estado por su cuenta sería
+      // una segunda autoridad sobre game_state.
+      //
+      // 1) RAFFLE_CONFLICT — otra resolución ganó la carrera.
+      // 2) Un código cancelable que dice que la ronda sigue lanzada: no hay que
+      //    cancelarla desde acá, hay que pedirle al backend que la resuelva (y
+      //    la va a cancelar transaccionalmente, como corresponde).
+      //
+      // La segunda respuesta cae sola en el lugar correcto de la clasificación:
+      //   · resuelta por el otro  → ok + already_drawn (mismo ganador)
+      //   · cancelada por el otro → rechazo original + already_cancelled
+      //   · todavía lanzada       → la resuelve/cancela ahora (el lock de la
+      //     RPC hace que esto sea un reintento controlado, no una carrera)
+      //   · vuelve a chocar       → incierto, con VERIFICAR a mano
+      const necesitaReconsulta = (x) => !!x?.error && (
+        x.code === "RAFFLE_CONFLICT" ||
+        (CODIGOS_CANCELABLES.has(x.code) && x.cancelled !== true)
+      );
+      if (necesitaReconsulta(res)) res = await pedir();
+
+      // Camino exitoso — intacto. El ganador lo publica el backend en
+      // game_state y llega por Realtime; la fase 'winner' lo pinta. Acá no se
+      // escribe nada.
+      //
+      // `already_drawn` es el reencuentro con un ganador que ya existía y cuya
+      // respuesta se había perdido: se muestra en el acto, sin esperar el
+      // rebote de Realtime, así el operador que apretó VERIFICAR obtiene la
+      // respuesta que fue a buscar.
+      if (!res?.error) {
+        setResultadoIncierto(false);
+        setResultadoRecuperado(
+          res?.already_drawn
+            ? { name: res?.winner?.name ?? null, prize: res?.prize ?? null }
+            : null,
+        );
+        return;
+      }
+
+      const code = res.code;
+
+      // INCIERTO: puede haber ganador y no saberlo. No se muta NADA.
+      if (CODIGOS_INCIERTOS.has(code)) {
+        setResultadoIncierto(true);
+        setActionError(mensajeErrorSorteo(res));
+        return;
+      }
+
+      // SEGURO: no hay ganador ni lo va a haber, y el backend YA dejó la ronda
+      // en 'cancelled' (por eso se apagó el estroboscópico). El panel sólo
+      // informa: el motivo durable vive en `game_state.raffle_cancel` y lo
+      // vuelve a pintar la card de la fase 'cancelled' incluso después de un
+      // F5. Acá no se escribe nada en la base.
+      if (CODIGOS_CANCELABLES.has(code)) {
+        setResultadoIncierto(false);
+        setActionError(mensajeErrorSorteo(res, { cancelado: true }));
+        return;
+      }
+
+      // Ni una cosa ni la otra (ROUND_NOT_LAUNCHED, ROUND_NOT_FOUND,
+      // INVALID_REQUEST): no hay ronda lanzada, así que no hay estroboscópico
+      // que apagar ni ganador que proteger. Se informa y listo.
+      setResultadoIncierto(false);
+      setActionError(mensajeErrorSorteo(res));
+    } finally {
+      resolvingRef.current = false;
+      setResolviendo(false);
+    }
+  }, []);
+
   // El servidor resuelve el sorteo cuando termina la cuenta regresiva. El
   // disparo se ancla en updated_at, así que si el admin refresca en mitad del
   // estroboscópico el panel retoma el sorteo en vez de dejar la ronda colgada.
-  const roundKey  = gameState?.updated_at ?? "";
-  const roundPriz = gameState?.raffle_prize;
+  const roundKey = gameState?.updated_at ?? "";
   useEffect(() => {
     if (phase !== "launched" || !sessionId) return undefined;
     if (drawnRef.current === roundKey) return undefined;
-    const t = setTimeout(async () => {
-      if (drawnRef.current === roundKey) return;
-      drawnRef.current = roundKey;
-      // Resolución definitiva: el backend vuelve a validar TODO. El dry-run de
-      // hace 10 segundos no garantiza nada — puede haberse ido gente y salir
-      // MIN_PARTICIPANTS o NO_ELIGIBLE_PARTICIPANTS ahora. Eso es correcto.
-      const res = await controlsRef.current?.drawRaffleWinner({ prize: roundPriz });
-      if (res?.error) { setActionError(mensajeErrorSorteo(res)); drawnRef.current = null; }
-    }, raffleCountdown(roundKey) * 1000);
+    const t = setTimeout(() => { resolverSorteo(); }, raffleCountdown(roundKey) * 1000);
     return () => clearTimeout(t);
-  }, [phase, sessionId, roundKey, roundPriz]);
+  }, [phase, sessionId, roundKey, resolverSorteo]);
+
+  // Cuando la ronda llega a un desenlace, el error del fetch deja de hacer
+  // falta: el motivo de la cancelación lo cuenta la card leyéndolo de la BASE
+  // (sobrevive al F5 y lo ve cualquier operador), y el ganador se explica solo.
+  useEffect(() => {
+    if (phase === "cancelled" || phase === "winner") {
+      setActionError(null);
+      setResultadoIncierto(false);
+      // La fase 'winner' ya muestra el ganador con todo: el cartelito de
+      // recuperación deja de tener sentido cuando llegó la fila de verdad.
+      setResultadoRecuperado(null);
+    }
+  }, [phase]);
 
   // ── Biblioteca de premios ─────────────────────────────────────────────────
   // El premio elegido se DERIVA de `premios` por id, no se guarda una copia:
@@ -1725,7 +1962,15 @@ function ReyPanel({sec, controls, sessionId, gameState}){
 
   const launch = async () => {
     if (busy || !sessionId) return;
+    // Con un resultado sin confirmar NO se relanza: si el backend había elegido
+    // ganador y no nos enteramos, una ronda nueva sortearía dos veces el mismo
+    // premio. Primero VERIFICAR.
+    if (resultadoIncierto) {
+      setActionError("⚠️ No se pudo confirmar el resultado del sorteo anterior. Verificá el estado antes de volver a lanzar.");
+      return;
+    }
     setBusy(true); setValidando(true); setActionError(null); drawnRef.current = null;
+    setResultadoRecuperado(null);
 
     // ── 1) DRY-RUN — la validación pasa ANTES de tocar game_state ───────────
     // El backend es la única autoridad: chequea configuración, presencia,
@@ -1733,38 +1978,50 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     // replica ni una regla, y ya no hay ningún conteo local que pueda
     // contradecirlo. Si falla, no se abre ronda, no hay estroboscópico, no
     // arranca el timer y la pantalla gigante no se entera de nada.
-    const chequeo = await controls?.validateRaffle({ prize: premioElegido?.nombre });
-    if (!chequeo?.ok) {
-      setActionError(mensajeErrorSorteo(chequeo));
-      setValidando(false); setBusy(false);
-      // Refresca la lista para que el número de conectados acompañe al error.
-      loadCandidates();
-      return;
+    // `finally`: ni "VALIDANDO…" ni `busy` pueden quedar pegados. Sin esto, un
+    // rechazo o una excepción en cualquiera de los dos pasos dejaba el panel
+    // con el botón gris y el cartel de validación puestos para siempre, y el
+    // operador tenía que recargar para volver a intentar.
+    try {
+      const chequeo = await controls?.validateRaffle({ prize: premioElegido?.nombre });
+      if (!chequeo?.ok) {
+        setActionError(mensajeErrorSorteo(chequeo, { previo: true }));
+        // Refresca la lista para que el número de conectados acompañe al error.
+        loadCandidates();
+        return;
+      }
+      setValidando(false);
+
+      // ── 2) Recién ahora se abre la ronda ──────────────────────────────────
+      // El premio viaja como TEXTO COPIADO del nombre de la biblioteca: a
+      // partir de acá `game_state.raffle_prize` es el snapshot de esta ronda y
+      // ya no depende de la fila de `rey_premios_biblioteca` (editarla o
+      // borrarla después no cambia el sorteo que se jugó).
+      //
+      // `launchRaffle` deja `raffle_cancel = NULL` en el mismo UPDATE: la ronda
+      // nueva no arranca arrastrando el motivo de la cancelación anterior.
+      //
+      // El segundo argumento es la compatibilidad muerta de `exclude_previous`
+      // (ver useGameState): se manda `false` fijo y nadie lo lee.
+      const r = await controls?.launchRaffle(
+        premioElegido?.nombre || livePrize, false, gameState?.minijuego_payload,
+      );
+      if (r?.error) setActionError("No se pudo lanzar el sorteo.");
+    } finally {
+      setValidando(false);
+      setBusy(false);
     }
-    setValidando(false);
-
-    // ── 2) Recién ahora se abre la ronda ────────────────────────────────────
-    // El premio viaja como TEXTO COPIADO del nombre de la biblioteca: a partir
-    // de acá `game_state.raffle_prize` es el snapshot de esta ronda y ya no
-    // depende de la fila de `rey_premios_biblioteca` (editarla o borrarla
-    // después no cambia el sorteo que se jugó).
-    //
-    // El segundo argumento es la compatibilidad muerta de `exclude_previous`
-    // (ver useGameState): se manda `false` fijo y nadie lo lee.
-    const r = await controls?.launchRaffle(
-      premioElegido?.nombre || livePrize, false, gameState?.minijuego_payload,
-    );
-    if (r?.error) setActionError("No se pudo lanzar el sorteo.");
-    setBusy(false);
   };
 
-  const drawNow = async () => {
-    if (busy) return; setBusy(true); setActionError(null);
-    drawnRef.current = gameState?.updated_at ?? "";
-    const res = await controls?.drawRaffleWinner({ prize: gameState?.raffle_prize });
-    if (res?.error) { setActionError(mensajeErrorSorteo(res)); drawnRef.current = null; }
-    setBusy(false);
-  };
+  // "🏆 Elegir ganador ahora" — EXACTAMENTE el mismo camino que el timer, con el
+  // mismo manejo del fallo tardío. Ya no hay una segunda implementación que
+  // pueda quedar trabada donde la otra cancela bien.
+  const drawNow   = () => resolverSorteo();
+  // "🔄 Verificar resultado" — sólo después de un resultado incierto. Vuelve a
+  // preguntarle al backend, que es idempotente: si había ganador lo devuelve
+  // (`already_drawn`), si la ronda estaba cancelada devuelve su motivo
+  // (`already_cancelled`), y si seguía lanzada la resuelve ahora.
+  const verificar = () => resolverSorteo({ forzar: true });
 
   // ── Las DOS salidas del juego, que no son la misma cosa ────────────────────
   // · nuevaRonda    → sigue en Rey del Orto, listo para sortear de nuevo.
@@ -1776,6 +2033,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   // panel y la de /tv cambian cuando cambia la fila.
   const nuevaRonda = async () => {
     if (busy) return; setBusy(true); setActionError(null); drawnRef.current = null;
+    setResultadoIncierto(false); setResultadoRecuperado(null);
     const r = await controls?.nuevaRondaRaffle();
     if (r?.error) setActionError("No se pudo preparar la ronda nueva.");
     setBusy(false);
@@ -1783,6 +2041,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
 
   const finalizarJuego = async () => {
     if (busy) return; setBusy(true); setActionError(null); drawnRef.current = null;
+    setResultadoIncierto(false); setResultadoRecuperado(null);
     const r = await controls?.resetRaffle();
     // Sólo se canta éxito si el UPDATE salió bien. Si falló, el estado queda
     // como estaba y el mismo botón reintenta.
@@ -2242,15 +2501,123 @@ function ReyPanel({sec, controls, sessionId, gameState}){
               {cd>0 ? "Estroboscópico en pantalla…" : "Pidiendo ganador al servidor…"}
             </div>
           </div>
-          <button className="btn btn-p btn-full" style={{marginTop:10}} onClick={drawNow} disabled={busy}>
-            🏆 Elegir ganador ahora
-          </button>
+          {/* Ganador RECUPERADO por la re-consulta: la ronda ya estaba resuelta
+              en el backend. Se muestra acá mismo para que el operador que
+              apretó VERIFICAR tenga la respuesta sin esperar a Realtime; en
+              cuanto llega la fila, la fase pasa a 'winner' y esto desaparece. */}
+          {resultadoRecuperado && (
+            <div style={{padding:"10px 12px",marginTop:10,borderRadius:10,fontSize:11,lineHeight:1.55,
+              background:"rgba(0,245,160,.08)",border:"1px solid rgba(0,245,160,.3)",color:"#86EFAC"}}>
+              ✅ Esta ronda ya estaba resuelta. Ganador:{" "}
+              <strong>{resultadoRecuperado.name || "—"}</strong>
+              {resultadoRecuperado.prize ? ` · Premio: ${resultadoRecuperado.prize}` : ""}.
+              No se sorteó de nuevo.
+            </div>
+          )}
+
+          {/* Resultado INCIERTO: la resolución no se pudo confirmar. No se
+              cancela la ronda (podría haber ganador) y no se ofrece relanzar:
+              lo único correcto acá es volver a preguntar. */}
+          {resultadoIncierto ? (
+            <>
+              <div style={{padding:"10px 12px",marginTop:10,borderRadius:10,fontSize:10.5,lineHeight:1.55,
+                background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.3)",color:"#FDE68A"}}>
+                No sabemos si el servidor alcanzó a elegir ganador. No relances:
+                verificá primero. Preguntar de nuevo es seguro — si había
+                ganador, es el mismo.
+              </div>
+              <button className="btn btn-p btn-full" style={{marginTop:7}} onClick={verificar}
+                disabled={busy||resolviendo}>
+                {resolviendo ? "⏳ VERIFICANDO…" : "🔄 Verificar resultado del sorteo"}
+              </button>
+            </>
+          ) : (
+            // Mismo `resolverSorteo` que el timer. `resolviendo` lo deshabilita
+            // mientras hay una resolución en vuelo — el doble click no pasa ni
+            // hasta la guarda del ref.
+            <button className="btn btn-p btn-full" style={{marginTop:10}} onClick={drawNow}
+              disabled={busy||resolviendo}>
+              {resolviendo ? "⏳ PIDIENDO GANADOR…" : "🏆 Elegir ganador ahora"}
+            </button>
+          )}
           {/* Salida de emergencia con el sorteo lanzado y todavía sin ganador
               (estroboscópico o esperando al servidor). Misma limpieza segura
               que el cierre normal. */}
           <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={finalizarJuego} disabled={busy}>
             ⏹ Cancelar juego y volver a DJ Democracy
           </button>
+        </div>
+      )}
+
+      {/* ── FALLO TARDÍO · ronda cancelada ───────────────────────────────────
+          El sorteo arrancó y el backend rechazó la resolución definitiva. NO hay
+          ganador, el estroboscópico ya se apagó solo (la fase salió de
+          'launched') y la Pantalla Gigante muestra "SORTEO CANCELADO".
+
+          El layout es el de preparación a propósito: lo único que el operador
+          quiere acá es ARREGLAR y REINTENTAR. Tiene a mano el motivo real con
+          los números del backend, la lista de conectados con su ↻, la
+          biblioteca de premios y la configuración de reglas — todo sin F5, sin
+          salir del módulo y sin finalizar el juego. */}
+      {phase==="cancelled"&&(
+        <div className="rey-split">
+          <div>
+            <div className="card" style={{borderColor:"rgba(255,214,0,.35)"}}>
+              <div style={{textAlign:"center",padding:"4px 0 10px"}}>
+                <div style={{fontSize:34,marginBottom:6}}>👑</div>
+                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:19,color:"#FFD600",
+                  textTransform:"uppercase",letterSpacing:.5}}>
+                  Sorteo cancelado
+                </div>
+                <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginTop:4}}>
+                  Sin ganador. La ronda no se jugó.
+                </div>
+              </div>
+
+              {/* El motivo sale de `game_state.raffle_cancel`, no de la respuesta
+                  del fetch: sobrevive al F5 y lo ve igual otro operador. */}
+              <div style={{padding:"11px 12px",borderRadius:10,fontSize:11.5,lineHeight:1.55,
+                background:"rgba(255,214,0,.07)",border:"1px solid rgba(255,214,0,.22)",color:"#FDE68A"}}>
+                {mensajeCancelacion(cancelInfo)}
+              </div>
+
+              {/* El premio NO se consumió: sigue seleccionado y listo para el
+                  reintento. La biblioteca quedó igual. */}
+              <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",margin:"11px 0 3px"}}>
+                Premio para el próximo intento
+              </div>
+              <div style={{fontSize:13,fontWeight:700,color:"#FFD600",marginBottom:11}}>
+                {premioElegido?.nombre || livePrize || "—"}
+              </div>
+
+              {/* Mismo `launch()` que la primera vez: vuelve a correr el dry-run
+                  y sólo abre ronda si el servidor la aprueba de nuevo. */}
+              <button className="btn btn-p btn-full" onClick={launch}
+                disabled={busy||validando||!(premioElegido||livePrize)}>
+                {validando ? "⏳ VALIDANDO…" : "🎰 LANZAR SORTEO DE NUEVO"}
+              </button>
+              {!(premioElegido||livePrize)&&(
+                <div style={{fontSize:10,color:"#FCA5A5",marginTop:7,textAlign:"center"}}>
+                  Elegí un premio de la biblioteca para poder lanzar.
+                </div>
+              )}
+              <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",margin:"7px 0 11px",lineHeight:1.5,
+                textAlign:"center"}}>
+                La pantalla gigante queda en "SORTEO CANCELADO" hasta que lances
+                de nuevo o cierres el juego. No se mueve sola.
+              </div>
+              <button className="btn btn-r btn-full" onClick={finalizarJuego} disabled={busy}>
+                🎵 Finalizar juego y volver a DJ Democracy
+              </button>
+            </div>
+
+            {listaElegibles}
+          </div>
+
+          <div>
+            {bibliotecaPremios}
+            {configReglas}
+          </div>
         </div>
       )}
 

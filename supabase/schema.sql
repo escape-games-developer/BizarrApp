@@ -183,11 +183,26 @@ CREATE TABLE game_state (
   screen_audio_enabled boolean  NOT NULL DEFAULT false, -- audio remoto de Pantalla Gigante
 
   -- Rey del Orto
+  -- 'cancelled' = ronda lanzada cuya resolución definitiva rechazó el backend
+  -- (se cayó gente durante el estroboscópico, se agotaron los elegibles, falta
+  -- configuración). Sin ganador y sin estroboscópico. Ver la migración
+  -- 20260926180000_rey_del_orto_v1_sorteo_cancelado.sql.
   raffle_state      text        NOT NULL DEFAULT 'idle'
-                                CHECK (raffle_state IN ('idle','launched','winner')),
+                                CHECK (raffle_state IN ('idle','launched','winner','cancelled')),
   raffle_winner_id  uuid        REFERENCES auth.users(id),
   raffle_winner_name text,
   raffle_prize      text        DEFAULT 'Consumición libre para dos',
+  -- Motivo estructurado de la cancelación, escrito por `rey_cancelar_ronda`:
+  --   { code, connected_count?, eligible_count?, required_count?, at }
+  --
+  -- `code` nunca se muestra: el Admin y la Pantalla lo traducen a una frase.
+  -- Los contadores son OPCIONALES — los rechazos por configuración o por premio
+  -- inválido se deciden antes de contar gente, así que vienen sin ellos, y
+  -- `required_count` es null cuando la regla de mínimo está apagada. Por eso los
+  -- lectores sólo imprimen un número cuando efectivamente es un número.
+  raffle_cancel     jsonb,
+  CONSTRAINT game_state_raffle_cancel_required
+    CHECK (raffle_state <> 'cancelled' OR raffle_cancel IS NOT NULL),
 
   -- Desafío Demente
   trivia_state      text        NOT NULL DEFAULT 'idle'

@@ -25,18 +25,51 @@ export function raffleCountdown(updatedAt) {
 }
 
 /**
+ * Motivo PÚBLICO de una ronda cancelada.
+ *
+ * Traduce `game_state.raffle_cancel` a una frase para el bar. Nunca devuelve el
+ * código, ni contadores, ni nada interno: la Pantalla Gigante y el celular del
+ * cliente no son el lugar para explicar la configuración del sorteo. Los
+ * números (4 de 5 conectados) van sólo al Admin, que los sabe interpretar.
+ *
+ * El `default` no es un descuido: si mañana el backend agrega un rechazo nuevo,
+ * la pantalla dice algo digno en vez de quedarse muda o mostrar un code.
+ */
+export function motivoCancelacionPublico(cancel) {
+  switch (cancel?.code) {
+    case "MIN_PARTICIPANTS":
+      return "No hay suficientes participantes para realizar el sorteo.";
+    case "NO_ELIGIBLE_PARTICIPANTS":
+      return "No quedan participantes elegibles para este sorteo.";
+    case "RAFFLE_CONFIG_INCOMPLETE":
+      return "El sorteo no está configurado para realizarse.";
+    default:
+      return "El sorteo no se pudo realizar.";
+  }
+}
+
+/**
  * useRaffle
  *
  * Deriva TODO de `game_state`: la fase, el ganador, el premio y la cuenta
  * regresiva son los de Supabase. Lo único local es la animación del
  * estroboscópico. No hay estado paralelo que pueda desincronizarse del
  * servidor ni perderse en un refresh.
+ *
+ * `cancelled` es el desenlace SIN ganador de una ronda que ya había arrancado:
+ * el backend rechazó la resolución definitiva por una condición operativa (se
+ * cayó gente durante el estroboscópico, se agotaron los elegibles, falta
+ * configuración). Como `isStrobe` sale de `state === 'launched'`, esa transición
+ * apaga el estroboscópico en las TRES pantallas sin ninguna lógica extra: es la
+ * misma fuente de verdad que lo había encendido.
  */
 export function useRaffle(gameState) {
-  const state     = gameState?.raffle_state ?? "idle";   // idle | launched | winner
+  const state     = gameState?.raffle_state ?? "idle";   // idle | launched | winner | cancelled
   const updatedAt = gameState?.updated_at ?? null;
   const isStrobe  = state === "launched";
   const isWinner  = state === "winner";
+  const isCancelled = state === "cancelled";
+  const cancel    = isCancelled ? (gameState?.raffle_cancel ?? null) : null;
 
   const [cd,    setCd]    = useState(() => raffleCountdown(updatedAt));
   const [color, setColor] = useState("#000");
@@ -78,5 +111,8 @@ export function useRaffle(gameState) {
     isIdle:   state === "idle",
     isStrobe,
     isWinner,
+    isCancelled,
+    cancel,                                        // crudo, para el Admin
+    cancelMessage: isCancelled ? motivoCancelacionPublico(cancel) : null,
   };
 }
