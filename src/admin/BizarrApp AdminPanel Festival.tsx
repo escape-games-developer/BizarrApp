@@ -30,6 +30,11 @@ import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
 import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInvalida } from "../hooks/realtime/useArmaPalabraRound";
 import { useBibliotecaPalabras } from "../hooks/useBibliotecaPalabras";
+import { useBibliotecaPreguntasTrivia } from "../hooks/useBibliotecaPreguntasTrivia";
+import {
+  useReglasArma, motivoMinimoArmaInvalido,
+  REGLA_ARMA_MINIMOS, ARMA_MIN_PISO, ARMA_MIN_TECHO,
+} from "../hooks/useReglasArma";
 import {
   useBibliotecaPremiosRey, motivoPremioInvalido, premioValido, PREMIO_MAX,
 } from "../hooks/useBibliotecaPremiosRey";
@@ -44,6 +49,9 @@ import {
   REGLA_SUMATE_MINIMOS, SUMATE_MIN_ESTRUCTURAL,
   SUMATE_MIN_PISO, SUMATE_MIN_TECHO,
 } from "../hooks/useReglasSumate";
+import {
+  useBibliotecaObjetivosSumate, motivoObjetivoInvalido, OBJETIVO_MIN, OBJETIVO_MAX,
+} from "../hooks/useBibliotecaObjetivosSumate";
 import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
 import {
   RaffleScreen,
@@ -235,6 +243,85 @@ const css = `
   @media (max-width:1040px){
     .pal-split{grid-template-columns:1fr;}
     .pal-list{max-height:320px;}
+  }
+  /* Barra operativa de Arma: tres botones lado a lado. Clase propia, mismo
+     criterio que .sum-actions. */
+  .pal-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+  .pal-actions .btn{padding:9px 4px;font-size:10.5px;line-height:1.25;white-space:normal;
+    text-align:center;min-height:40px;}
+  .pal-actions .btn:disabled{opacity:.35;cursor:not-allowed;}
+  @media (max-width:360px){ .pal-actions{grid-template-columns:1fr;} }
+
+  /* Desafío Demente — editor/operación (~70%) + configuración (~30%).
+     Clases propias, mismo criterio que .pal-* / .sum-*. */
+  .dd-split{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:10px;align-items:start;}
+  .dd-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+  .dd-actions .btn{padding:9px 4px;font-size:10.5px;line-height:1.25;white-space:normal;
+    text-align:center;min-height:40px;}
+  .dd-actions .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .dd-lib-list{max-height:46vh;overflow-y:auto;margin:0 -4px;padding:0 4px;
+    scrollbar-width:thin;scrollbar-color:rgba(155,47,255,.3) transparent;}
+  .dd-lib-list::-webkit-scrollbar{width:4px;}
+  .dd-lib-list::-webkit-scrollbar-thumb{background:rgba(155,47,255,.35);border-radius:2px;}
+  .dd-lib-row{display:flex;align-items:center;gap:6px;padding:6px 7px;margin-bottom:4px;border-radius:9px;
+    background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);transition:background .15s,border-color .15s;}
+  .dd-lib-row:hover{background:rgba(168,85,247,.07);border-color:rgba(168,85,247,.22);}
+  .dd-lib-row.sel{background:rgba(168,85,247,.16);border-color:#A855F7;}
+  .dd-lib-radio{flex-shrink:0;width:22px;height:22px;padding:0;border:none;background:none;cursor:pointer;
+    font-size:15px;line-height:22px;color:rgba(240,232,255,.4);}
+  .dd-lib-row.sel .dd-lib-radio{color:#C084FC;}
+  .dd-lib-q{flex:1;min-width:0;font-size:11px;font-weight:600;color:#F0E8FF;line-height:1.35;cursor:pointer;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .dd-lib-ic{flex-shrink:0;padding:2px 4px;border:none;background:none;cursor:pointer;font-size:11px;opacity:.7;}
+  .dd-lib-ic:hover{opacity:1;}
+  .dd-lib-add{flex-shrink:0;width:24px;height:24px;padding:0;border-radius:7px;cursor:pointer;
+    font-size:15px;font-weight:800;line-height:22px;color:#C084FC;
+    background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.4);}
+  .dd-lib-link{border:none;background:none;padding:0;cursor:pointer;font-size:10px;color:rgba(240,232,255,.45);text-decoration:underline;}
+  .dd-modal-back{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+    padding:16px;background:rgba(4,2,10,.72);backdrop-filter:blur(3px);}
+  .dd-modal{width:100%;max-width:560px;max-height:calc(100vh - 32px);overflow-y:auto;padding:18px;border-radius:16px;
+    background:#120A20;border:1px solid rgba(168,85,247,.35);box-shadow:0 20px 60px rgba(0,0,0,.6);}
+  .dd-modal-t{font-family:Syne,sans-serif;font-weight:900;font-size:15px;color:#F0E8FF;margin-bottom:12px;}
+  @media (max-width:1040px){ .dd-split{grid-template-columns:1fr;} .dd-lib-list{max-height:340px;} }
+  @media (max-width:360px){ .dd-actions{grid-template-columns:1fr;} }
+
+  /* Sumate — operación a la izquierda, configuración a la derecha. Clase
+     propia, mismo criterio que .pal-* / .rey-*. */
+  .sum-split{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:10px;align-items:start;}
+  /* Barra operativa: tres botones lado a lado, que se achican sin romper. */
+  .sum-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+  .sum-actions .btn{padding:9px 4px;font-size:10.5px;line-height:1.25;white-space:normal;
+    text-align:center;min-height:40px;}
+  .sum-actions .btn:disabled{opacity:.35;cursor:not-allowed;}
+  @media (max-width:360px){ .sum-actions{grid-template-columns:1fr;} }
+  /* Biblioteca de objetivos: grilla de fichas numéricas con scroll propio. */
+  .sum-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:6px;
+    max-height:42vh;overflow-y:auto;margin:0 -4px;padding:2px 4px;
+    scrollbar-width:thin;scrollbar-color:rgba(255,149,0,.3) transparent;}
+  .sum-list::-webkit-scrollbar{width:4px;}
+  .sum-list::-webkit-scrollbar-thumb{background:rgba(255,149,0,.35);border-radius:2px;}
+  .sum-obj{position:relative;display:flex;align-items:center;justify-content:center;height:46px;
+    border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s;
+    background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
+  .sum-obj:hover{background:rgba(255,149,0,.08);border-color:rgba(255,149,0,.3);}
+  .sum-obj.sel{background:rgba(255,149,0,.18);border-color:#FF9500;box-shadow:0 0 0 1px #FF9500 inset;}
+  .sum-obj-n{font-family:'Syne',sans-serif;font-weight:900;font-size:18px;color:#F0E8FF;}
+  .sum-obj.sel .sum-obj-n{color:#FF9500;}
+  .sum-obj-x{position:absolute;top:2px;right:2px;width:16px;height:16px;padding:0;border-radius:5px;
+    font-size:8px;line-height:16px;cursor:pointer;color:rgba(255,45,120,.7);
+    background:rgba(255,45,120,.06);border:1px solid rgba(255,45,120,.2);}
+  .sum-obj-x:disabled{opacity:.4;cursor:default;}
+  .sum-auto{display:flex;align-items:center;justify-content:center;height:40px;margin-bottom:8px;
+    border-radius:10px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:900;font-size:13px;
+    letter-spacing:.8px;color:rgba(240,232,255,.7);transition:background .15s,border-color .15s;
+    background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.1);}
+  .sum-auto:hover{background:rgba(255,149,0,.08);border-color:rgba(255,149,0,.3);}
+  .sum-auto.sel{background:rgba(255,149,0,.18);border-color:#FF9500;color:#FF9500;
+    box-shadow:0 0 0 1px #FF9500 inset;}
+  @media (max-width:1040px){
+    .sum-split{grid-template-columns:1fr;}
+    .sum-list{max-height:260px;}
   }
 
   /* Rey del Orto — biblioteca de premios como panel lateral.
@@ -2703,12 +2790,27 @@ function ReyPanel({sec, controls, sessionId, gameState}){
 const mensajeSumate = (r) => {
   const conectados = typeof r?.connected_count === "number" ? r.connected_count : null;
   const requeridos = typeof r?.required_count  === "number" ? r.required_count  : null;
+  // Con objetivo de biblioteca el rechazo puede traer el objetivo y cuánta
+  // gente hace falta para formarlo. `required_count` es el mínimo FINAL que
+  // aplicó el servidor; `target_min_participants` es sólo el que exige el
+  // objetivo, así que se usa únicamente si el final no vino.
+  const objetivoPedido = typeof r?.target === "number" ? r.target : null;
+  const minParaObjetivo = requeridos ??
+    (typeof r?.target_min_participants === "number" ? r.target_min_participants : null);
   switch (r?.code) {
     // ── Lanzamiento ──
     case "MIN_PARTICIPANTS":
+      if (objetivoPedido !== null && minParaObjetivo !== null && conectados !== null)
+        return `⚠️ No se puede lanzar: para formar el objetivo ${objetivoPedido} se necesitan al menos ${minParaObjetivo} participantes y hay ${conectados} conectados.`;
+      if (objetivoPedido !== null && minParaObjetivo !== null)
+        return `⚠️ No se puede lanzar: para formar el objetivo ${objetivoPedido} se necesitan al menos ${minParaObjetivo} participantes conectados.`;
       return (conectados !== null && requeridos !== null)
         ? `⚠️ No se puede lanzar: hay ${conectados} participantes conectados y se necesitan ${requeridos}.`
         : "⚠️ No se puede lanzar: no hay suficientes participantes conectados.";
+    case "INVALID_TARGET":
+      return "⚠️ El objetivo seleccionado no es válido.";
+    case "TARGET_NOT_IN_LIBRARY":
+      return "⚠️ Este objetivo ya no existe en la biblioteca. Elegí otro.";
     case "CONFIG_INCOMPLETE":
       return "⚠️ La configuración de Sumate está incompleta. Revisá la regla de participantes mínimos.";
     case "SESSION_NOT_FOUND":
@@ -2776,13 +2878,22 @@ function SumaPanel({sec, controls, sessionId, gameState}){
   // Resultado de `sumate_check_target`. null = todavía no se consultó.
   const [objetivoPosible, setObjetivoPosible] = useState(null);
 
+  // 📚 Biblioteca de objetivos — fuente de verdad `sumate_objetivos_biblioteca`.
+  const biblioteca = useBibliotecaObjetivosSumate();
+  // Objetivo elegido: estado OPERATIVO LOCAL del Admin. No se persiste, no toca
+  // game_state ni la TV. Se DERIVA por id de lo que trajo el hook: si alguien
+  // lo borra de la biblioteca, la selección se cae sola.
+  const [objetivoElegidoId, setObjetivoElegidoId] = useState(null);
+  const objetivoElegido =
+    biblioteca.objetivos.find((o) => o.id === objetivoElegidoId) || null;
+
   const enElAire   = gameState?.active_game === "suma";
   const anunciando = !enElAire && gameState?.active_placa === "game_suma";
   const enJuego    = round?.status === "playing";
-  // Ronda histórica cerrada con grupo ganador. El flujo V1 ya no produce
-  // `finished` —no hay validación digital— pero en la base pueden quedar rondas
-  // de antes, y la fase tiene que saber pintarlas en vez de ignorarlas.
-  const conGanador = round?.status === "finished" && !!round?.winner_group;
+  // Una ronda `finished` (histórica, de la época de validación digital) ya no
+  // tiene rama propia: el flujo V1 no la produce, y pintarla como "¡SUMARON
+  // EXACTO!" tapaba la preparación —y con ella ANUNCIAR— cada vez que era la
+  // última ronda de la sesión. Todo lo que no está `playing` es preparación.
   const cancelada  = round?.status === "cancelled";
 
   // Presencia: misma ventana de 2 minutos y misma tabla que usa Rey del Orto.
@@ -2798,12 +2909,17 @@ function SumaPanel({sec, controls, sessionId, gameState}){
 
   useEffect(() => { setObjetivoPosible(null); }, [round?.id]);
 
+  // Candado de acciones. `busy` (estado) deshabilita los botones, pero React
+  // lo aplica en el render siguiente: dos clics en el mismo tick pasaban los
+  // dos y lanzaban DOS rondas. El ref se marca en el acto y cierra ese hueco.
+  const busyRef = useRef(false);
   const correr = async (fn) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setErr(null); setNota(null);
     try { await fn(); }
     catch (e) { setErr(e?.message || String(e)); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   // ── Objetivo imposible ────────────────────────────────────────────────────
@@ -2835,45 +2951,104 @@ function SumaPanel({sec, controls, sessionId, gameState}){
 
   // LANZAR / NUEVA RONDA: una sola RPC. El backend cierra la ronda anterior con
   // cancel_reason='new_round', reparte, calcula y pone el juego al aire.
+  //
+  // El objetivo sale de la selección LOCAL: null = 🎲 automático, N = objetivo
+  // de la biblioteca. No se calcula acá si N es posible con los conectados:
+  // si no alcanza, el servidor rechaza con MIN_PARTICIPANTS y sus números.
   const lanzar = (esNueva = false) => correr(async () => {
-    const r = await lanzarRonda();
-    if (!r?.ok) { setErr(mensajeSumate(r)); return; }
+    const r = await lanzarRonda(objetivoElegido ? objetivoElegido.target : null);
+    if (!r?.ok) {
+      setErr(mensajeSumate(r));
+      // El objetivo se borró de la biblioteca (quizá desde otra pestaña): se
+      // recarga la lista y, como la selección se DERIVA por id, si ya no está
+      // el panel vuelve solo a 🎲 AUTOMÁTICO.
+      if (r?.code === "TARGET_NOT_IN_LIBRARY") biblioteca.refresh();
+      return;
+    }
     setObjetivoPosible(null);
-    const objetivoNuevo = typeof r.target_number === "number" ? r.target_number : "—";
-    const jugadores = typeof r.participants === "number" ? r.participants : "—";
-    setNota(esNueva
-      ? `🔁 Ronda nueva — objetivo ${objetivoNuevo} con ${jugadores} jugadores.`
-      : `🚀 Ronda lanzada — objetivo ${objetivoNuevo} con ${jugadores} jugadores.`);
+    // Sólo se imprime lo que el servidor devolvió. Después de esto la autoridad
+    // es la fila real de `sumate_rounds`, no esta respuesta.
+    const partes = [];
+    if (typeof r.target_number === "number") {
+      const origen = r.target_source === "library" ? " (biblioteca)"
+                   : r.target_source === "random"  ? " (automático)" : "";
+      partes.push(`objetivo ${r.target_number}${origen}`);
+    }
+    if (typeof r.participants === "number") partes.push(`${r.participants} jugadores`);
+    const detalle = partes.length ? ` — ${partes.join(" · ")}` : "";
+    setNota(`${esNueva ? "🔁 Ronda nueva" : "🚀 Ronda lanzada"}${detalle}.`);
   });
 
   // FINALIZAR: una sola RPC cancela la ronda viva y saca Sumate del aire.
   // Una ronda terminada operativamente por el staff NO necesita winner_group:
   // el resultado pasó en el escenario, no en la plataforma.
+  //
+  //   · Ronda `playing` → `sumate_cancel_round(p_close_game=true)`: la cancela
+  //     (cancel_reason='manual') y, si Sumate está al aire, lo saca en la misma
+  //     transacción. Celular y TV se enteran por Realtime de `sumate_rounds`.
+  //   · Sin ronda viva pero con Sumate al aire o sólo ANUNCIADO → no hay ronda
+  //     que cancelar; `deactivateGame` limpia active_game y active_placa.
+  //     (`sumate_cancel_round` sólo limpia la placa si active_game='suma', así
+  //     que con Sumate apenas anunciado la placa quedaba colgada.)
   const finalizarJuego = () => correr(async () => {
-    if (!round?.id) {
-      const e = await controls?.deactivateGame();
-      if (e?.error) throw new Error(e.error.message || String(e.error));
-      setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
+    if (enJuego) {
+      const res = await cancelarRonda(true);
+      if (!res?.ok) { setErr(mensajeSumate(res)); return; }
+      // Ronda viva pero Sumate sólo anunciado (no al aire): la RPC no toca la
+      // placa, se limpia con el mismo mecanismo de placas de siempre.
+      if (!res.game_closed && gameState?.active_placa === "game_suma") {
+        const e = await controls?.deactivateGame();
+        if (e?.error) throw new Error(e.error.message || String(e.error));
+      }
+      setNota("⏹ Ronda finalizada. La TV volvió a DJ Democracy.");
       return;
     }
-    const res = await cancelarRonda(true);
-    // ROUND_ALREADY_FINISHED devuelve ok:false PERO igual puede haber cerrado
-    // el juego: lo que manda para el cartel es `game_closed`, no `ok`.
-    if (res?.game_closed) {
-      setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
-    } else if (res?.ok) {
-      setNota("⏹ Ronda cerrada. Sumate no estaba al aire.");
-    } else {
-      setErr(mensajeSumate(res));
-    }
+    const e = await controls?.deactivateGame();
+    if (e?.error) throw new Error(e.error.message || String(e.error));
+    setNota("⏹ Sumate cerrado. La TV volvió a DJ Democracy.");
   });
+
+  // ── Habilitación de la barra operativa ───────────────────────────────────
+  // Todo sale de Supabase (`sumate_rounds` vía useSumateRound + `game_state`),
+  // nunca de un estado React paralelo. `busy` bloquea las tres a la vez: no se
+  // puede disparar una acción mientras otra RPC está en vuelo.
+  //   · Anunciar: sólo si Sumate no está al aire ni ya anunciado — anunciar
+  //     con el juego al aire lo sacaría de la pantalla (announceGame pone
+  //     active_game=null).
+  //   · Nueva ronda: siempre que haya jornada. El backend cierra la anterior
+  //     (cancel_reason='new_round') y pone Sumate al aire.
+  //   · Finalizar: sólo si hay algo que cerrar (ronda viva, juego al aire o
+  //     placa anunciada).
+  const puedeAnunciar  = !busy && !!sessionId && !enElAire && !anunciando;
+  const puedeLanzar    = !busy && !!sessionId;
+  const puedeFinalizar = !busy && (enJuego || enElAire || anunciando);
 
   const objetivo = typeof round?.target_number === "number" ? round.target_number : null;
 
-  const salida = (
-    <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
-      ⏹ Finalizar juego y volver a DJ Democracy
-    </button>
+  // ── Barra operativa ──────────────────────────────────────────────────────
+  // ÚNICA ubicación de las tres acciones del juego. Columna derecha, arriba de
+  // la biblioteca. La biblioteca es la única representación del objetivo que
+  // va a usar «Nueva ronda» (🎲 Automático o la ficha resaltada).
+  const barraOperativa = (
+    <div className="card" style={{marginBottom:10, borderColor:"rgba(255,149,0,.3)"}}>
+      <div className="sum-actions">
+        {/* ANUNCIAR — sólo la placa `game_suma` (announceGame). Sin ronda. */}
+        <button className="btn btn-g" disabled={!puedeAnunciar} onClick={anunciar}
+          title={enElAire ? "Sumate ya está al aire" : anunciando ? "La placa ya está en pantalla" : "Mostrar la placa de Sumate"}>
+          📢 Anunciar
+        </button>
+        {/* NUEVA RONDA — una sola llamada a sumate_launch_round con el objetivo
+            de la biblioteca (o p_target null en 🎲 Automático). La RPC pone
+            Sumate al aire: no se llama a activateGame. */}
+        <button className="btn btn-p" disabled={!puedeLanzar} onClick={() => lanzar(enJuego)}>
+          🔄 Nueva ronda
+        </button>
+        {/* FINALIZAR — cierra la ronda viva y saca Sumate de la pantalla. */}
+        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}>
+          ⏹ Finalizar
+        </button>
+      </div>
+    </div>
   );
 
   // Lista informativa de participantes. NO seleccionable: acá no se valida nada.
@@ -2931,8 +3106,15 @@ function SumaPanel({sec, controls, sessionId, gameState}){
         </div>
       )}
 
+      {/* ── Dos columnas, mismo patrón que Rey del Orto ──
+          IZQUIERDA: operación (preparación con ANUNCIAR / ronda en curso).
+          DERECHA: biblioteca de objetivos (`sumate_objetivos_biblioteca`)
+          arriba y configuración de reglas debajo.
+          Abajo de 1040px `.sum-split` apila las columnas. */}
+      <div className="sum-split">
+      <div>
       {/* ── Preparación: sin ronda viva ── */}
-      {!enJuego && !conGanador && (
+      {!enJuego && (
         <div className="card">
           <div className="ctitle">🔢 Sumate que sumamos</div>
           <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
@@ -2969,29 +3151,18 @@ function SumaPanel({sec, controls, sessionId, gameState}){
               onClick={leerConectados}>↻</button>
           </div>
 
-          {!enElAire && (
-            <button className="btn btn-g btn-full" style={{marginBottom:7}}
-              disabled={busy} onClick={anunciar}>
-              📢 Anunciar → mostrar placa en pantalla
-            </button>
-          )}
-          {anunciando && (
-            <div style={{fontSize:10, color:"rgba(240,232,255,.35)", textAlign:"center",
-              marginBottom:7, lineHeight:1.5}}>
-              Placa en pantalla. Todavía no hay ronda ni números repartidos.
-            </div>
-          )}
-
-          <button className="btn btn-p btn-full" disabled={busy} onClick={() => lanzar(false)}>
-            🚀 Lanzar juego
-          </button>
+          {/* Anunciar / Nueva ronda / Finalizar viven SÓLO en la barra
+              operativa de la columna derecha. */}
+          <div style={{fontSize:10.5, color:"rgba(240,232,255,.35)", textAlign:"center", lineHeight:1.5}}>
+            Elegí el objetivo en la biblioteca y usá la barra de acciones:
+            📢 Anunciar · 🔄 Nueva ronda · ⏹ Finalizar.
+          </div>
           {activos < 2 && (
             <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:7, textAlign:"center", lineHeight:1.5}}>
               Se necesitan al menos 2 participantes conectados.<br/>
               <span style={{opacity:.75}}>Con 3 o más el juego se pone bueno.</span>
             </div>
           )}
-          {(enElAire || anunciando) && <div style={{marginTop:8}}>{salida}</div>}
         </div>
       )}
 
@@ -3039,11 +3210,9 @@ function SumaPanel({sec, controls, sessionId, gameState}){
               </div>
               <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:10}}>
                 Se fue gente que hacía falta para llegar a {objetivo ?? "el objetivo"}.
-                La ronda sigue abierta por si vuelven, pero lo razonable es lanzar una nueva.
+                La ronda sigue abierta por si vuelven, pero lo razonable es lanzar una
+                nueva con 🔄 Nueva ronda (barra de acciones).
               </div>
-              <button className="btn btn-p btn-full" disabled={busy} onClick={() => lanzar(true)}>
-                🔄 Nueva ronda
-              </button>
             </div>
           )}
 
@@ -3058,60 +3227,153 @@ function SumaPanel({sec, controls, sessionId, gameState}){
             Comprueba si todavía existe algún grupo posible con los presentes.
             No elige ganador.
           </div>
-          <button className="btn btn-p btn-full" style={{marginBottom:8}}
-            disabled={busy} onClick={() => lanzar(true)}>
-            🔄 Nueva ronda
-          </button>
-          {salida}
         </>
       )}
 
-      {/* ── Ronda histórica con grupo ganador ──
-          El flujo V1 ya NO produce este estado: no hay validación digital. Se
-          mantiene para que una ronda `finished` de antes se vea bien en vez de
-          caer en la pantalla de preparación como si no hubiera pasado nada. */}
-      {conGanador && (
-        <div className="card" style={{borderColor:"rgba(0,245,160,.35)"}}>
-          <div style={{textAlign:"center", marginBottom:12}}>
-            <div style={{fontSize:34, lineHeight:1}}>🏆</div>
-            <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:17, color:"#00F5A0", marginTop:6}}>
-              ¡SUMARON EXACTO!
-            </div>
-            <div style={{fontSize:10, color:"rgba(240,232,255,.3)", marginTop:4}}>
-              Ronda histórica, validada con el flujo anterior.
-            </div>
+
+      </div>
+
+      {/* ── Columna derecha: barra operativa, biblioteca, configuración ──
+          SIEMPRE visibles, en cualquier fase (playing / cancelled / finished /
+          sin ronda). */}
+      <div>
+        {barraOperativa}
+        <SumaBibliotecaCard col={COL} biblioteca={biblioteca}
+          elegidoId={objetivoElegidoId} onElegir={setObjetivoElegidoId}/>
+        <div style={{marginTop:10}}>
+          <SumaReglasCard col={COL}/>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Biblioteca de objetivos de Sumate ───────────────────────────────────────
+// Lista persistente en `sumate_objetivos_biblioteca` (INSERT de `target`,
+// DELETE por id, sin UPDATE). Tocar un objetivo lo SELECCIONA: es estado local
+// del panel, no escribe nada. La validación 3..45 es UX; la autoridad es la
+// tabla.
+function SumaBibliotecaCard({col, biblioteca, elegidoId, onElegir}){
+  const { objetivos, loading, error, refresh, existe, agregar, eliminar } = biblioteca;
+  const [nuevo,      setNuevo]      = useState("");
+  const [trabajando, setTrabajando] = useState(false);
+  const [errorAlta,  setErrorAlta]  = useState(null);
+  const [errorBaja,  setErrorBaja]  = useState(null);
+
+  // Automático está elegido cuando no hay un objetivo VIGENTE seleccionado:
+  // mismo criterio que usa el panel para derivar el objetivo que se envía.
+  const automatico = !objetivos.some((o) => o.id === elegidoId);
+
+  const motivo    = nuevo.trim() ? motivoObjetivoInvalido(nuevo) : null;
+  const duplicado = !motivo && nuevo.trim() !== "" && existe(nuevo.trim());
+  const puedeAgregar = nuevo.trim() !== "" && !motivo && !duplicado && !trabajando;
+
+  const alta = async () => {
+    if (!puedeAgregar) return;
+    setTrabajando(true); setErrorAlta(null); setErrorBaja(null);
+    try { await agregar(nuevo); setNuevo(""); }
+    catch (e) { setErrorAlta(e?.message || "No pudimos agregar el objetivo."); }
+    finally { setTrabajando(false); }
+  };
+
+  const baja = async (o) => {
+    if (trabajando) return;
+    if (!window.confirm(`¿Eliminar el objetivo ${o.target} de la biblioteca?`)) return;
+    setTrabajando(true); setErrorAlta(null); setErrorBaja(null);
+    try {
+      await eliminar(o.id);
+      if (elegidoId === o.id) onElegir(null);
+    }
+    catch (e) { setErrorBaja(e?.message || "No pudimos eliminar el objetivo."); }
+    finally { setTrabajando(false); }
+  };
+
+  return (
+    <div className="card">
+      <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
+        <div className="ctitle" style={{margin:0, flex:1}}>📚 Biblioteca de objetivos</div>
+        {!loading && !error && (
+          <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)"}}>
+            {objetivos.length} {objetivos.length === 1 ? "objetivo" : "objetivos"}
           </div>
-          {(round.winner_group || []).map((g) => (
-            <div key={g.user_id} style={{display:"flex", alignItems:"center", gap:9,
-              padding:"9px 10px", marginBottom:5, borderRadius:10,
-              background:"rgba(0,245,160,.08)", border:"1px solid rgba(0,245,160,.25)"}}>
-              <div style={{fontSize:19, flexShrink:0}}>{g.avatar_emoji || "👤"}</div>
-              <div style={{flex:1, minWidth:0, fontSize:12.5, fontWeight:700, color:"#F0E8FF",
-                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{g.name}</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20, color:"#00F5A0"}}>
-                {g.assigned_number}
-              </div>
-            </div>
-          ))}
-          <div style={{textAlign:"center", fontFamily:"Syne,sans-serif", fontWeight:900,
-            fontSize:19, color:"#FFD600", margin:"14px 0 16px", lineHeight:1.4}}>
-            {(round.winner_group || []).map((g) => g.assigned_number).join(" + ")} = {objetivo ?? "—"}
-          </div>
-          <button className="btn btn-g btn-full" style={{marginBottom:10}}
-            disabled={busy} onClick={() => lanzar(true)}>
-            🔄 Nueva ronda
+        )}
+      </div>
+
+      {/* 🎲 Automático: siempre disponible, aunque la tabla no cargue. Es el
+          modo por defecto — lanza con p_target null. */}
+      <div role="button" tabIndex={0}
+        className={`sum-auto${automatico ? " sel" : ""}`}
+        onClick={() => onElegir(null)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onElegir(null); } }}>
+        🎲 AUTOMÁTICO
+      </div>
+
+      {loading && (
+        <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"10px 0"}}>
+          Cargando la biblioteca…
+        </div>
+      )}
+      {!loading && error && (
+        <div style={{padding:"4px 0 8px"}}>
+          <div style={{fontSize:10.5, color:"#FCA5A5", marginBottom:8, lineHeight:1.5}}>{error}</div>
+          <button className="btn btn-g" style={{padding:"5px 12px", fontSize:10.5}} onClick={refresh}>
+            ↻ Reintentar
           </button>
-          {salida}
+        </div>
+      )}
+      {!loading && !error && objetivos.length === 0 && (
+        <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"10px 0", lineHeight:1.5}}>
+          Todavía no cargaste ningún objetivo. Mientras tanto se lanza en 🎲 Automático.
         </div>
       )}
 
-      {/* ── Configuración ──
-          SIEMPRE visible, en cualquier fase. Antes vivía dentro de la rama de
-          preparación, así que con una ronda activa —o con la ronda histórica
-          `finished` que hay en producción— quedaba oculta y el operador no podía
-          llegar a ella. Es configuración del juego, no de la ronda. */}
-      <div style={{marginTop:10}}>
-        <SumaReglasCard col={COL}/>
+      {!loading && !error && objetivos.length > 0 && (
+        <div className="sum-list">
+          {objetivos.map((o) => (
+            /* Tocar SELECCIONA. No lanza, no escribe, no toca la TV. El ✕
+               corta la propagación para no seleccionar lo que se borra. */
+            <div key={o.id} role="button" tabIndex={0}
+              className={`sum-obj${o.id === elegidoId ? " sel" : ""}`}
+              onClick={() => onElegir(o.id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onElegir(o.id); } }}>
+              <span className="sum-obj-n">{o.target}</span>
+              <button className="sum-obj-x" title="Eliminar de la biblioteca"
+                disabled={trabajando}
+                onClick={(e) => { e.stopPropagation(); baja(o); }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {errorBaja && (
+        <div style={{fontSize:10, color:"#FCA5A5", marginTop:6, lineHeight:1.5}}>{errorBaja}</div>
+      )}
+
+      {/* Alta manual — la biblioteca no se precarga ni se autogenera. */}
+      <div style={{borderTop:"1px solid rgba(240,232,255,.08)", marginTop:10, paddingTop:10}}>
+        <div style={{display:"flex", gap:6, marginBottom:6}}>
+          <input className="inp" value={nuevo} inputMode="numeric" maxLength={3}
+            style={{flex:1, minWidth:0, margin:0, fontWeight:700, textAlign:"center"}}
+            onChange={(e) => { setNuevo(e.target.value); setErrorAlta(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") alta(); }}
+            placeholder="+ Nuevo objetivo"/>
+          <button className="btn btn-p" style={{padding:"0 13px", whiteSpace:"nowrap"}}
+            disabled={!puedeAgregar} onClick={alta}>
+            {trabajando ? "…" : "Agregar"}
+          </button>
+        </div>
+        {motivo && (
+          <div style={{fontSize:10, color:"#FCA5A5", marginBottom:4, lineHeight:1.5}}>{motivo}</div>
+        )}
+        {duplicado && (
+          <div style={{fontSize:10, color:"#FFD600", marginBottom:4}}>Este objetivo ya existe en la biblioteca.</div>
+        )}
+        {errorAlta && (
+          <div style={{fontSize:10, color:"#FCA5A5", marginBottom:4, lineHeight:1.5}}>{errorAlta}</div>
+        )}
+        <div style={{fontSize:9, color:"rgba(240,232,255,.25)", lineHeight:1.5}}>
+          Enteros de {OBJETIVO_MIN} a {OBJETIVO_MAX}. El servidor vuelve a validar.
+        </div>
       </div>
     </div>
   );
@@ -3228,12 +3490,40 @@ function SumaReglasCard({col}){
 // ══════════════════════════════════════════════════════════════════════════
 // Arma la Palabra — ronda multiusuario.
 //
-// Mismo contrato operativo que Sumate que Sumamos. La diferencia de fondo es
-// que acá IMPORTA EL ORDEN: el operador selecciona a la gente en el orden en
-// que se paró y eso es lo que forma la palabra. Por eso `seleccion` es un
-// ARRAY ordenado y no un set.
+// Mismo contrato operativo que Sumate que Sumamos: se resuelve FÍSICAMENTE.
+// La gente se busca en el bar, forma la palabra entre ellos y se acerca al
+// escenario. El operador no selecciona ni valida a nadie desde el panel.
 //
 // La palabra la escribe el operador; las letras las reparte el servidor.
+
+/**
+ * Traduce el rechazo de `arma_palabra_launch_round` (ver `rechazoLanzamiento`)
+ * a algo que el operador pueda leer. Los números salen SIEMPRE del backend: si
+ * no vinieron, no se imprime ninguno. Nunca muestra SQL, HINT ni DETAIL.
+ */
+const mensajeArma = (r) => {
+  const conectados = typeof r?.connected_count === "number" ? r.connected_count : null;
+  const requeridos = typeof r?.required_count  === "number" ? r.required_count  : null;
+  switch (r?.code) {
+    case "MIN_PARTICIPANTS":
+      return (conectados !== null && requeridos !== null)
+        ? `⚠️ No se puede lanzar: hay ${conectados} participantes conectados y se necesitan ${requeridos}.`
+        : "⚠️ No se puede lanzar: no hay suficientes participantes conectados.";
+    case "INVALID_WORD":
+      return "⚠️ El servidor rechazó la palabra: tiene que tener de 3 a 6 letras, sin espacios, signos ni letras repetidas.";
+    case "CONFIG_INCOMPLETE":
+      return "⚠️ La configuración de Arma la Palabra está incompleta. Revisá la regla de participantes mínimos.";
+    case "UNAUTHORIZED":
+      return "⚠️ Tu sesión venció o no sos administrador. Volvé a entrar al Admin.";
+    case "SESSION_MISSING":
+      return "⚠️ No hay una jornada activa. Iniciá la jornada antes de lanzar.";
+    case "RPC_ERROR":
+      return "⚠️ No se pudo contactar al servidor. Revisá la conexión y volvé a intentar.";
+    default:
+      return "⚠️ No se pudo lanzar la ronda.";
+  }
+};
+
 function PalabraPanel({sec, controls, sessionId, gameState}){
   const COL = "#A855F7";
   const { round, assignments, lanzarRonda, cancelarRonda } =
@@ -3263,7 +3553,6 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
 
   const enElAire = gameState?.active_game === "palabra";
   const enJuego  = round?.status === "playing";
-  const conGanador = round?.status === "finished" && !!round?.winner_group;
   // La placa del juego puesta por «Anunciar». Es una capa aparte de
   // `active_game`: anunciar no inicia ninguna ronda. Sale de `gameState`, no de
   // un estado local, así que se ve igual en toda pestaña del admin.
@@ -3281,12 +3570,17 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   useEffect(() => { leerConectados(); }, [leerConectados, round?.id]);
   const activos = (conectados || []).filter(reyActivo).length;
 
+  // Candado de acciones. `busy` (estado) deshabilita los botones, pero React
+  // lo aplica en el render siguiente: dos clics en el mismo tick pasaban los
+  // dos. El ref se marca en el acto y cierra ese hueco.
+  const busyRef = useRef(false);
   const correr = async (fn) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setErr(null); setNota(null);
     try { await fn(); }
     catch (e) { setErr(e?.message || String(e)); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   // ── Alta en la biblioteca ─────────────────────────────────────────────────
@@ -3305,10 +3599,10 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   });
 
   // ── Edición de una palabra de la biblioteca ──────────────────────────────
-  // `editando` es el ID de la fila. La biblioteca no se renderiza con una ronda
-  // viva, así que no hay forma de editar la palabra que está jugando. Y las
-  // rondas guardan la palabra como texto copiado: editar acá nunca reescribe
-  // el historial.
+  // `editando` es el ID de la fila. La biblioteca está visible también con una
+  // ronda viva (columna derecha), así que la palabra EN JUEGO tiene el lápiz
+  // bloqueado. Igual las rondas guardan la palabra como texto copiado: editar
+  // acá nunca reescribe la ronda ni el historial.
   const editNorm   = normalizarPalabra(editTexto);
   const editMotivo = editTexto.trim() ? motivoPalabraInvalida(editNorm) : null;
   const editDup    = palabraValida(editNorm) && yaEnBiblioteca(editNorm, editando);
@@ -3344,9 +3638,11 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   const filtro    = normalizarPalabra(busqueda);
   const filtradas = filtro ? palabras.filter((p) => p.word.includes(filtro)) : palabras;
 
-  // Cuánta gente hace falta para una palabra: uno por letra, porque el reparto
-  // entrega cada letra al menos una vez.
-  const alcanzaGente = (w) => activos >= w.length;
+  // Cuánta gente hace falta NO se decide acá: lo decide
+  // `arma_palabra_launch_round` con la regla de `arma_palabra_reglas_config`
+  // y lo informa en el rechazo MIN_PARTICIPANTS. Antes el botón se bloqueaba
+  // contando conectados con el reloj del navegador; eso duplicaba la autoridad
+  // del servidor y podía contradecirla.
 
   // Anuncio: sólo pone la placa del juego en la pantalla gigante. No crea
   // ronda ni reparte letras — `announceGame` deja `active_game` en null a
@@ -3354,33 +3650,57 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
   const anunciar = () => correr(async () => {
     const e = await controls?.announceGame("palabra");
     if (e?.error) throw new Error(e.error.message || String(e.error));
-    setNota("📺 La placa de Arma la Palabra está en pantalla.");
+    setNota("📢 Placa de Arma la Palabra en pantalla. Todavía no hay ronda.");
   });
 
   const lanzar = (w) => correr(async () => {
-    const r = await lanzarRonda(w);
+    let r;
+    try { r = await lanzarRonda(w); }
+    catch (e) {
+      // Se vuelve a leer la presencia: si faltaba gente, el número del panel
+      // tiene que acompañar al que acaba de informar el servidor.
+      if (e?.rechazo?.code === "MIN_PARTICIPANTS") leerConectados();
+      throw new Error(mensajeArma(e?.rechazo));
+    }
     const e = await controls?.activateGame("palabra");
     if (e?.error) throw new Error(e.error.message || String(e.error));
     setUsadas((u) => (u.includes(w) ? u : [...u, w]));
-    setNota(`🚀 Ronda lanzada — ${r?.target_word} (${r?.letters} letras) entre ${r?.participants} jugadores.`);
+    // El éxito V1 trae `word_length` y `participants` (ya no `target_word`).
+    const letras = typeof r?.word_length === "number" ? r.word_length : w.length;
+    setNota(typeof r?.participants === "number"
+      ? `🚀 Ronda lanzada — ${w} (${letras} letras) entre ${r.participants} jugadores.`
+      : `🚀 Ronda lanzada — ${w}.`);
   });
 
-  // Vuelve a la pantalla de selección SIN salir del juego: la TV queda en el
-  // standby y el operador elige la palabra siguiente de la lista.
-  const nuevaPalabra = () => correr(async () => {
-    if (enJuego) await cancelarRonda();
-    setNota("🔁 Elegí la palabra siguiente.");
-  });
+  // NUEVA PALABRA: lanza una ronda con la palabra SELECCIONADA en la
+  // biblioteca, por el mismo flujo de siempre (`lanzar` →
+  // arma_palabra_launch_round → activateGame). La RPC cancela sola la ronda
+  // `playing` anterior, así que no hace falta cancelarla antes. Sin palabra
+  // elegida el botón está deshabilitado.
+  const nuevaPalabra = () => { if (elegida) lanzar(elegida.word); };
 
-  // Cierra el juego: cancela la ronda viva (si la hay) y lo saca del aire. La
-  // TV vuelve sola a DJ Democracy — mismo contrato que Sumate y Trivia, sin
-  // avanzar la canción del DJ.
+  // FINALIZAR: cancela la ronda viva (arma_palabra_cancel_round) si la hay y
+  // saca el juego del aire con `deactivateGame`, que limpia active_game Y
+  // active_placa — así también retira la placa cuando sólo estaba anunciado.
+  // La TV vuelve sola a DJ Democracy, sin avanzar la canción del DJ.
   const finalizarJuego = () => correr(async () => {
     if (enJuego) await cancelarRonda();
     const e = await controls?.deactivateGame();
     if (e?.error) throw new Error(e.error.message || String(e.error));
-    setNota("🎵 Juego cerrado. La TV volvió a DJ Democracy.");
+    setNota("⏹ Arma la Palabra cerrado. La TV volvió a DJ Democracy.");
   });
+
+  // ── Habilitación de la barra operativa ───────────────────────────────────
+  // Todo sale de Supabase (`arma_palabra_rounds` + `game_state`) y de la
+  // selección local de la biblioteca. `busy` bloquea las tres a la vez.
+  //   · Anunciar: sólo si el juego no está al aire ni ya anunciado — con el
+  //     juego al aire, announceGame (active_game=null) lo sacaría de pantalla.
+  //   · Nueva palabra: con jornada y una palabra elegida en la biblioteca.
+  //     Cuántos participantes hacen falta lo decide el servidor.
+  //   · Finalizar: sólo si hay algo que cerrar.
+  const puedeAnunciar  = !busy && !!sessionId && !enElAire && !anunciado;
+  const puedeLanzar    = !busy && !!sessionId && !!elegida;
+  const puedeFinalizar = !busy && (enJuego || enElAire || anunciado);
 
   const objetivo = round?.target_word || "";
 
@@ -3394,10 +3714,29 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
     return objetivo.split("").map((l) => ({ letra: l, cuantos: m.get(l) || 0 }));
   })();
 
-  const salida = (
-    <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
-      🎵 Finalizar juego y volver a DJ Democracy
-    </button>
+  // ── Barra operativa ──────────────────────────────────────────────────────
+  // ÚNICA ubicación de las tres acciones. Columna derecha, arriba de la
+  // biblioteca. La biblioteca (fila resaltada) es la única representación de
+  // la palabra que va a usar «Nueva palabra».
+  const barraOperativa = (
+    <div className="card" style={{marginBottom:10, borderColor:"rgba(168,85,247,.3)"}}>
+      <div className="pal-actions">
+        {/* ANUNCIAR — sólo la placa `game_palabra` (announceGame). Sin ronda. */}
+        <button className="btn btn-g" disabled={!puedeAnunciar} onClick={anunciar}
+          title={enElAire ? "Arma la Palabra ya está al aire" : anunciado ? "La placa ya está en pantalla" : "Mostrar la placa de Arma la Palabra"}>
+          📢 Anunciar
+        </button>
+        {/* NUEVA PALABRA — lanza la palabra elegida en la biblioteca. */}
+        <button className="btn btn-p" disabled={!puedeLanzar} onClick={nuevaPalabra}
+          title={elegida ? `Lanzar ${elegida.word}` : "Elegí una palabra en la biblioteca"}>
+          🔄 Nueva palabra
+        </button>
+        {/* FINALIZAR — cierra la ronda viva y saca el juego de la pantalla. */}
+        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}>
+          ⏹ Finalizar
+        </button>
+      </div>
+    </div>
   );
 
   return(
@@ -3413,111 +3752,162 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
         </div>
       )}
 
-      {/* ── Sin ronda viva: preparar la próxima palabra ──────────────────
-          Dos columnas: a la izquierda el operador trabaja (anuncia, revisa la
-          palabra elegida, lanza); a la derecha la biblioteca es un SELECTOR.
-          Abajo de 1040px `.pal-split` apila las columnas. */}
-      {!enJuego && !conGanador && (
-        <div className="pal-split">
-          {/* ══ Columna principal ══════════════════════════════════════ */}
-          <div>
-            {/* Anuncio — placa en la pantalla gigante, sin crear ronda.
-                Es independiente de la selección: anunciar no lanza nada y
-                seleccionar no anuncia nada. */}
-            <div className="card" style={{marginBottom:10}}>
-              <div style={{display:"flex", alignItems:"center", gap:8}}>
-                <div style={{flex:1}}>
-                  <div className="ctitle" style={{margin:0}}>Anunciar en pantalla</div>
-                  <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", marginTop:2}}>
-                    Pone la placa de Arma la Palabra en la pantalla gigante. No arranca
-                    ninguna ronda: seguís acá preparando la palabra.
-                  </div>
+      {/* ── Dos columnas, mismo patrón que Rey del Orto ─────────────────
+          IZQUIERDA: la operación del juego (preparar/lanzar, o la ronda en
+          curso). DERECHA: biblioteca arriba y configuración de reglas debajo,
+          visibles en TODAS las fases. Abajo de 1040px `.pal-split` apila las
+          columnas.
+
+          Una ronda `finished` (histórica, de la época de validación digital)
+          ya no tiene rama propia: el flujo V1 no la produce, y mostrarla
+          tapaba la biblioteca y dejaba «Nueva palabra» sin efecto. Todo lo
+          que no está `playing` es preparación. */}
+      <div className="pal-split">
+        {/* ══ Columna izquierda: operación ═══════════════════════════════ */}
+        <div>
+          {!enJuego && (
+            <>
+              {/* Anunciar / Nueva palabra / Finalizar viven SÓLO en la barra
+                  operativa de la columna derecha, y la palabra elegida se ve
+                  sólo en la biblioteca (fila resaltada). */}
+              <div className="card" style={{marginBottom:10}}>
+                <div className="ctitle">🔤 Arma la palabra</div>
+                <div style={{fontSize:11, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
+                  Elegí una palabra en la biblioteca y usá la barra de acciones:
+                  📢 Anunciar · 🔄 Nueva palabra · ⏹ Finalizar. El servidor verifica
+                  los participantes conectados al lanzar.
                 </div>
-                <button className="btn btn-g" style={{padding:"7px 13px", fontSize:10.5, whiteSpace:"nowrap"}}
-                  disabled={busy} onClick={anunciar}>
-                  📺 Anunciar
-                </button>
               </div>
-              {anunciado && (
-                <div style={{marginTop:8, fontSize:10.5, color:"#00F5A0"}}>
-                  ✓ La placa está en pantalla.
+  
+              <div className="card">
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
+                    Participantes conectados
+                  </div>
+                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22, color:COL}}>{activos}</div>
+                  <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                    onClick={leerConectados}>↻</button>
                 </div>
-              )}
-            </div>
-
-            {/* Palabra elegida — sólo preparación. Nada de esto está en la
-                base ni en la TV hasta que se toque «Lanzar». */}
-            <div className="card" style={{marginBottom:10}}>
-              <div className="ctitle">Palabra seleccionada</div>
-
-              {!elegida ? (
-                <div style={{textAlign:"center", padding:"26px 14px"}}>
-                  <div style={{fontSize:30, marginBottom:8, opacity:.45}}>🔤</div>
-                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:800, fontSize:14,
-                    color:"rgba(240,232,255,.6)", marginBottom:5}}>
-                    Seleccioná una palabra de la biblioteca
-                  </div>
-                  <div style={{fontSize:11, color:"rgba(240,232,255,.3)", lineHeight:1.5}}>
-                    Elegí una palabra del panel derecho para preparar la próxima ronda.
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div style={{display:"flex", gap:6, justifyContent:"center", flexWrap:"wrap",
-                    padding:"8px 0 10px"}}>
-                    {elegida.word.split("").map((l, i) => (
-                      <div key={i} style={{minWidth:44, height:54, padding:"0 6px", borderRadius:11,
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:26, color:COL,
-                        background:"rgba(168,85,247,.12)", border:"1.5px solid rgba(168,85,247,.4)"}}>{l}</div>
-                    ))}
-                  </div>
-                  <div style={{textAlign:"center", fontSize:10.5, color:"rgba(240,232,255,.4)",
-                    marginBottom:12}}>
-                    {elegida.word.length} letras
-                  </div>
-
-                  {/* Mismo flujo de siempre: `lanzar()` → arma_palabra_launch_round. */}
-                  <button className="btn btn-p btn-full"
-                    disabled={busy || !alcanzaGente(elegida.word)}
-                    onClick={()=>lanzar(elegida.word)}>
-                    🚀 Lanzar {elegida.word}
-                  </button>
-
-                  {/* La misma guarda que ya existía, ahora contra la palabra
-                      elegida en vez de contra toda la lista. El RPC igual la
-                      vuelve a chequear del otro lado. */}
-                  {!alcanzaGente(elegida.word) && (
-                    <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:8, lineHeight:1.5,
-                      textAlign:"center"}}>
-                      Con {activos} conectados no alcanza. Hace falta un participante por letra.
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="card">
-              <div style={{display:"flex", alignItems:"center", gap:8}}>
-                <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
-                  Participantes conectados
-                </div>
-                <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22, color:COL}}>{activos}</div>
-                <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
-                  onClick={leerConectados}>↻</button>
-              </div>
-              {enElAire && (
-                <>
-                  <div style={{fontSize:10, color:"rgba(240,232,255,.3)", margin:"10px 0 6px", textAlign:"center"}}>
+                {enElAire && (
+                  <div style={{fontSize:10, color:"rgba(240,232,255,.3)", marginTop:10, textAlign:"center"}}>
                     Arma la Palabra sigue en el aire, esperando la palabra siguiente.
                   </div>
-                  {salida}
-                </>
-              )}
-            </div>
-          </div>
+                )}
+                {anunciado && (
+                  <div style={{fontSize:10, color:"#00F5A0", marginTop:10, textAlign:"center"}}>
+                    📢 La placa está en pantalla. Todavía no hay ronda ni letras repartidas.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
-          {/* ══ Panel lateral: biblioteca ══════════════════════════════ */}
+          {/* ── EN JUEGO: información operativa, no un validador ──
+              La palabra se resuelve FÍSICAMENTE: la gente se busca en el bar, se
+              junta y se acerca al escenario, y el staff resuelve ahí. La plataforma
+              no necesita saber qué personas la formaron, así que acá no hay
+              selección de jugadores, ni casilleros, ni botón de validar, y no se
+              llama a `validate_arma_palabra_group`. La RPC sigue en Supabase, sin
+              consumidor. */}
+          {enJuego && (
+            <>
+              <div className="card" style={{marginBottom:10, borderColor:"rgba(168,85,247,.3)"}}>
+                <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
+                  <div className="chip chip-live"><div className="dot-live"/>Juego activo</div>
+                  <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
+                    {assignments.length} con letra
+                  </div>
+                </div>
+    
+                {/* La palabra sí se le muestra al OPERADOR: la necesita para
+                    resolver en el escenario. Al cliente no, sólo a la TV. */}
+                <div style={{textAlign:"center", padding:"4px 0 12px"}}>
+                  <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>PALABRA EN JUEGO</div>
+                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:38, color:COL,
+                    letterSpacing:4, lineHeight:1.2}}>
+                    {objetivo || "—"}
+                  </div>
+                </div>
+    
+                <div style={{display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
+                  borderRadius:10, background:"rgba(240,232,255,.04)",
+                  border:"1px solid rgba(240,232,255,.08)", marginBottom:10}}>
+                  <div style={{flex:1, fontSize:11, color:"rgba(240,232,255,.55)"}}>
+                    Participantes conectados
+                  </div>
+                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:16, color:COL}}>{activos}</div>
+                  <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                    onClick={leerConectados}>↻</button>
+                </div>
+    
+                {/* Distribución de letras. Es lo único que el operador necesita
+                    saber del reparto: que cada letra de la palabra está en manos de
+                    alguien. Un 0 significa que esa letra no salió y la palabra no
+                    se puede formar. */}
+                <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4, marginBottom:7}}>
+                  DISTRIBUCIÓN
+                </div>
+                <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:10}}>
+                  {distribucion.map(({letra, cuantos}, i) => (
+                    <div key={`${letra}-${i}`} style={{display:"flex", alignItems:"center", gap:5,
+                      padding:"5px 10px", borderRadius:9,
+                      background: cuantos > 0 ? "rgba(168,85,247,.12)" : "rgba(255,45,120,.1)",
+                      border: `1px solid ${cuantos > 0 ? "rgba(168,85,247,.35)" : "rgba(255,45,120,.4)"}`}}>
+                      <span style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:15,
+                        color: cuantos > 0 ? COL : "#FF2D78"}}>{letra}</span>
+                      <span style={{fontSize:11, color:"rgba(240,232,255,.45)"}}>× {cuantos}</span>
+                    </div>
+                  ))}
+                </div>
+    
+                <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
+                  La gente se busca en el bar y se acerca al escenario. Cuando el staff
+                  resuelva, elegí la palabra siguiente o cerrá el juego.
+                </div>
+              </div>
+    
+              {/* Lista informativa. NO seleccionable: acá no se valida nada. */}
+              <div className="card" style={{marginBottom:10}}>
+                <div className="ctitle">Participantes</div>
+                {assignments.length === 0 && (
+                  <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"12px 0"}}>
+                    Todavía nadie tiene letra. Los celulares la reciben solos al abrir el juego.
+                  </div>
+                )}
+                <div style={{maxHeight:260, overflowY:"auto"}}>
+                  {assignments.map((a) => {
+                    const presente = a.last_seen ? reyActivo(a) : true;
+                    return (
+                      <div key={a.user_id}
+                        style={{display:"flex", alignItems:"center", gap:9, padding:"7px 9px",
+                          marginBottom:4, borderRadius:10, opacity: presente ? 1 : .45,
+                          background:"rgba(240,232,255,.03)", border:"1px solid rgba(240,232,255,.08)"}}>
+                        <div style={{fontSize:17, flexShrink:0}}>{a.avatar_emoji || "👤"}</div>
+                        <div style={{flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"#F0E8FF",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                          {a.name}
+                          {!presente && (
+                            <span style={{fontSize:9, fontWeight:400, color:"rgba(240,232,255,.3)"}}> · inactivo</span>
+                          )}
+                        </div>
+                        <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:19,
+                          color:"rgba(240,232,255,.45)"}}>{a.assigned_letter}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{fontSize:9.5, color:"rgba(240,232,255,.26)", marginTop:8, lineHeight:1.5}}>
+                  Sólo informativo. El grupo se resuelve en el escenario, no desde acá.
+                </div>
+              </div>
+    
+            </>
+          )}
+        </div>
+
+        {/* ══ Columna derecha: barra operativa + biblioteca + configuración ══ */}
+        <div>
+          {barraOperativa}
           <div className="card">
             <div className="ctitle">📚 Biblioteca de palabras</div>
 
@@ -3566,6 +3956,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
               {filtradas.map((p) => {
                 const w = p.word;
                 const usada = usadas.includes(w);
+                const alAire = enJuego && w === objetivo;
                 const editandoEsta = editando === p.id;
 
                 if (editandoEsta) return (
@@ -3607,16 +3998,16 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                     <div style={{flex:1, minWidth:0}}>
                       <div className="pal-row-w">{w}</div>
                       <div className="pal-row-n">
-                        {w.length} letras{usada ? " · ya jugada" : ""}
+                        {w.length} letras{alAire ? " · en juego" : usada ? " · ya jugada" : ""}
                       </div>
                     </div>
                     {/* Una palabra ya lanzada es historial de la partida: editarla
                         retroactivamente no cambia la ronda que se jugó. */}
                     <button className="btn" style={{padding:"4px 7px", fontSize:10, flexShrink:0,
                       background:"rgba(0,229,255,.06)", border:"1px solid rgba(0,229,255,.2)",
-                      color: usada ? "rgba(0,229,255,.25)" : "rgba(0,229,255,.75)"}}
-                      title={usada ? "Ya se jugó en esta partida" : "Editar palabra"}
-                      disabled={busy || usada}
+                      color: (usada || alAire) ? "rgba(0,229,255,.25)" : "rgba(0,229,255,.75)"}}
+                      title={alAire ? "Está en juego" : usada ? "Ya se jugó en esta partida" : "Editar palabra"}
+                      disabled={busy || usada || alAire}
                       onClick={e=>{ e.stopPropagation(); abrirEdicion(p); }}>✏️</button>
                     <button className="btn" style={{padding:"4px 7px", fontSize:10, flexShrink:0,
                       background:"rgba(255,45,120,.06)", border:"1px solid rgba(255,45,120,.2)",
@@ -3655,232 +4046,173 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
               </div>
             </div>
           </div>
+
+          {/* Configuración debajo de la biblioteca. Referencia visual: la
+              palabra en juego o, sin ronda viva, la que se está preparando. */}
+          <div style={{marginTop:10}}>
+            <PalabraReglasCard col={COL} palabraRef={enJuego ? objetivo : (elegida?.word || "")}
+              enJuego={enJuego}/>
+          </div>
         </div>
-      )}
-      {/* ── EN JUEGO: información operativa, no un validador ──
-          La palabra se resuelve FÍSICAMENTE: la gente se busca en el bar, se
-          junta y se acerca al escenario, y el staff resuelve ahí. La plataforma
-          no necesita saber qué personas la formaron, así que acá no hay
-          selección de jugadores, ni casilleros, ni botón de validar, y no se
-          llama a `validate_arma_palabra_group`. La RPC sigue en Supabase, sin
-          consumidor. */}
-      {enJuego && (
-        <>
-          <div className="card" style={{marginBottom:10, borderColor:"rgba(168,85,247,.3)"}}>
-            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
-              <div className="chip chip-live"><div className="dot-live"/>Juego activo</div>
-              <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
-                {assignments.length} con letra
-              </div>
-            </div>
-
-            {/* La palabra sí se le muestra al OPERADOR: la necesita para
-                resolver en el escenario. Al cliente no, sólo a la TV. */}
-            <div style={{textAlign:"center", padding:"4px 0 12px"}}>
-              <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>PALABRA EN JUEGO</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:38, color:COL,
-                letterSpacing:4, lineHeight:1.2}}>
-                {objetivo || "—"}
-              </div>
-            </div>
-
-            <div style={{display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
-              borderRadius:10, background:"rgba(240,232,255,.04)",
-              border:"1px solid rgba(240,232,255,.08)", marginBottom:10}}>
-              <div style={{flex:1, fontSize:11, color:"rgba(240,232,255,.55)"}}>
-                Participantes conectados
-              </div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:16, color:COL}}>{activos}</div>
-              <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
-                onClick={leerConectados}>↻</button>
-            </div>
-
-            {/* Distribución de letras. Es lo único que el operador necesita
-                saber del reparto: que cada letra de la palabra está en manos de
-                alguien. Un 0 significa que esa letra no salió y la palabra no
-                se puede formar. */}
-            <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4, marginBottom:7}}>
-              DISTRIBUCIÓN
-            </div>
-            <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:10}}>
-              {distribucion.map(({letra, cuantos}, i) => (
-                <div key={`${letra}-${i}`} style={{display:"flex", alignItems:"center", gap:5,
-                  padding:"5px 10px", borderRadius:9,
-                  background: cuantos > 0 ? "rgba(168,85,247,.12)" : "rgba(255,45,120,.1)",
-                  border: `1px solid ${cuantos > 0 ? "rgba(168,85,247,.35)" : "rgba(255,45,120,.4)"}`}}>
-                  <span style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:15,
-                    color: cuantos > 0 ? COL : "#FF2D78"}}>{letra}</span>
-                  <span style={{fontSize:11, color:"rgba(240,232,255,.45)"}}>× {cuantos}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
-              La gente se busca en el bar y se acerca al escenario. Cuando el staff
-              resuelva, elegí la palabra siguiente o cerrá el juego.
-            </div>
-          </div>
-
-          {/* Lista informativa. NO seleccionable: acá no se valida nada. */}
-          <div className="card" style={{marginBottom:10}}>
-            <div className="ctitle">Participantes</div>
-            {assignments.length === 0 && (
-              <div style={{fontSize:11.5, color:"rgba(240,232,255,.3)", padding:"12px 0"}}>
-                Todavía nadie tiene letra. Los celulares la reciben solos al abrir el juego.
-              </div>
-            )}
-            <div style={{maxHeight:260, overflowY:"auto"}}>
-              {assignments.map((a) => {
-                const presente = a.last_seen ? reyActivo(a) : true;
-                return (
-                  <div key={a.user_id}
-                    style={{display:"flex", alignItems:"center", gap:9, padding:"7px 9px",
-                      marginBottom:4, borderRadius:10, opacity: presente ? 1 : .45,
-                      background:"rgba(240,232,255,.03)", border:"1px solid rgba(240,232,255,.08)"}}>
-                    <div style={{fontSize:17, flexShrink:0}}>{a.avatar_emoji || "👤"}</div>
-                    <div style={{flex:1, minWidth:0, fontSize:12, fontWeight:600, color:"#F0E8FF",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-                      {a.name}
-                      {!presente && (
-                        <span style={{fontSize:9, fontWeight:400, color:"rgba(240,232,255,.3)"}}> · inactivo</span>
-                      )}
-                    </div>
-                    <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:19,
-                      color:"rgba(240,232,255,.45)"}}>{a.assigned_letter}</div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{fontSize:9.5, color:"rgba(240,232,255,.26)", marginTop:8, lineHeight:1.5}}>
-              Sólo informativo. El grupo se resuelve en el escenario, no desde acá.
-            </div>
-          </div>
-
-          <button className="btn btn-p btn-full" style={{marginBottom:8}}
-            disabled={busy} onClick={nuevaPalabra}>
-            🔄 Nueva palabra
-          </button>
-          {salida}
-        </>
-      )}
-
-      {/* ── Ganador ── */}
-      {conGanador && (
-        <div className="card" style={{borderColor:"rgba(0,245,160,.3)"}}>
-          <div style={{textAlign:"center", marginBottom:12}}>
-            <div style={{fontSize:34, lineHeight:1}}>🏆</div>
-            <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:17, color:"#00F5A0", marginTop:6}}>
-              ¡Armaron {round.target_word}!
-            </div>
-          </div>
-          {(round.winner_group || []).map((g) => (
-            <div key={g.user_id} className="qrow">
-              <div className="qavatar">{g.avatar_emoji || "👤"}</div>
-              <div className="qname" style={{flex:1}}>{g.name}</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:18, color:"#00F5A0"}}>
-                {g.assigned_letter}
-              </div>
-            </div>
-          ))}
-          <div style={{marginTop:12}}>
-            <button className="btn btn-g btn-full" style={{marginBottom:4}}
-              disabled={busy} onClick={nuevaPalabra}>
-              🔁 Nueva palabra
-            </button>
-            <div style={{fontSize:9.5, color:"rgba(240,232,255,.28)", margin:"0 0 10px", textAlign:"center", lineHeight:1.5}}>
-              Vuelve a la lista para elegir la siguiente. Sigue en Arma la Palabra:
-              la TV queda en la pantalla del juego. La ronda anterior queda en el histórico.
-            </div>
-          </div>
-          {salida}
-        </div>
-      )}
-
-      {/* ── Configuración ── SIEMPRE visible, en cualquier fase. */}
-      <div style={{marginTop:10}}>
-        <PalabraReglasCard col={COL} objetivo={objetivo}/>
       </div>
     </div>
   );
 }
 
 // ── Configuración de reglas de Arma la Palabra ──────────────────────────────
-// ⚠️ SIN BACKEND. A diferencia de Rey del Orto (`rey_reglas_config`) y de
-// Sumate (`sumate_reglas_config`), Arma la Palabra NO tiene tabla de reglas en
-// Supabase. Esta card existe para dejar el lugar hecho y para mostrar lo que SÍ
-// es cierto hoy — el mínimo estructural —, no para simular una configuración
-// que no se guarda en ningún lado.
-//
-// El toggle y el número están DESHABILITADOS a propósito. No hay localStorage,
-// no hay estado que finja persistir: si el operador lo mueve y refresca, no
-// pasó nada, y mentirle sobre eso es peor que no ofrecerlo. Se habilita cuando
-// exista el contrato en la base (ver el informe: hace falta una tanda de
-// Supabase).
+// Mismo contrato visual y funcional que las cards de Rey del Orto y Sumate,
+// pero sobre `arma_palabra_reglas_config` (migración
+// `20260928233131_arma_palabra_reglas_v1`, ya aplicada en producción).
 //
 // ── MÍNIMO ESTRUCTURAL vs MÍNIMO CONFIGURABLE ──
-// En Arma la Palabra el mínimo estructural NO es un número fijo: es la CANTIDAD
-// DE LETRAS de la palabra en juego. `arma_palabra_launch_round` rechaza con
-// `necesitás al menos <length(palabra)> participantes`, porque cada letra tiene
-// que estar en manos de alguien. Con una palabra de 3 letras hacen falta 3
-// personas; con una de 6, seis. Por eso con 2 participantes el juego no lanza
-// nunca: ninguna palabra válida tiene menos de 3 letras.
-//
-// El mínimo configurable sería una restricción ADICIONAL encima de ese piso, y
-// apagarla no podría bajar del estructural — igual que en Sumate, donde la RPC
-// aplica GREATEST(2, configurado).
-function PalabraReglasCard({col, objetivo}){
-  const letras = (objetivo || "").length;
+// El mínimo estructural NO es un número fijo: es la CANTIDAD DE LETRAS de la
+// palabra, porque cada letra tiene que estar en manos de alguien. La regla
+// configurable es una restricción ADICIONAL encima de ese piso:
+//   ON  → required = GREATEST(length(palabra), min)
+//   OFF → required = length(palabra)
+// Eso lo calcula `arma_palabra_launch_round`. El "mínimo efectivo" de esta
+// card es SÓLO una referencia visual: no habilita ni bloquea ningún botón.
+function PalabraReglasCard({col, palabraRef, enJuego}){
+  const {
+    loading, error: reglasError, refresh, reglaPorKey, actualizarRegla,
+  } = useReglasArma();
+
+  const [minInput, setMinInput] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [errorInline, setErrorInline] = useState(null);
+
+  const regla = reglaPorKey(REGLA_ARMA_MINIMOS);
+  const minGuardado = typeof regla?.value?.min === "number" ? regla.value.min : null;
+  const guardadoTxt = minGuardado == null ? "" : String(minGuardado);
+
+  // El input arranca y se resincroniza con lo PERSISTIDO. Apagar la regla no
+  // toca `value`, así que el número sigue acá aunque la regla esté en OFF.
+  useEffect(() => { setMinInput(guardadoTxt); }, [guardadoTxt]);
+
+  const motivo = motivoMinimoArmaInvalido(minInput);
+  const sucio  = minInput.trim() !== guardadoTxt;
+
+  const guardar = async (patch) => {
+    if (guardando || !regla) return;
+    setGuardando(true); setErrorInline(null);
+    try { await actualizarRegla(REGLA_ARMA_MINIMOS, patch); }
+    catch (e) { setErrorInline(e?.message || String(e)); }
+    finally { setGuardando(false); }
+  };
+
+  const guardarMinimo = () => {
+    if (motivo || !sucio) return;
+    guardar({ value: { min: Number(minInput.trim()) } });
+  };
+
+  if (loading) return (
+    <div className="card"><div className="ctitle">⚙️ Configuración de reglas</div>
+      <div style={{fontSize:11, color:"rgba(240,232,255,.3)"}}>Cargando configuración…</div>
+    </div>
+  );
+
+  if (reglasError || !regla) return (
+    <div className="card"><div className="ctitle">⚙️ Configuración de reglas</div>
+      <div style={{fontSize:11, color:"#FCA5A5", lineHeight:1.5, marginBottom:9}}>
+        {reglasError || "Falta la regla de participantes mínimos en la base."}
+      </div>
+      <button className="btn btn-g" style={{padding:"6px 13px", fontSize:11}} onClick={refresh}>
+        ↻ Reintentar
+      </button>
+    </div>
+  );
+
+  // ── Referencia visual del mínimo efectivo (con lo GUARDADO, no el borrador) ──
+  const letras   = (palabraRef || "").length;
+  const efectivo = letras > 0
+    ? (regla.enabled && minGuardado !== null ? Math.max(letras, minGuardado) : letras)
+    : null;
+
+  const actualizado = regla.updated_at
+    ? new Date(regla.updated_at).toLocaleString("es-AR",
+        { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })
+    : null;
 
   return (
     <div className="card">
       <div className="ctitle">⚙️ Configuración de reglas</div>
-
-      {/* Lo que SÍ es cierto hoy, leído de la mecánica real. */}
       <div className="rey-regla">
         <div className="rey-regla-hdr">
-          <div className="rey-regla-t">Mínimo estructural del juego</div>
-          <div className="rey-regla-estado rey-regla-on">SIEMPRE</div>
-        </div>
-        <div className="rey-regla-d">
-          Hacen falta tantos participantes como letras tenga la palabra: cada letra
-          tiene que estar en manos de alguien. Las palabras válidas tienen entre 3 y
-          6 letras, así que con 2 participantes el juego nunca puede lanzarse.
-        </div>
-        {letras > 0 && (
-          <div style={{fontSize:10.5, color:col, marginTop:7, lineHeight:1.5}}>
-            Palabra en juego: <strong>{objetivo}</strong> → mínimo {letras} participantes.
+          <div className="rey-regla-t">Participantes mínimos</div>
+          <div className={`rey-regla-estado ${regla.enabled ? "rey-regla-on" : "rey-regla-off"}`}>
+            {regla.enabled ? "ACTIVA" : "DESACTIVADA"}
           </div>
-        )}
-      </div>
-
-      {/* El lugar reservado, dicho como lo que es. */}
-      <div className="rey-regla" style={{opacity:.55}}>
-        <div className="rey-regla-hdr">
-          <div className="rey-regla-t">Participantes mínimos (operativo)</div>
-          <div className="rey-regla-estado rey-regla-off">SIN CONECTAR</div>
-          <Toggle on={false} color={col} label="" onToggle={() => {}}/>
+          {/* Apagar/encender manda SÓLO `enabled`: el mínimo guardado no se toca. */}
+          <Toggle on={regla.enabled} color={col}
+            label={guardando ? "Guardando…" : ""}
+            onToggle={() => guardar({ enabled: !regla.enabled })}/>
         </div>
         <div className="rey-regla-d">
-          Restricción adicional encima del mínimo estructural, para pedir más gente
-          de la que la palabra exige.
+          Cuántos participantes conectados hacen falta para poder lanzar una ronda,
+          además del mínimo que exige la palabra.
         </div>
-        <div style={{display:"flex", gap:7, alignItems:"center", marginTop:9}}>
-          <input value="" readOnly disabled placeholder="—"
+
+        {/* Con la regla apagada el valor guardado se sigue viendo, atenuado:
+            se conserva para cuando se vuelva a encender. */}
+        <div style={{display:"flex", gap:7, alignItems:"center", marginTop:9,
+          opacity: regla.enabled ? 1 : .5}}>
+          <input value={minInput} onChange={(e) => setMinInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") guardarMinimo(); }}
+            inputMode="numeric" placeholder="—" disabled={guardando}
             style={{width:74, padding:"7px 9px", borderRadius:9, fontSize:13,
               fontFamily:"Syne,sans-serif", fontWeight:800, textAlign:"center",
-              background:"rgba(240,232,255,.03)", border:"1px solid rgba(240,232,255,.08)",
-              color:"rgba(240,232,255,.3)", cursor:"not-allowed"}}/>
-          <button className="btn btn-g" style={{padding:"7px 14px", fontSize:11}} disabled>
-            Guardar
+              background:"rgba(240,232,255,.05)",
+              border:`1px solid ${sucio ? "rgba(255,214,0,.45)" : "rgba(240,232,255,.12)"}`,
+              color:"#F0E8FF"}}/>
+          <button className="btn btn-g" style={{padding:"7px 14px", fontSize:11}}
+            disabled={guardando || !!motivo || !sucio}
+            onClick={guardarMinimo}>
+            {guardando ? "Guardando…" : "Guardar"}
           </button>
+          <div style={{flex:1, fontSize:10, color:"rgba(240,232,255,.3)", lineHeight:1.4}}>
+            Entre {ARMA_MIN_PISO} y {ARMA_MIN_TECHO}.
+          </div>
         </div>
-      </div>
+        {sucio && !motivo && (
+          <div style={{fontSize:10, color:"#FFD600", marginTop:6}}>
+            Cambio sin guardar (guardado: {guardadoTxt || "—"}).
+          </div>
+        )}
+        {motivo && sucio && (
+          <div style={{fontSize:10, color:"#FCA5A5", marginTop:6}}>{motivo}</div>
+        )}
+        {!regla.enabled && (
+          <div style={{fontSize:10, color:"rgba(240,232,255,.35)", marginTop:7, lineHeight:1.5}}>
+            Regla desactivada: sólo se aplica el mínimo de la palabra (una persona por letra).
+            {minGuardado !== null && ` El valor ${minGuardado} queda guardado para cuando la vuelvas a activar.`}
+          </div>
+        )}
 
-      <div style={{fontSize:10, color:"#FFD600", marginTop:10, lineHeight:1.5,
-        borderTop:"1px solid rgba(240,232,255,.06)", paddingTop:9}}>
-        ⚠️ Arma la Palabra todavía no tiene tabla de reglas en la base. Este control
-        está a la vista pero desconectado: no guarda nada. Se habilita cuando se
-        cree el contrato en Supabase.
+        {/* Mínimo estructural: lo que el operador tiene que entender. */}
+        <div style={{fontSize:10.5, color:"rgba(240,232,255,.5)", marginTop:9, lineHeight:1.5,
+          borderTop:"1px solid rgba(240,232,255,.06)", paddingTop:8}}>
+          El mínimo efectivo nunca puede ser menor que la cantidad de letras de la palabra.
+        </div>
+        {letras > 0 && (
+          <div style={{fontSize:10.5, color:col, marginTop:6, lineHeight:1.6}}>
+            {enJuego ? "Palabra en juego" : "Palabra seleccionada"}: <strong>{palabraRef}</strong>
+            {" → "}mínimo estructural: <strong>{letras}</strong>
+            <br/>
+            Mínimo efectivo: <strong>{efectivo}</strong>
+            <span style={{color:"rgba(240,232,255,.3)"}}>
+              {" "}(referencia: el servidor lo verifica al lanzar)
+            </span>
+          </div>
+        )}
+
+        {actualizado && (
+          <div style={{fontSize:9.5, color:"rgba(240,232,255,.25)", marginTop:7}}>
+            Última modificación: {actualizado}
+          </div>
+        )}
+        {errorInline && (
+          <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:8, lineHeight:1.5}}>{errorInline}</div>
+        )}
       </div>
     </div>
   );
@@ -3968,21 +4300,115 @@ function OpcionesEditor({opts, setOpts, correct, setCorrect}){
   );
 }
 
+// ── Clave de duplicado dentro de la RONDA ───────────────────────────────────
+// Mismo criterio que el UNIQUE de la biblioteca (minúsculas + trim + espacios
+// internos colapsados), aplicado sólo para no cargar dos veces la misma
+// pregunta en una ronda. No toca tildes ni signos.
+const claveTrivia = (texto) => String(texto || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+// ── Modal único de ALTA / EDICIÓN de una pregunta de biblioteca ────────────
+// El mismo formulario para «Nueva pregunta» y «Editar pregunta»: cambia el
+// título y la acción que recibe `onGuardar`. Reutiliza OpcionesEditor y
+// preguntaValida, así las reglas (2–4 opciones, una correcta) son las mismas
+// que siempre tuvo Desafío Demente.
+function PreguntaModal({modo, inicial, guardando, error, onCancelar, onGuardar}){
+  const [texto,   setTexto]   = useState(inicial?.text ?? "");
+  const [opts,    setOpts]    = useState(inicial?.opts?.length ? [...inicial.opts] : ["",""]);
+  const [correct, setCorrect] = useState(Number.isInteger(inicial?.correct) ? inicial.correct : 0);
+  const valida = preguntaValida(texto, opts, correct);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !guardando) onCancelar(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [guardando, onCancelar]);
+
+  const guardar = () => {
+    if (!valida || guardando) return;
+    // Misma normalización que siempre usó la ronda: trim de texto y opciones.
+    onGuardar({ text:texto.trim(), opts:opts.map((o) => o.trim()), correct });
+  };
+
+  return (
+    <div className="dd-modal-back" onMouseDown={(e)=>{ if (e.target === e.currentTarget && !guardando) onCancelar(); }}>
+      <div className="dd-modal" role="dialog" aria-modal="true"
+        aria-label={modo === "editar" ? "Editar pregunta" : "Nueva pregunta"}>
+        <div className="dd-modal-t">{modo === "editar" ? "✏️ Editar pregunta" : "➕ Nueva pregunta"}</div>
+        <div className="ctitle">Pregunta</div>
+        <textarea className="inp" rows={2} autoFocus placeholder="Escribí la pregunta"
+          value={texto} onChange={(e)=>setTexto(e.target.value)}/>
+        <div className="ctitle" style={{marginTop:4}}>Respuestas</div>
+        <OpcionesEditor opts={opts} setOpts={setOpts} correct={correct} setCorrect={setCorrect}/>
+        {modo === "editar" && (
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)",marginBottom:8,lineHeight:1.5}}>
+            Editar la biblioteca no cambia las preguntas que ya copiaste a la ronda.
+          </div>
+        )}
+        {error && <div style={{fontSize:10.5,color:"#FCA5A5",marginBottom:8,lineHeight:1.5}}>{error}</div>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button className="btn btn-r" style={{padding:"8px 16px",fontSize:11}}
+            disabled={guardando} onClick={onCancelar}>Cancelar</button>
+          <button className="btn btn-p" style={{padding:"8px 16px",fontSize:11}}
+            disabled={!valida || guardando} onClick={guardar}>
+            {guardando ? "Guardando…" : "Guardar pregunta"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Confirmación de borrado de una pregunta de biblioteca ─────────────────
+function ConfirmarBorradoModal({pregunta, guardando, error, onCancelar, onConfirmar}){
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !guardando) onCancelar(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [guardando, onCancelar]);
+  return (
+    <div className="dd-modal-back" onMouseDown={(e)=>{ if (e.target === e.currentTarget && !guardando) onCancelar(); }}>
+      <div className="dd-modal" role="alertdialog" aria-modal="true" aria-label="Eliminar pregunta" style={{maxWidth:440}}>
+        <div className="dd-modal-t">🗑️ ¿Eliminar esta pregunta de la biblioteca?</div>
+        <div style={{fontSize:12.5,fontWeight:600,color:"#F0E8FF",lineHeight:1.45,padding:"10px 12px",
+          borderRadius:10,background:"rgba(240,232,255,.04)",border:"1px solid rgba(240,232,255,.08)",marginBottom:8}}>
+          {pregunta.text}
+        </div>
+        <div style={{fontSize:10,color:"rgba(240,232,255,.4)",marginBottom:10,lineHeight:1.5}}>
+          Si ya la agregaste a la ronda, esa copia queda intacta.
+        </div>
+        {error && <div style={{fontSize:10.5,color:"#FCA5A5",marginBottom:8,lineHeight:1.5}}>{error}</div>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button className="btn btn-g" style={{padding:"8px 16px",fontSize:11}}
+            disabled={guardando} onClick={onCancelar}>Cancelar</button>
+          <button className="btn btn-r" style={{padding:"8px 16px",fontSize:11}}
+            disabled={guardando} onClick={onConfirmar}>
+            {guardando ? "Eliminando…" : "Eliminar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TriviaPanel({sec, controls, sessionId, gameState}){
+  // `qs` = preguntas de ESTA ronda: COPIAS {text, opts, correct}, sin
+  // referencia viva a la biblioteca. Editar o borrar la biblioteca no las toca.
   const [qs,       setQs]       = useState([]);
   const [coupon,   setCoupon]   = useState("BEER50");
-  const [newQ,     setNewQ]     = useState("");
-  const [newOpts,  setNewOpts]  = useState(["",""]);
-  const [newCorr,  setNewCorr]  = useState(0);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
-  // Índice de la pregunta que se está editando (null = ninguna). La edición
-  // ocurre sobre `qs`, en memoria: nada de esto toca `trivia_questions` hasta
-  // que el operador lanza la ronda.
-  const [editIdx,  setEditIdx]  = useState(null);
-  const [editQ,    setEditQ]    = useState("");
-  const [editOpts, setEditOpts] = useState(["",""]);
-  const [editCorr, setEditCorr] = useState(0);
+  // 📚 Biblioteca: catálogo PERSISTENTE (trivia_preguntas_biblioteca).
+  const biblio = useBibliotecaPreguntasTrivia();
+  const [bibBusqueda, setBibBusqueda] = useState("");
+  const [bibNota,     setBibNota]     = useState(null);
+  const [bibErr,      setBibErr]      = useState(null);
+  // Selección múltiple: ids de la biblioteca. Estado operativo local.
+  const [bibSel,      setBibSel]      = useState([]);
+  // Modal de alta/edición: null | {modo:"nueva"} | {modo:"editar", pregunta}
+  const [modal,       setModal]       = useState(null);
+  const [modalErr,    setModalErr]    = useState(null);
+  const [borrando,    setBorrando]    = useState(null);   // pregunta a confirmar
+  const [borrarErr,   setBorrarErr]   = useState(null);
   const phase = gameState?.active_game === "trivia" ? gameState?.trivia_state || "idle" : "idle";
   const enElAire = gameState?.active_game === "trivia";
   const curQ = gameState?.trivia_question ?? 0;
@@ -4006,36 +4432,12 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
       });
   }, [sessionId, roundId]);
 
-  const addQ = () => {
-    if(!preguntaValida(newQ,newOpts,newCorr)||qs.length>=MAX_TRIVIA_Q) return;
-    // Se guardan sólo las opciones reales y sin espacios sobrantes: nada de
-    // rellenar hasta cuatro. Eso es lo que después va a `options` en el INSERT.
-    setQs(q=>[...q,{text:newQ.trim(),opts:newOpts.map(o=>o.trim()),correct:newCorr}]);
-    setNewQ(""); setNewOpts(["",""]); setNewCorr(0);
-  };
-
-  // ── Gestión de la lista local, previa al lanzamiento ─────────────────────
-  // Las tres operan sobre `qs` y nada más: el orden del array ES el
-  // `question_idx` que se va a insertar, así que reordenar acá alcanza para
-  // que la ronda salga en el orden elegido.
-  const abrirEdicion = (i) => {
-    setEditIdx(i);
-    setEditQ(qs[i].text);
-    setEditOpts([...qs[i].opts]);
-    setEditCorr(qs[i].correct);
-  };
-  const cancelarEdicion = () => setEditIdx(null);
-  const guardarEdicion = () => {
-    if(!preguntaValida(editQ,editOpts,editCorr)) return;
-    setQs(list=>list.map((q,i)=>i===editIdx
-      ?{text:editQ.trim(),opts:editOpts.map(o=>o.trim()),correct:editCorr}:q));
-    setEditIdx(null);
-  };
+  // ── Gestión de la ronda, previa al lanzamiento ───────────────────────────
+  // Operan sobre `qs` y nada más: el orden del array ES el `question_idx` que
+  // se va a insertar, así que reordenar acá alcanza.
   const borrarQ = (i) => {
-    if(!window.confirm(`¿Eliminar la pregunta ${i+1}?`)) return;
+    if(!window.confirm(`¿Quitar la pregunta ${i+1} de la ronda?`)) return;
     setQs(list=>list.filter((_,idx)=>idx!==i));
-    // Si estaba abierta en edición, la edición deja de tener sentido.
-    setEditIdx(null);
   };
   const moverQ = (i, dir) => {
     const destino = i + dir;
@@ -4045,8 +4447,6 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
       [next[i],next[destino]]=[next[destino],next[i]];
       return next;
     });
-    // El índice editado se movería junto con la fila; más simple es cerrarla.
-    setEditIdx(null);
   };
 
   // Las preguntas cargadas viven sólo en memoria hasta que se lanza la ronda:
@@ -4062,12 +4462,16 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
 
   // Toda acción pasa por acá: un solo vuelo a la vez y el error queda visible.
   // Sin esto, un doble click en Lanzar insertaba las preguntas dos veces y uno
-  // en Siguiente salteaba una pregunta.
+  // en Siguiente salteaba una pregunta. El candado es un ref y no sólo `busy`:
+  // el estado se aplica en el render siguiente, así que dos clics en el mismo
+  // tick pasaban los dos y lanzaban DOS rondas.
+  const busyRef = useRef(false);
   const correr = async (fn) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setActionError(null);
     try { await fn(); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   };
 
   const launch = () => correr(async () => {
@@ -4111,229 +4515,397 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
     else { setQs([]); setCoupon("BEER50"); }
   });
 
-  // Botón de salida único, reutilizado en TODAS las fases: durante la partida,
-  // con el ganador en pantalla y en reposo con el juego al aire.
-  const salida = (
-    <button className="btn btn-r btn-full" disabled={busy} onClick={finalizarJuego}>
-      🎵 Finalizar juego y volver a DJ Democracy
-    </button>
+  // ── Barra operativa ──────────────────────────────────────────────────────
+  // ÚNICA ubicación de las tres acciones. Reutiliza los handlers de siempre
+  // (anunciar / launch / finalizarJuego) y las mismas condiciones de antes:
+  //   · Anunciar: en preparación y con el juego fuera del aire — con el juego
+  //     al aire, announceGame (active_game=null) lo sacaría de la pantalla.
+  //   · Lanzar: la condición de siempre (en preparación, con preguntas).
+  //   · Finalizar: resetTrivia, disponible donde antes estaba «Finalizar
+  //     juego y volver a DJ Democracy»: con Desafío Demente al aire.
+  const puedeAnunciar  = !busy && phase === "idle" && !enElAire && !anunciado;
+  const puedeLanzar    = !busy && phase === "idle" && qs.length > 0;
+  const puedeFinalizar = !busy && enElAire;
+
+  const barraOperativa = (
+    <div className="card" style={{marginBottom:10}}>
+      <div className="dd-actions">
+        <button className="btn btn-g" disabled={!puedeAnunciar} onClick={anunciar}
+          title={enElAire ? "Desafío Demente ya está al aire" : anunciado ? "La placa ya está en pantalla" : "Mostrar la placa de Desafío Demente"}>
+          📢 Anunciar
+        </button>
+        <button className="btn btn-p" disabled={!puedeLanzar} onClick={launch}
+          title={phase !== "idle" ? "Hay una partida en curso" : !qs.length ? "Cargá al menos una pregunta" : "Lanzar el desafío"}>
+          🚀 Lanzar desafío
+        </button>
+        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}
+          title="Cierra el Desafío y la TV vuelve a DJ Democracy">
+          ⏹ Finalizar
+        </button>
+      </div>
+      {actionError && (
+        <div style={{marginTop:8,color:"#FCA5A5",fontSize:11,textAlign:"center"}}>{actionError}</div>
+      )}
+    </div>
+  );
+
+  // ── Información lateral: SÓLO derivada de estado que ya existe ───────────
+  const rondaTxt = phase === "idle"
+    ? `${qs.length}/${MAX_TRIVIA_Q} preguntas`
+    : `Pregunta ${Math.min(curQ + 1, qs.length || curQ + 1)}/${qs.length || "—"}`;
+  const estadoTxt =
+    phase === "active"   ? "En juego" :
+    phase === "revealed" ? "En juego · respuesta revelada" :
+    phase === "finished" ? "Finalizado" :
+    enElAire             ? "Preparando · al aire" :
+    anunciado            ? "Preparando · placa en pantalla" :
+                           "Preparando";
+
+  // ── Biblioteca: selección múltiple ───────────────────────────────────────
+  // La selección se poda sola si una pregunta deja de existir (borrada acá o
+  // por otro admin): nunca queda un id fantasma seleccionado.
+  useEffect(() => {
+    setBibSel((sel) => {
+      const vivos = sel.filter((id) => biblio.preguntas.some((p) => p.id === id));
+      return vivos.length === sel.length ? sel : vivos;
+    });
+  }, [biblio.preguntas]);
+
+  const alternarSel = (id) =>
+    setBibSel((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
+
+  // AGREGAR SELECCIONADAS: copia pregunta + opciones + correcta a la ronda.
+  // No escribe en la biblioteca ni lanza nada. Si no entran todas, no agrega
+  // ninguna: el operador corrige la selección. Las que ya están en la ronda
+  // (misma pregunta) se saltean y se avisa.
+  const agregarSeleccionadas = () => {
+    setBibErr(null); setBibNota(null);
+    const elegidas = biblio.preguntas.filter((p) => bibSel.includes(p.id));
+    if (!elegidas.length) return;
+    const enRonda = new Set(qs.map((q) => claveTrivia(q.text)));
+    const nuevas  = elegidas.filter((p) => !enRonda.has(claveTrivia(p.text)));
+    const repetidas = elegidas.length - nuevas.length;
+    if (!nuevas.length) {
+      setBibErr(repetidas === 1 ? "Esa pregunta ya está en la ronda." : "Esas preguntas ya están en la ronda.");
+      return;
+    }
+    if (qs.length + nuevas.length > MAX_TRIVIA_Q) {
+      setBibErr(`La ronda admite hasta ${MAX_TRIVIA_Q} preguntas. Tenés ${qs.length} cargadas y seleccionaste ${nuevas.length}`
+        + (repetidas ? ` nuevas (${repetidas} ya estaban en la ronda).` : ".")
+        + " Ajustá la selección.");
+      return;
+    }
+    // Copias: nada de referencias a la fila de la biblioteca.
+    setQs((list) => [...list, ...nuevas.map((p) => ({ text:p.text, opts:[...p.opts], correct:p.correct }))]);
+    setBibSel([]);
+    setBibNota(`✓ ${nuevas.length} ${nuevas.length === 1 ? "pregunta agregada" : "preguntas agregadas"} a la ronda.`
+      + (repetidas ? ` ${repetidas} ya estaba${repetidas === 1 ? "" : "n"} y no se repiti${repetidas === 1 ? "ó" : "eron"}.` : ""));
+  };
+
+  // ── Modal alta/edición y borrado ─────────────────────────────────────────
+  const abrirNueva   = () => { setModalErr(null); setModal({ modo:"nueva" }); };
+  const abrirEditar  = (p) => { setModalErr(null); setModal({ modo:"editar", pregunta:p }); };
+  const cerrarModal  = useCallback(() => setModal(null), []);
+  const guardarModal = async (q) => {
+    setModalErr(null);
+    try {
+      const r = modal?.modo === "editar"
+        ? await biblio.editar(modal.pregunta.id, q)
+        : await biblio.guardar(q);
+      if (!r) return;               // candado: otro envío en vuelo
+      setModal(null);
+      setBibErr(null);
+      setBibNota(modal?.modo === "editar" ? "✏️ Pregunta actualizada en la biblioteca." : "💾 Pregunta guardada en la biblioteca.");
+    } catch (e) { setModalErr(e?.message || "No pudimos guardar la pregunta."); }
+  };
+  const cerrarBorrado = useCallback(() => setBorrando(null), []);
+  const confirmarBorrado = async () => {
+    if (!borrando) return;
+    setBorrarErr(null);
+    try {
+      const ok = await biblio.eliminar(borrando.id);
+      if (!ok) return;
+      setBibSel((sel) => sel.filter((x) => x !== borrando.id));
+      setBorrando(null);
+      setBibErr(null);
+      setBibNota("🗑️ Pregunta eliminada de la biblioteca.");
+    } catch (e) {
+      // Si la fila ya no existe, el refresco del hook la saca de la lista y
+      // el efecto de poda la saca de la selección. Si falló por otra causa,
+      // sigue existiendo y sigue seleccionada.
+      setBorrarErr(e?.message || "No pudimos eliminar la pregunta.");
+    }
+  };
+
+  // Búsqueda LOCAL, sin acentos ni mayúsculas, en la pregunta Y en las
+  // opciones (aunque las opciones no se vean en la lista).
+  const sinAcentos = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const bibFiltro = sinAcentos(bibBusqueda.trim());
+  const bibLista  = bibFiltro
+    ? biblio.preguntas.filter((p) => sinAcentos(p.text).includes(bibFiltro)
+        || p.opts.some((o) => sinAcentos(o).includes(bibFiltro)))
+    : biblio.preguntas;
+  const preparando = phase === "idle";
+
+  const bibliotecaCard = (
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+        <div className="ctitle" style={{margin:0,flex:1}}>📚 Biblioteca de preguntas</div>
+        {!biblio.error && (
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>
+            {bibFiltro ? `${bibLista.length} de ${biblio.preguntas.length}` : biblio.preguntas.length}
+          </div>
+        )}
+        <button className="dd-lib-add" title="Nueva pregunta" aria-label="Nueva pregunta" onClick={abrirNueva}>+</button>
+      </div>
+
+      {/* «Cargando» sólo en la carga inicial: los refrescos después de guardar,
+          editar o borrar no hacen desaparecer la lista. */}
+      {biblio.loading && biblio.preguntas.length===0 && !biblio.error && (
+        <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"8px 0"}}>Cargando la biblioteca…</div>
+      )}
+
+      {!biblio.loading && biblio.error && (
+        <div style={{padding:"2px 0 4px"}}>
+          <div style={{fontSize:10.5,color:"#FCA5A5",marginBottom:8,lineHeight:1.5}}>{biblio.error}</div>
+          <button className="btn btn-g" style={{padding:"5px 12px",fontSize:10.5}} onClick={biblio.refresh}>↻ Reintentar</button>
+        </div>
+      )}
+
+      {!biblio.error && !(biblio.loading && biblio.preguntas.length===0) && (
+        <>
+          <input className="inp" value={bibBusqueda} onChange={(e)=>setBibBusqueda(e.target.value)}
+            placeholder="🔎 Buscar pregunta..." style={{margin:"0 0 8px",width:"100%"}}/>
+          {biblio.preguntas.length===0 && (
+            <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"6px 0",lineHeight:1.5}}>
+              Todavía no hay preguntas. Creá la primera con el botón +.
+            </div>
+          )}
+          {biblio.preguntas.length>0 && bibLista.length===0 && (
+            <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"6px 0"}}>No se encontraron preguntas.</div>
+          )}
+          <div className="dd-lib-list">
+            {bibLista.map((p) => {
+              const sel = bibSel.includes(p.id);
+              return (
+                <div key={p.id} className={`dd-lib-row${sel ? " sel" : ""}`}>
+                  {/* ○ / ● — selección múltiple. Toda la fila selecciona. */}
+                  <button className="dd-lib-radio" role="checkbox" aria-checked={sel}
+                    aria-label={sel ? "Quitar de la selección" : "Seleccionar"}
+                    onClick={()=>alternarSel(p.id)}>{sel ? "●" : "○"}</button>
+                  <div className="dd-lib-q" onClick={()=>alternarSel(p.id)} title={p.text}>{p.text}</div>
+                  <button className="dd-lib-ic" title="Editar pregunta" aria-label="Editar pregunta"
+                    onClick={()=>abrirEditar(p)}>✏️</button>
+                  <button className="dd-lib-ic" title="Eliminar de la biblioteca" aria-label="Eliminar de la biblioteca"
+                    onClick={()=>{ setBorrarErr(null); setBorrando(p); }}>🗑️</button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{borderTop:"1px solid rgba(240,232,255,.08)",marginTop:8,paddingTop:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{flex:1,fontSize:10.5,fontWeight:700,
+                color: bibSel.length ? "#C084FC" : "rgba(240,232,255,.35)"}}>
+                {bibSel.length} {bibSel.length === 1 ? "seleccionada" : "seleccionadas"}
+              </div>
+              {bibSel.length > 0 && (
+                <button className="dd-lib-link" onClick={()=>setBibSel([])}>Limpiar</button>
+              )}
+            </div>
+            <button className="btn btn-p btn-full" style={{fontSize:10.5}}
+              disabled={!bibSel.length || !preparando}
+              title={!preparando ? "Disponible mientras preparás la ronda" : undefined}
+              onClick={agregarSeleccionadas}>
+              Agregar seleccionadas a ronda
+            </button>
+          </div>
+        </>
+      )}
+      {bibNota && <div style={{fontSize:10,color:"#00F5A0",marginTop:8,lineHeight:1.5}}>{bibNota}</div>}
+      {bibErr  && <div style={{fontSize:10.5,color:"#FCA5A5",marginTop:8,lineHeight:1.5}}>{bibErr}</div>}
+    </div>
   );
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {phase==="idle"&&(
-        <>
-          {/* Anuncio — placa en la pantalla gigante, sin iniciar el juego */}
-          <div className="card">
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{flex:1}}>
-                <div className="ctitle" style={{margin:0}}>Anunciar en pantalla</div>
-                <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",marginTop:2}}>
-                  Pone la placa de Desafío Demente en la pantalla gigante. No arranca el
-                  juego: seguís acá cargando las preguntas.
+      {/* Dos columnas: la ronda a la izquierda (~70%); barra operativa,
+          biblioteca y configuración a la derecha (~30%). Abajo de 1040px
+          `.dd-split` apila. */}
+      <div className="dd-split">
+        {/* ══ Columna principal: la ronda ══════════════════════════════════ */}
+        <div>
+          {phase==="idle"&&(
+            <div className="card">
+              <div className="ctitle">Preguntas de la ronda · {qs.length}/{MAX_TRIVIA_Q}</div>
+              {qs.length===0&&(
+                <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"4px 0 2px",lineHeight:1.5}}>
+                  Todavía no hay preguntas en la ronda. Seleccionalas en la biblioteca y tocá
+                  «Agregar seleccionadas a ronda».
                 </div>
-              </div>
-              <button className="btn btn-g" style={{padding:"7px 13px",fontSize:10.5,whiteSpace:"nowrap"}}
-                disabled={busy} onClick={anunciar}>
-                📺 Anunciar
-              </button>
-            </div>
-            {anunciado && (
-              <div style={{marginTop:8,fontSize:10.5,color:"#00F5A0"}}>
-                ✓ La placa de Desafío Demente está en pantalla.
-              </div>
-            )}
-          </div>
-
-          {/* Configuración */}
-          <div className="card">
-            <div className="ctitle">Cupón del equipo ganador</div>
-            <input className="inp" value={coupon} onChange={e=>setCoupon(e.target.value)}
-              placeholder="Ej: BEER50"/>
-          </div>
-
-          {/* Preguntas cargadas */}
-          <div className="card">
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div className="ctitle" style={{margin:0}}>{qs.length}/{MAX_TRIVIA_Q} preguntas cargadas</div>
-            </div>
-            {qs.map((q,i)=>(
-              <div key={i} style={{padding:"8px 10px",background:"rgba(240,232,255,.04)",
-                border:`1px solid ${editIdx===i?"rgba(0,229,255,.35)":"rgba(240,232,255,.07)"}`,
-                borderRadius:9,marginBottom:5}}>
-                {editIdx===i ? (
-                  /* Edición en línea — sobre `qs`, nada viaja a Supabase todavía */
-                  <>
-                    <div style={{fontSize:10,color:"#00E5FF",marginBottom:4,fontWeight:700}}>
-                      Editando P{i+1}
+              )}
+              {qs.map((q,i)=>(
+                <div key={i} style={{padding:"7px 9px",background:"rgba(240,232,255,.04)",
+                  border:"1px solid rgba(240,232,255,.07)",borderRadius:9,marginBottom:5}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+                    <div style={{flex:1,minWidth:0,fontSize:11.5,fontWeight:600,color:"#F0E8FF",lineHeight:1.35}}>
+                      <span style={{fontFamily:"Syne,sans-serif",fontWeight:900,color:"rgba(240,232,255,.35)"}}>
+                        {i+1}.
+                      </span> {q.text}
                     </div>
-                    <textarea className="inp" rows={2} placeholder="Pregunta"
-                      value={editQ} onChange={e=>setEditQ(e.target.value)}/>
-                    <OpcionesEditor opts={editOpts} setOpts={setEditOpts}
-                      correct={editCorr} setCorrect={setEditCorr}/>
-                    <div style={{display:"flex",gap:6}}>
-                      <button className="btn btn-g" style={{flex:1,padding:"6px",fontSize:10.5}}
-                        disabled={!preguntaValida(editQ,editOpts,editCorr)}
-                        onClick={guardarEdicion}>✓ Guardar cambios</button>
-                      <button className="btn btn-r" style={{padding:"6px 11px",fontSize:10.5}}
-                        onClick={cancelarEdicion}>Cancelar</button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                      <div style={{fontSize:10,color:"rgba(240,232,255,.3)",flex:1}}>P{i+1}</div>
-                      {/* El orden del array es el `question_idx` que se va a insertar */}
-                      <button title="Mover arriba" disabled={i===0} onClick={()=>moverQ(i,-1)}
-                        style={{background:"none",border:"none",cursor:i===0?"default":"pointer",
-                          color:i===0?"rgba(240,232,255,.12)":"rgba(240,232,255,.45)",fontSize:13,padding:"0 3px"}}>↑</button>
-                      <button title="Mover abajo" disabled={i===qs.length-1} onClick={()=>moverQ(i,1)}
-                        style={{background:"none",border:"none",cursor:i===qs.length-1?"default":"pointer",
-                          color:i===qs.length-1?"rgba(240,232,255,.12)":"rgba(240,232,255,.45)",fontSize:13,padding:"0 3px"}}>↓</button>
-                      <button title="Editar" onClick={()=>abrirEdicion(i)}
-                        style={{background:"none",border:"none",cursor:"pointer",
-                          color:"rgba(0,229,255,.6)",fontSize:12,padding:"0 3px"}}>✏️</button>
-                      <button title="Eliminar" onClick={()=>borrarQ(i)}
-                        style={{background:"none",border:"none",cursor:"pointer",
-                          color:"rgba(255,45,120,.6)",fontSize:12,padding:"0 3px"}}>🗑️</button>
-                    </div>
-                    <div style={{fontSize:11.5,fontWeight:600,color:"#F0E8FF",marginBottom:5}}>{q.text}</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                      {q.opts.map((o,oi)=>(
-                        <span key={oi} style={{fontSize:9.5,padding:"2px 7px",borderRadius:6,
-                          background:q.correct===oi?"rgba(0,245,160,.12)":"rgba(240,232,255,.06)",
-                          color:q.correct===oi?"#00F5A0":"rgba(240,232,255,.4)",
-                          border:q.correct===oi?"1px solid rgba(0,245,160,.28)":"1px solid transparent"}}>
-                          {String.fromCharCode(65+oi)}. {o}
-                        </span>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-            {hayBorradorSinLanzar && (
-              <div style={{fontSize:9.5,color:"rgba(255,214,0,.55)",marginTop:6,lineHeight:1.5}}>
-                ⚠️ Las preguntas todavía no se guardaron: viven en esta pestaña hasta que
-                lances la partida. Si recargás, se pierden.
-              </div>
-            )}
-          </div>
-
-          {/* Agregar pregunta */}
-          <div className="card">
-            <div className="ctitle">Agregar pregunta</div>
-            <textarea className="inp" rows={2} placeholder="Pregunta" value={newQ}
-              onChange={e=>setNewQ(e.target.value)}/>
-            <OpcionesEditor opts={newOpts} setOpts={setNewOpts}
-              correct={newCorr} setCorrect={setNewCorr}/>
-            {qs.length>=MAX_TRIVIA_Q&&(
-              <div style={{fontSize:9.5,color:"rgba(255,214,0,.6)",marginBottom:8}}>
-                Máximo {MAX_TRIVIA_Q} preguntas por ronda.
-              </div>
-            )}
-            <button className="btn btn-g btn-full" onClick={addQ}
-              disabled={!preguntaValida(newQ,newOpts,newCorr)||qs.length>=MAX_TRIVIA_Q}>
-              + Agregar pregunta
-            </button>
-          </div>
-
-          <button className="btn btn-p btn-full" onClick={launch} disabled={busy || !qs.length}>
-            🧠 Lanzar Desafío Demente!
-          </button>
-          {/* Reposo CON el juego en el aire — es donde deja "🔁 Nueva partida".
-              Sin esta salida, la única forma de bajar el Desafío de la TV era
-              lanzar otra partida y cerrarla. */}
-          {enElAire && (
-            <div className="card" style={{marginTop:10}}>
-              <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:6,textAlign:"center"}}>
-                Desafío Demente sigue en el aire, preparando la partida.
-              </div>
-              {salida}
+                    {/* El orden del array es el `question_idx` que se va a insertar */}
+                    <button title="Mover arriba" disabled={i===0} onClick={()=>moverQ(i,-1)}
+                      style={{background:"none",border:"none",cursor:i===0?"default":"pointer",
+                        color:i===0?"rgba(240,232,255,.12)":"rgba(240,232,255,.45)",fontSize:13,padding:"0 3px"}}>↑</button>
+                    <button title="Mover abajo" disabled={i===qs.length-1} onClick={()=>moverQ(i,1)}
+                      style={{background:"none",border:"none",cursor:i===qs.length-1?"default":"pointer",
+                        color:i===qs.length-1?"rgba(240,232,255,.12)":"rgba(240,232,255,.45)",fontSize:13,padding:"0 3px"}}>↓</button>
+                    <button title="Quitar de la ronda" onClick={()=>borrarQ(i)}
+                      style={{background:"none",border:"none",cursor:"pointer",
+                        color:"rgba(255,45,120,.6)",fontSize:12,padding:"0 3px"}}>🗑️</button>
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
+                    {q.opts.map((o,oi)=>(
+                      <span key={oi} style={{fontSize:9.5,padding:"2px 7px",borderRadius:6,
+                        background:q.correct===oi?"rgba(0,245,160,.12)":"rgba(240,232,255,.06)",
+                        color:q.correct===oi?"#00F5A0":"rgba(240,232,255,.4)",
+                        border:q.correct===oi?"1px solid rgba(0,245,160,.28)":"1px solid transparent"}}>
+                        {String.fromCharCode(65+oi)}. {o}{q.correct===oi?" ✓":""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {hayBorradorSinLanzar && (
+                <div style={{fontSize:9.5,color:"rgba(255,214,0,.55)",marginTop:6,lineHeight:1.5}}>
+                  ⚠️ La ronda todavía no se guardó: vive en esta pestaña hasta que lances la
+                  partida. Si recargás, se pierde. La biblioteca sí queda guardada.
+                </div>
+              )}
             </div>
           )}
-        </>
-      )}
 
-      {(phase==="active"||phase==="revealed")&&qs[curQ]&&(
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div className="chip chip-live"><div className="dot-live"/>En vivo</div>
-            <div style={{fontSize:10,color:"rgba(240,232,255,.35)"}}>
-              P{curQ+1}/{qs.length}
-            </div>
-          </div>
-          {/* Scoreboard */}
-          <div style={{display:"flex",gap:8,marginBottom:10}}>
-            {[{name:"🍠 Batata",pct:bata,col:"#FF9500"},{name:"🍋 Membrillo",pct:memb,col:"#FFD600"}].map((t,i)=>(
-              <div key={i} style={{flex:1,borderRadius:10,padding:"8px",textAlign:"center",
-                background:`${t.col}10`,border:`1px solid ${t.col}33`}}>
-                <div style={{fontSize:10,fontWeight:700,color:t.col,marginBottom:4}}>{t.name}</div>
-                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:t.col}}>{t.pct}%</div>
-                <div style={{height:5,background:"rgba(240,232,255,.06)",borderRadius:3,marginTop:5}}>
-                  <div style={{height:"100%",width:t.pct+"%",background:t.col,borderRadius:3,transition:"width .6s"}}/>
+          {(phase==="active"||phase==="revealed")&&qs[curQ]&&(
+            <div className="card">
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <div className="chip chip-live"><div className="dot-live"/>En vivo</div>
+                <div style={{fontSize:10,color:"rgba(240,232,255,.35)"}}>
+                  P{curQ+1}/{qs.length}
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div style={{fontSize:14,fontWeight:700,color:"#F0E8FF",lineHeight:1.4,marginBottom:10,padding:"10px",
-            background:"rgba(240,232,255,.04)",borderRadius:10}}>
-            {qs[curQ].text}
-          </div>
-
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-            {qs[curQ].opts.map((o,oi)=>(
-              <div key={oi} style={{
-                padding:"6px 10px",borderRadius:8,fontSize:11,
-                background:revealed&&qs[curQ].correct===oi?"rgba(0,245,160,.12)":revealed?"rgba(255,45,120,.08)":"rgba(240,232,255,.06)",
-                color:revealed&&qs[curQ].correct===oi?"#00F5A0":revealed?"rgba(240,232,255,.25)":"rgba(240,232,255,.7)",
-                border:revealed&&qs[curQ].correct===oi?"1px solid rgba(0,245,160,.3)":"1px solid rgba(240,232,255,.08)"}}>
-                {String.fromCharCode(65+oi)}. {o}
+              {/* Scoreboard */}
+              <div style={{display:"flex",gap:8,marginBottom:10}}>
+                {[{name:"🍠 Batata",pct:bata,col:"#FF9500"},{name:"🍋 Membrillo",pct:memb,col:"#FFD600"}].map((t,i)=>(
+                  <div key={i} style={{flex:1,borderRadius:10,padding:"8px",textAlign:"center",
+                    background:`${t.col}10`,border:`1px solid ${t.col}33`}}>
+                    <div style={{fontSize:10,fontWeight:700,color:t.col,marginBottom:4}}>{t.name}</div>
+                    <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:t.col}}>{t.pct}%</div>
+                    <div style={{height:5,background:"rgba(240,232,255,.06)",borderRadius:3,marginTop:5}}>
+                      <div style={{height:"100%",width:t.pct+"%",background:t.col,borderRadius:3,transition:"width .6s"}}/>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <div style={{display:"flex",gap:7}}>
-            {!revealed&&<button className="btn btn-p" style={{flex:1}} disabled={busy} onClick={reveal}>👁 Revelar</button>}
-            {revealed&&curQ<qs.length-1&&(
-              <button className="btn btn-p" style={{flex:1}} disabled={busy} onClick={next}>
-                ▶ Siguiente
-              </button>
-            )}
-            {revealed&&curQ===qs.length-1&&(
-              <button className="btn btn-p" style={{flex:1,background:"linear-gradient(135deg,#00F5A0,#00E5FF)",color:"#08040F"}}
-                disabled={busy} onClick={finish}>
-                🏆 Ver ganador
-              </button>
-            )}
-          </div>
-          <div style={{marginTop:8}}>{salida}</div>
-        </div>
-      )}
+              <div style={{fontSize:14,fontWeight:700,color:"#F0E8FF",lineHeight:1.4,marginBottom:10,padding:"10px",
+                background:"rgba(240,232,255,.04)",borderRadius:10}}>
+                {qs[curQ].text}
+              </div>
 
-      {phase==="finished"&&(
-        <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.25)"}}>
-          <div style={{fontSize:32,marginBottom:8}}>🏆</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
-            color:winnerTeam==="membrillo"?"#FFD600":"#FF9500",marginBottom:4}}>
-             {winnerTeam ? (winnerTeam==="batata"?"🍠 Team Batata ganó!":"🍋 Team Membrillo ganó!") : "🤝 Empate"}
-          </div>
-          <div style={{fontSize:11,color:"rgba(240,232,255,.35)",marginBottom:12}}>
-            Premio configurado: <strong style={{color:"#FFD600"}}>{coupon}</strong>. La entrega se gestiona por separado.
-          </div>
-           <div style={{fontSize:11,color:"rgba(240,232,255,.45)",marginBottom:10}}>Aciertos: Batata {accumulated.batata} · Membrillo {accumulated.membrillo}</div>
-          <button className="btn btn-g btn-full" disabled={busy} onClick={nuevaPartida}>
-            🔁 Nueva partida
-          </button>
-          <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",margin:"6px 0 12px",lineHeight:1.5}}>
-            Sigue en Desafío Demente: la TV queda en la pantalla del juego y
-            podés cargar las preguntas de la partida siguiente.
-          </div>
-          {salida}
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+                {qs[curQ].opts.map((o,oi)=>(
+                  <div key={oi} style={{
+                    padding:"6px 10px",borderRadius:8,fontSize:11,
+                    background:revealed&&qs[curQ].correct===oi?"rgba(0,245,160,.12)":revealed?"rgba(255,45,120,.08)":"rgba(240,232,255,.06)",
+                    color:revealed&&qs[curQ].correct===oi?"#00F5A0":revealed?"rgba(240,232,255,.25)":"rgba(240,232,255,.7)",
+                    border:revealed&&qs[curQ].correct===oi?"1px solid rgba(0,245,160,.3)":"1px solid rgba(240,232,255,.08)"}}>
+                    {String.fromCharCode(65+oi)}. {o}
+                  </div>
+                ))}
+              </div>
+
+              {/* Controles de la partida — propios de la fase, no de la barra. */}
+              <div style={{display:"flex",gap:7}}>
+                {!revealed&&<button className="btn btn-p" style={{flex:1}} disabled={busy} onClick={reveal}>👁 Revelar</button>}
+                {revealed&&curQ<qs.length-1&&(
+                  <button className="btn btn-p" style={{flex:1}} disabled={busy} onClick={next}>
+                    ▶ Siguiente
+                  </button>
+                )}
+                {revealed&&curQ===qs.length-1&&(
+                  <button className="btn btn-p" style={{flex:1,background:"linear-gradient(135deg,#00F5A0,#00E5FF)",color:"#08040F"}}
+                    disabled={busy} onClick={finish}>
+                    🏆 Ver ganador
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {phase==="finished"&&(
+            <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.25)"}}>
+              <div style={{fontSize:32,marginBottom:8}}>🏆</div>
+              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
+                color:winnerTeam==="membrillo"?"#FFD600":"#FF9500",marginBottom:4}}>
+                 {winnerTeam ? (winnerTeam==="batata"?"🍠 Team Batata ganó!":"🍋 Team Membrillo ganó!") : "🤝 Empate"}
+              </div>
+              <div style={{fontSize:11,color:"rgba(240,232,255,.35)",marginBottom:12}}>
+                Premio configurado: <strong style={{color:"#FFD600"}}>{coupon}</strong>. La entrega se gestiona por separado.
+              </div>
+               <div style={{fontSize:11,color:"rgba(240,232,255,.45)",marginBottom:10}}>Aciertos: Batata {accumulated.batata} · Membrillo {accumulated.membrillo}</div>
+              <button className="btn btn-g btn-full" disabled={busy} onClick={nuevaPartida}>
+                🔁 Nueva partida
+              </button>
+              <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",marginTop:6,lineHeight:1.5}}>
+                Sigue en Desafío Demente: la TV queda en la pantalla del juego y
+                podés cargar las preguntas de la partida siguiente.
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* ══ Columna lateral: barra → biblioteca → configuración ═══════════ */}
+        <div>
+          {barraOperativa}
+          {bibliotecaCard}
+          <div className="card">
+            <div className="ctitle">⚙️ Configuración</div>
+            <div style={{fontSize:9.5,letterSpacing:1.2,color:"rgba(240,232,255,.35)",marginBottom:5}}>
+              CUPÓN DEL EQUIPO GANADOR
+            </div>
+            {/* Mismo estado `coupon` de siempre: se entrega a startTrivia al
+                lanzar. Con la partida en curso ya se usó, así que no se edita. */}
+            <input className="inp" value={coupon} onChange={e=>setCoupon(e.target.value)}
+              placeholder="Ej: BEER50" disabled={phase!=="idle"}
+              style={{marginBottom:8,opacity:phase!=="idle"?.55:1}}/>
+            {/* Resumen compacto, derivado de estado existente. */}
+            <div style={{fontSize:10,color:"rgba(240,232,255,.45)",lineHeight:1.5}}>
+              {rondaTxt} · <span style={{fontWeight:700,
+                color: phase==="finished" ? "#00F5A0" : phase==="idle" ? "rgba(240,232,255,.7)" : "#FF2D78"}}>
+                {estadoTxt}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {modal && (
+        <PreguntaModal
+          key={modal.modo === "editar" ? modal.pregunta.id : "nueva"}
+          modo={modal.modo}
+          inicial={modal.modo === "editar" ? modal.pregunta : null}
+          guardando={biblio.guardando}
+          error={modalErr}
+          onCancelar={cerrarModal}
+          onGuardar={guardarModal}/>
       )}
-      {actionError&&<div style={{marginTop:10,color:"#FCA5A5",fontSize:11,textAlign:"center"}}>{actionError}</div>}
+      {borrando && (
+        <ConfirmarBorradoModal
+          pregunta={borrando}
+          guardando={biblio.guardando}
+          error={borrarErr}
+          onCancelar={cerrarBorrado}
+          onConfirmar={confirmarBorrado}/>
+      )}
     </div>
   );
 }

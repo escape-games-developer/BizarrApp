@@ -375,8 +375,9 @@ function SumaElNumero({ user, sessionId }) {
     );
   }
 
-  const objetivo = typeof round.target_number === "number" ? round.target_number : null;
-
+  // Durante la ronda el celular muestra SÓLO el número propio. El objetivo y
+  // la consigna viven exclusivamente en la Pantalla Gigante: ni objetivo, ni
+  // números ajenos, ni instrucciones acá.
   return (
     <div>
       {header}
@@ -385,7 +386,7 @@ function SumaElNumero({ user, sessionId }) {
           vistazo: la persona tiene que poder mostrarlo levantando el teléfono
           mientras camina por el bar. */}
       <div style={{
-        textAlign:"center", padding:"26px 16px", marginBottom:10, borderRadius:16,
+        textAlign:"center", padding:"26px 16px", borderRadius:16,
         background:"rgba(0,229,255,.08)", border:"1px solid rgba(0,229,255,.28)",
       }}>
         <div style={{fontSize:11,color:"rgba(0,229,255,.75)",letterSpacing:".14em",fontWeight:700,marginBottom:4}}>
@@ -393,43 +394,6 @@ function SumaElNumero({ user, sessionId }) {
         </div>
         <div style={{fontFamily:"Syne, sans-serif",fontSize:120,fontWeight:900,color:"#00E5FF",lineHeight:1}}>
           {miNumero}
-        </div>
-      </div>
-
-      {/* El objetivo también acá: sin esto la persona depende de tener la TV a
-          la vista para saber a qué número apuntar. */}
-      {objetivo !== null && (
-        <div style={{
-          display:"flex", alignItems:"center", justifyContent:"center", gap:10,
-          padding:"12px 14px", marginBottom:10, borderRadius:14,
-          background:"rgba(255,149,0,.09)", border:"1px solid rgba(255,149,0,.3)",
-        }}>
-          <div style={{fontSize:11,color:"rgba(255,149,0,.8)",letterSpacing:".12em",fontWeight:700}}>
-            OBJETIVO
-          </div>
-          <div style={{fontFamily:"Syne, sans-serif",fontSize:38,fontWeight:900,color:"#FF9500",lineHeight:1}}>
-            {objetivo}
-          </div>
-        </div>
-      )}
-
-      {/* Ni números ajenos, ni nombres, ni combinaciones sugeridas: hay que
-          encontrarse en el bar.
-
-          La consigna termina en el ESCENARIO, no en la app: el grupo se junta y
-          se acerca, y el staff resuelve ahí. No hay nada que confirmar desde el
-          celular ni desde el panel. */}
-      <div style={{
-        padding:"14px", borderRadius:12, textAlign:"center", lineHeight:1.6,
-        background:"rgba(255,215,0,.06)", border:"1px solid rgba(255,215,0,.14)",
-        fontSize:12.5, color:"rgba(255,215,0,.6)",
-      }}>
-        Buscá a otras personas y sumen sus números hasta llegar al objetivo.
-        <div style={{
-          marginTop:10, paddingTop:10, borderTop:"1px solid rgba(255,215,0,.14)",
-          fontFamily:"Syne, sans-serif", fontWeight:900, fontSize:13.5, color:"#FFD600",
-        }}>
-          ¡Júntense y acérquense al escenario!
         </div>
       </div>
     </div>

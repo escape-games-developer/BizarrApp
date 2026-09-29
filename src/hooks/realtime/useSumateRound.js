@@ -191,9 +191,18 @@ export function useSumateRound(sessionId, { admin = false, userId = null } = {})
    * nueva, reparte números, calcula el objetivo y pone el juego al aire, todo
    * en una transacción. NO hay que llamar a `activateGame('suma')` después.
    */
-  const lanzarRonda = useCallback(async () => {
+  // Contrato V1: `sumate_launch_round(p_session, p_target int DEFAULT NULL)`.
+  //   · p_target null → modo automático (algoritmo original del servidor).
+  //   · p_target N    → objetivo de la biblioteca; el SERVIDOR reparte los
+  //                     números para que N tenga solución al lanzar, o rechaza.
+  // `p_target` se manda SIEMPRE, también en null, para que el modo sea
+  // explícito. Acá no se calcula ni se valida si N es posible: decide Supabase.
+  const lanzarRonda = useCallback(async (target = null) => {
     if (!sessionId) return { ok: false, code: "INVALID_REQUEST", error: "Sin sesión activa" };
-    const res = await rpc("sumate_launch_round", { p_session: sessionId });
+    const res = await rpc("sumate_launch_round", {
+      p_session: sessionId,
+      p_target:  Number.isInteger(target) ? target : null,
+    });
     await leerRonda();
     return res;
   }, [sessionId, leerRonda]);

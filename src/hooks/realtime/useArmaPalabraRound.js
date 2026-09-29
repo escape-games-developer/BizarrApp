@@ -52,6 +52,36 @@ export function motivoPalabraInvalida(palabra) {
   return null;
 }
 
+/** Códigos estables que `arma_palabra_launch_round` manda en HINT. */
+const CODIGOS_LANZAMIENTO = ["UNAUTHORIZED", "INVALID_WORD", "CONFIG_INCOMPLETE", "MIN_PARTICIPANTS"];
+
+/**
+ * Convierte el rechazo de `arma_palabra_launch_round` en `{ code, ...detalle }`.
+ *
+ * El contrato V1 (migración `20260928233131_arma_palabra_reglas_v1`) rechaza
+ * con EXCEPCIÓN, no con `{ok:false}`: el código estable viaja en `hint` y un
+ * JSON `{code, connected_count, required_count, ...}` en `details`. Este
+ * parser sólo lee esos dos campos; el texto SQL de `message` no sale de acá.
+ *
+ * Un fallo de transporte (red, JWT vencido) no trae hint: se clasifica aparte
+ * para no decirle al operador "faltan participantes" cuando no llegó al server.
+ */
+export function rechazoLanzamiento(e) {
+  let detalle = {};
+  if (typeof e?.details === "string" && e.details.trim().startsWith("{")) {
+    try { detalle = JSON.parse(e.details) || {}; } catch { detalle = {}; }
+  }
+  const hint = typeof e?.hint === "string" ? e.hint.trim() : "";
+  let code =
+    CODIGOS_LANZAMIENTO.includes(hint)         ? hint :
+    CODIGOS_LANZAMIENTO.includes(detalle.code) ? detalle.code :
+    null;
+  if (!code) {
+    code = (e?.code === "PGRST301" || e?.code === "42501") ? "UNAUTHORIZED" : "RPC_ERROR";
+  }
+  return { ...detalle, code };
+}
+
 /**
  * Arma la Palabra — ronda + letras.
  *
@@ -180,13 +210,25 @@ export function useArmaPalabraRound(sessionId, { admin = false, userId = null } 
   }, [admin, roundId, userId, round?.status]);
 
   // ── Acciones de admin ─────────────────────────────────────────────────────
+  // Rechazos: tira un Error con `.rechazo = { code, connected_count?,
+  // required_count?, ... }` (ver `rechazoLanzamiento`). Quién puede lanzar lo
+  // decide SÓLO el servidor: acá no se cuenta a nadie ni se compara mínimos.
   const lanzarRonda = useCallback(async (palabra) => {
-    if (!sessionId) throw new Error("Sin sesión activa");
+    if (!sessionId) {
+      const err = new Error("Sin sesión activa");
+      err.rechazo = { code: "SESSION_MISSING" };
+      throw err;
+    }
     const { data, error: e } = await supabase
       .rpc("arma_palabra_launch_round", {
         p_session: sessionId, p_target_word: palabra,
       });
-    if (e) throw new Error(e.message);
+    if (e) {
+      console.error("[useArmaPalabraRound] launch rechazado:", e);
+      const err = new Error("Lanzamiento rechazado");
+      err.rechazo = rechazoLanzamiento(e);
+      throw err;
+    }
     await leerRonda();
     return data;
   }, [sessionId, leerRonda]);
