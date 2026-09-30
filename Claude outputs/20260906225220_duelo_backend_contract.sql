@@ -1,3 +1,4 @@
+
 -- applause_finish: cierre forzado real + empate = NULL
 -- Mantiene semántica original para p_force=false (PT / Follow Leader / Duelo sin forzado).
 -- Cambios:

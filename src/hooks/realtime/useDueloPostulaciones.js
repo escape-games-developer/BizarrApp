@@ -2,15 +2,34 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "../../lib/supabase";
 
 /**
- * useDueloPostulaciones
+ * useDueloPostulaciones — postulaciones al Duelo de Talentos (`duelo_postulaciones`).
  *
- * Maneja las postulaciones del público al Duelo de Talentos (fase "inviting").
- * Lee/escribe la tabla duelo_postulaciones con Realtime.
+ * Contrato del backend (migración 20260930005253):
+ *  · El cliente sólo inserta SU fila, en 'waiting', en la sesión activa.
+ *  · Nombre, avatar y foto los completa el trigger `duelo_postulacion_identidad`
+ *    desde `profiles`: el cliente NO los manda (lo que mandara se pisa).
+ *  · UNIQUE (session_id, user_id): una postulación por persona y sesión.
+ *  · Cambiar el estado o borrar filas es sólo de admin.
+ *  · `duelo_launch_round` pasa a 'selected' a los dos elegidos; el resto sigue
+ *    'waiting' y queda disponible para los próximos duelos.
  *
- * @param {string|null} sessionId  sesión activa
- * @param {object|null} user       usuario autenticado ({ id, name, avatarId, avatarEmoji, photoUrl })
- * @returns { postulaciones, misPostulacion, loading, error, postularme }
+ * @param {string|null} sessionId
+ * @param {object|null} user   usuario autenticado (sólo se usa `id`)
  */
+function makeInstanceId() {
+  return Math.random().toString(36).slice(2, 8);
+}
+
+/** Traduce el rechazo del INSERT a un mensaje para el público. */
+function mensajePostulacion(err) {
+  if (err?.code === "23505") return null; // ya estaba postulado: el refetch lo muestra
+  if (err?.code === "23514" || /PROFILE_REQUIRED|perfil/i.test(err?.message || "")) {
+    return "Completá tu perfil para poder postularte.";
+  }
+  if (err?.code === "42501") return "Las postulaciones no están abiertas en este momento.";
+  return "No pudimos registrar tu postulación. Probá de nuevo en unos segundos.";
+}
+
 export function useDueloPostulaciones(sessionId, user) {
   const [postulaciones, setPostulaciones] = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -19,29 +38,23 @@ export function useDueloPostulaciones(sessionId, user) {
   const channelRef        = useRef(null);
   const mountedRef        = useRef(true);
   const reconnectTimerRef = useRef(null);
+  const instanceIdRef     = useRef(makeInstanceId());
 
-  // ── Fetch de todas las postulaciones de la sesión ────────────────────────────
-  // Nota: el fetch trae TODA la lista de la sesión y `misPostulacion` se deriva
-  // de ahí; por eso depende SOLO de sessionId, no de user.id.
   const fetchAll = useCallback(async () => {
-    console.log("[useDueloPostulaciones] fetching", { sessionId });
     if (!sessionId) { setPostulaciones([]); setLoading(false); return; }
     const { data, error: err } = await supabase
       .from("duelo_postulaciones")
-      .select("*")
+      .select("id,session_id,user_id,user_name,avatar_id,avatar_emoji,photo_url,status,created_at")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: true });
-    if (!mountedRef.current) return; // evita clobber si desmontó durante el await
-    if (err) {
-      console.error("[useDueloPostulaciones] fetch error:", err);
-      setError(err.message);
-    } else {
-      setPostulaciones(data || []);
-    }
+    if (!mountedRef.current) return;
+    if (err) console.error("[useDueloPostulaciones] fetch error:", err);
+    else setPostulaciones(data || []);
     setLoading(false);
   }, [sessionId]);
 
-  // ── Suscripción realtime con reconexión backoff 3s ───────────────────────────
+  // Suscripción con reconexión a los 3 s. El nombre lleva un id de instancia:
+  // Admin y Cliente pueden convivir en la misma pestaña (preview).
   const subscribe = useCallback((sid) => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -52,12 +65,13 @@ export function useDueloPostulaciones(sessionId, user) {
     if (old) supabase.removeChannel(old);
 
     const channel = supabase
-      .channel(`duelo_postulaciones_${sid}`)
+      .channel(`duelo_postulaciones_${sid}_${instanceIdRef.current}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "duelo_postulaciones",
         filter: `session_id=eq.${sid}`,
       }, fetchAll)
       .subscribe((status) => {
+        if (status === "SUBSCRIBED") fetchAll();
         if (
           (status === "CLOSED" || status === "TIMED_OUT") &&
           mountedRef.current && channelRef.current === channel
@@ -84,47 +98,56 @@ export function useDueloPostulaciones(sessionId, user) {
     };
   }, [sessionId, fetchAll, subscribe]);
 
-  // ── Mi postulación (o null) ──────────────────────────────────────────────────
   const misPostulacion = useMemo(
     () => (user?.id ? postulaciones.find((p) => p.user_id === user.id) || null : null),
     [postulaciones, user?.id]
   );
 
-  useEffect(() => {
-    console.log(
-      "[useDueloPostulaciones] got", postulaciones.length,
-      "misPostulacion:", misPostulacion,
-      "| userId:", user?.id, "| sessionId:", sessionId
-    );
-  }, [postulaciones, misPostulacion, user?.id, sessionId]);
-
-  // ── Postularme ───────────────────────────────────────────────────────────────
+  // ── Cliente: postularme ───────────────────────────────────────────────────
+  // Sólo se manda lo mínimo que exige la policy. La identidad la pone el
+  // trigger desde `profiles`.
   const postularme = useCallback(async () => {
     if (!sessionId || !user?.id) return;
-    // Ya está postulado: no repetir (la UNIQUE session_id+user_id igual protege).
     if (postulaciones.some((p) => p.user_id === user.id)) return;
-
-    setError(null); // el reintento arranca limpio, si no el cartel quedaba pegado
+    setError(null);
     const { error: err } = await supabase
       .from("duelo_postulaciones")
-      .insert({
-        session_id:   sessionId,
-        user_id:      user.id,
-        user_name:    user.name,
-        avatar_id:    user.avatarId    || null,
-        avatar_emoji: user.avatarEmoji || null,
-        photo_url:    user.photoUrl    || null,
-      });
-    // Error típico: RLS o violación de UNIQUE (ya postulado en otra pestaña).
+      .insert({ session_id: sessionId, user_id: user.id, status: "waiting" });
     if (err) {
       console.error("[useDueloPostulaciones] postularme error:", err);
-      setError(err.message);
+      setError(mensajePostulacion(err));
     }
-  }, [sessionId, user, postulaciones]);
+    fetchAll();
+  }, [sessionId, user?.id, postulaciones, fetchAll]);
 
-  // TODO: retirarPostulacion — la policy de DELETE/UPDATE es solo admin, así que
-  // el usuario no puede retirarse por ahora. El admin rechaza (status='rejected').
-  // No se expone en el return de esta versión.
+  // ── Admin ─────────────────────────────────────────────────────────────────
+  // Devuelven `{ error }` con mensaje legible; el panel lo muestra.
+  const quitar = useCallback(async (id) => {
+    const { error: err } = await supabase.from("duelo_postulaciones").delete().eq("id", id);
+    if (err) return { error: err.code === "42501" ? "Tu usuario no puede quitar postulantes." : err.message };
+    fetchAll();
+    return {};
+  }, [fetchAll]);
 
-  return { postulaciones, misPostulacion, loading, error, postularme };
+  const reactivar = useCallback(async (id) => {
+    const { error: err } = await supabase
+      .from("duelo_postulaciones").update({ status: "waiting" }).eq("id", id);
+    if (err) return { error: err.code === "42501" ? "Tu usuario no puede cambiar postulantes." : err.message };
+    fetchAll();
+    return {};
+  }, [fetchAll]);
+
+  /** Vacía la lista de la sesión, salvo los ids indicados (duelistas en juego). */
+  const vaciar = useCallback(async (exceptIds = []) => {
+    if (!sessionId) return {};
+    let q = supabase.from("duelo_postulaciones").delete().eq("session_id", sessionId);
+    const keep = exceptIds.filter(Boolean);
+    if (keep.length) q = q.not("id", "in", `(${keep.join(",")})`);
+    const { error: err } = await q;
+    if (err) return { error: err.code === "42501" ? "Tu usuario no puede quitar postulantes." : err.message };
+    fetchAll();
+    return {};
+  }, [sessionId, fetchAll]);
+
+  return { postulaciones, misPostulacion, loading, error, postularme, quitar, reactivar, vaciar };
 }

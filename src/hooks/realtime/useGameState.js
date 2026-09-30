@@ -494,227 +494,31 @@ export function useAdminControls(sessionId) {
   }, [update, dismissActiveVideo]);
 
   // ── Duelo de Talentos ─────────────────────────────────────────────────────
-  const startDuelo = useCallback(async () => {
+  // Lanzar, finalizar y cancelar son RPC (`services/duelo.js`): la ronda, los
+  // participantes, el resultado y el espejo en game_state los escribe el
+  // servidor en una sola transacción. Lo único que queda acá es poner el
+  // Duelo en el escenario para abrir la convocatoria, que es un cambio de capa
+  // como el de cualquier otro juego.
+  //
+  // Deja los campos de presentación del Duelo en neutro: la ronda anterior (si
+  // la había) ya la canceló `duelo_cancel_round` antes de llamar a esto.
+  const abrirConvocatoriaDuelo = useCallback(async () => {
     await dismissActiveVideo();
-    return update({
+    const { error } = await update({
       active_escenario: "duelo",
-      duelo_state:      "voting",
+      active_game:      null,
+      active_placa:     null,
+      placa_custom:     null,
+      duelo_state:      "idle",
+      duelo_slot1:      null,
+      duelo_slot2:      null,
+      duelo_video:      null,
+      duelo_winner:     null,
       duelo_votes_a:    0,
       duelo_votes_b:    0,
     });
-  }, [update, dismissActiveVideo]);
-
-  const revealDuelo = useCallback(() =>
-    update({ duelo_state: "revealed" }),
-  [update]);
-
-  const openDueloInvitation = useCallback(async () => {
-    await dismissActiveVideo();
-    return update({ active_placa: "duelo", active_escenario: null,
-                    duelo_state: "inviting", duelo_slot1: null, duelo_slot2: null });
-  }, [update, dismissActiveVideo]);
-
-  const selectDueloParticipant = useCallback((slot, participant) =>
-    update({ [`duelo_slot${slot}`]: participant }),
-  [update]);
-
-  const launchDueloVideo = useCallback(async (ytId, ytTitle) => {
-    await dismissActiveVideo();
-    return update({ active_escenario: "duelo", active_placa: null,
-                    duelo_state: "active", duelo_video: { ytId, ytTitle } });
-  }, [update, dismissActiveVideo]);
-
-  const closeDuelo = useCallback((winnerId) =>
-    update({ duelo_state: "finished", duelo_winner: winnerId,
-             active_escenario: null }),
-  [update]);
-
-  // ── Duelo v2 — postulaciones + applause + push ────────────────────────────
-  // Flujo nuevo (task DueloPanel): convocatoria por push → postulaciones
-  // realtime en duelo_postulaciones → admin elige 2 slots → applause_session
-  // game_type='duelo'. Coexiste con las funciones viejas de arriba, que usa el
-  // DueloView legacy en EscenarioView (limpieza en task 9). No adaptamos las
-  // viejas para no romper esa vista.
-
-  // send-push tiene verify_jwt=true → mandamos el JWT del admin explícito para
-  // que la function autentique como admin_users (no como anónimo).
-  const pushToSession = useCallback(async (body) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return supabase.functions.invoke("send-push", {
-      body,
-      headers: session?.access_token
-        ? { Authorization: `Bearer ${session.access_token}` }
-        : undefined,
-    });
-  }, []);
-
-  // Abre (o reabre) la convocatoria. Es el reset de ronda: deja la sesión sin
-  // postulaciones ni ronda de aplausos previas, así la ronda 2 arranca en cero.
-  const openPostulacionesDuelo = useCallback(async () => {
-    if (!sessionId) throw new Error("Sin sesión activa");
-    await dismissActiveVideo();
-    // 1. Limpia postulaciones anteriores de la sesión
-    const { error: eDel } = await supabase
-      .from("duelo_postulaciones").delete().eq("session_id", sessionId);
-    if (eDel) throw new Error(eDel.message);
-    // 2. Borra applause_sessions anteriores de tipo duelo de esta sesión
-    //    (el ON DELETE CASCADE se lleva counts y user_contrib → counts en cero)
-    const { error: eRound } = await supabase.from("applause_sessions").delete()
-      .eq("session_id", sessionId).eq("game_type", "duelo");
-    if (eRound) throw new Error(eRound.message);
-    // 3. active_escenario='duelo' + limpia video/slots + state idle.
-    //    Limpiamos también placa/juego: si no, la capa de placa o de otro juego
-    //    quedaba por encima del Duelo en /tv y en /pantalla.
-    const { error: eState } = await update({
-      active_escenario: "duelo",
-      active_game:      null,
-      active_placa:     null,
-      placa_custom:     null,
-      duelo_video: null,
-      duelo_slot1: null,
-      duelo_slot2: null,
-      duelo_state: "idle",
-    });
-    if (eState) throw new Error(eState.message || String(eState));
-    // 4. Push nativo a todos los conectados
-    await pushToSession({
-      session_id: sessionId,
-      title: "🎤 ¡Empezó el Duelo!",
-      body:  "Postulate para participar",
-      url:   "/?view=games&game=duelo",
-      tag:   "duelo-open",
-    });
-    return {};
-  }, [sessionId, update, pushToSession, dismissActiveVideo]);
-
-  const setPostulacionStatus = useCallback((id, status) =>
-    supabase.from("duelo_postulaciones").update({ status }).eq("id", id),
-  []);
-
-  const deletePostulacion = useCallback((id) =>
-    supabase.from("duelo_postulaciones").delete().eq("id", id),
-  []);
-
-  // NOTA: no inicializamos applause_counts. La RPC applause_add hace INSERT ON CONFLICT
-  // cuando llega el primer tap, y las policies actuales no permiten INSERT directo.
-  // `videoInput` es OPCIONAL por contrato: launchDuelo({ p1, p2 }),
-  // launchDuelo({ p1, p2, videoInput: null }) y launchDuelo({ p1, p2,
-  // videoInput: "" }) son todos lanzamientos válidos y arrancan la ronda igual.
-  // Los ÚNICOS requisitos son la sesión activa y los dos participantes.
-  const launchDuelo = useCallback(async ({ p1, p2, videoInput = null }) => {
-    if (!sessionId) return { error: "Sin sesión activa" };
-    if (!p1 || !p2) throw new Error("Faltan los dos participantes del duelo");
-    await dismissActiveVideo();
-    // 1. Parsear videoInput → YouTube (yt_id) o URL directa. El video es
-    //    OPCIONAL: sin input, o con un input que no es ni YouTube ni una URL
-    //    http(s), duelo_video queda en NULL limpio. Nunca "" ni {} ni "null":
-    //    la TV pregunta por `video?.source`, y un objeto vacío la dejaba con el
-    //    marco negro del reproductor puesto sin nada que reproducir.
-    const dueloVideo = parseDueloVideo(videoInput);
-
-    // 2. Crear applause_session. El duelo cierra por acción manual del admin,
-    //    pero `voting_ends_at` NO puede ir en null: el RPC applause_finish
-    //    aborta si la ronda no tiene deadline, incluso con p_force. Le damos
-    //    una fecha lejana (12 h) que actúa como tope de seguridad: si nadie
-    //    cierra la ronda, no queda "en vivo" para siempre.
-    const HORIZON_MS = 12 * 60 * 60 * 1000;
-    const { data: round, error: e1 } = await supabase
-      .from("applause_sessions")
-      .insert({
-        session_id: sessionId,
-        game_type:  "duelo",
-        status:     "voting",
-        p1_user_id: p1.user_id, p1_name: p1.user_name,
-        p1_avatar:  JSON.stringify({
-          avatar_id: p1.avatar_id, avatar_emoji: p1.avatar_emoji, photo_url: p1.photo_url,
-        }),
-        p2_user_id: p2.user_id, p2_name: p2.user_name,
-        p2_avatar:  JSON.stringify({
-          avatar_id: p2.avatar_id, avatar_emoji: p2.avatar_emoji, photo_url: p2.photo_url,
-        }),
-        voting_ends_at: new Date(Date.now() + HORIZON_MS).toISOString(),
-      })
-      .select()
-      .single();
-    if (e1) throw e1;
-
-    // 3. Postulaciones no seleccionadas → 'rejected' (las 2 en slot quedan 'selected')
-    await supabase.from("duelo_postulaciones")
-      .update({ status: "rejected" })
-      .eq("session_id", sessionId)
-      .eq("status", "waiting");
-
-    // 4. Guardar video + slots en game_state (y despejar las capas de arriba:
-    //    placa/juego taparían al Duelo en /tv y en /pantalla).
-    const { error: e2 } = await update({
-      active_escenario: "duelo",
-      active_game:      null,
-      active_placa:     null,
-      placa_custom:     null,
-      duelo_video: dueloVideo,
-      duelo_slot1: {
-        user_id: p1.user_id, name: p1.user_name,
-        avatar_id: p1.avatar_id, avatar_emoji: p1.avatar_emoji, photo_url: p1.photo_url,
-      },
-      duelo_slot2: {
-        user_id: p2.user_id, name: p2.user_name,
-        avatar_id: p2.avatar_id, avatar_emoji: p2.avatar_emoji, photo_url: p2.photo_url,
-      },
-      duelo_state: "voting",
-    });
-    // Sin slots persistidos la TV no sabe a quién mostrar: es un fallo de
-    // lanzamiento, no un detalle. Lo propagamos para que el panel no cante éxito.
-    if (e2) throw new Error(e2.message || String(e2));
-
-    // 5. Push a los conectados
-    await pushToSession({
-      session_id: sessionId,
-      title: "🎤 ¡Empezó el Duelo!",
-      body:  `${p1.user_name} vs ${p2.user_name}. Elegí a tu favorito`,
-      url:   "/?view=games&game=duelo",
-      tag:   "duelo-launch",
-    });
-
-    return round;
-  }, [sessionId, update, pushToSession, dismissActiveVideo]);
-
-  // Cierra la MEDICIÓN: el ganador lo calcula y persiste el servidor
-  // (applause_finish → status='finished' + winner_slot). Es idempotente y
-  // sólo pasa el guard de p_force si auth.uid() está en admin_users, así que
-  // dos admins o un doble click no producen dos resultados distintos.
-  const finishDuelo = useCallback(async (roundId) => {
-    if (!roundId) throw new Error("No hay ronda de duelo abierta");
-    const { error } = await supabase.rpc("applause_finish", {
-      p_round: roundId, p_force: true,
-    });
-    if (error) throw new Error(error.message);
-    // Espejo en game_state para que la fase también viva donde vive el resto
-    // del estado del panel. La fuente de verdad del ganador sigue siendo
-    // applause_sessions.winner_slot.
-    const { error: e2 } = await update({ duelo_state: "revealed" });
-    if (e2) throw new Error(e2.message || String(e2));
-  }, [update]);
-
-  // Saca el Duelo del aire: es lo ÚNICO que apaga el overlay de la TV, así que
-  // no puede fallar en silencio. `update` devuelve `{ error }` en vez de tirar,
-  // y el panel sólo mira el catch: sin este throw, un cierre rechazado (RLS,
-  // red, sesión vencida) cantaba "Duelo cancelado" mientras /tv seguía con el
-  // Duelo puesto encima del DJ, sin nada que le avisara al operador.
-  //
-  // La ronda de aplausos NO se borra acá — queda como histórico y la limpia
-  // `openPostulacionesDuelo` al abrir la ronda siguiente.
-  const cerrarDuelo = useCallback(async () => {
-    const { error } = await update({
-      active_escenario: null,
-      active_placa: null,
-      placa_custom: null,
-      duelo_video: null,
-      duelo_slot1: null,
-      duelo_slot2: null,
-      duelo_state: "idle",
-    });
     if (error) throw new Error(error.message || String(error));
-  }, [update]);
+  }, [update, dismissActiveVideo]);
 
   // ── FTL / PT / Karaoke ───────────────────────────────────────────────────
   // Placa de invitación (anuncio previo). No la usa Follow the Leader: su
@@ -833,10 +637,7 @@ export function useAdminControls(sessionId) {
     resetRaffle, nuevaRondaRaffle,
     startTrivia, revealTriviaAnswer, nextTriviaQuestion, finishTrivia, resetTrivia, newTriviaRound,
     activateEscenario, deactivateEscenario,
-    startDuelo, revealDuelo,
-    openDueloInvitation, selectDueloParticipant, launchDueloVideo, closeDuelo,
-    openPostulacionesDuelo, setPostulacionStatus, deletePostulacion,
-    launchDuelo, finishDuelo, cerrarDuelo,
+    abrirConvocatoriaDuelo, dismissActiveVideo,
     openEscenarioInvitation, openEscenario, prepararEscenario,
     setEscenarioVideo, setPerformanceEscenario, finishEscenarioTurn, closeEscenario,
     launchMinijuego,

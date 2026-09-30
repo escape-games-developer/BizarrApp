@@ -4,7 +4,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useGameState, useAdminControls, parseDueloVideo } from "../hooks/realtime/useGameState";
 import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
-import { useApplauseRound, resolveDueloWinner, dueloPercentages } from "../hooks/realtime/useApplauseRound";
+import { useDueloRound } from "../hooks/realtime/useDueloRound";
+import { useReglasDuelo, motivoDuracionInvalida, motivoAplausosInvalido } from "../hooks/useReglasDuelo";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
@@ -53,6 +54,12 @@ import {
   useBibliotecaObjetivosSumate, motivoObjetivoInvalido, OBJETIVO_MIN, OBJETIVO_MAX,
 } from "../hooks/useBibliotecaObjetivosSumate";
 import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
+import {
+  lanzarRondaDuelo, finalizarRondaDuelo, cancelarRondaDuelo, pushDuelo, mensajeDueloAdmin,
+  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
+  REGLA_DUELO_DURACION, REGLA_DUELO_APLAUSOS,
+  DUELO_DURACION_MIN, DUELO_DURACION_MAX, DUELO_APLAUSOS_MIN, DUELO_APLAUSOS_MAX,
+} from "../services/duelo";
 import {
   RaffleScreen,
   TriviaScreen,
@@ -689,386 +696,571 @@ function DueloSplitBar({p1}){
   );
 }
 
-// DueloPanel — postulaciones (realtime) → 2 slots → video → lanzar con push.
-// Fuente de verdad del estado: game_state.active_escenario + applause_session.
-function DueloPanel({sec, controls, sessionId, gameState}){
-  const { postulaciones } = useDueloPostulaciones(sessionId, null);
-  // Filtro por game_type: sin él, una ronda de PT/FTL posterior secuestraba el
-  // estado del panel del Duelo y mostraba contadores de otro juego.
-  const { round, counts } = useApplauseRound(sessionId, "duelo");
+const DUELO_P1 = "#FF2D78";
+const DUELO_P2 = "#FF9500";
 
-  const [slot1, setSlot1]           = useState(null); // fila de duelo_postulaciones
-  const [slot2, setSlot2]           = useState(null);
+// Tarjeta de un duelista (fase de votación / resultado).
+function DueloLado({p, col, pct, votos, ganador}){
+  return (
+    <div style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
+      background:`${col}10`,border:`1.5px solid ${ganador?col:`${col}44`}`}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:1,color:col}}>PARTICIPANTE {p?.slot}</div>
+        <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
+        <div style={{fontSize:11.5,fontWeight:700,color:col}}>{p?.name}</div>
+        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:26,color:col}}>{pct}%</div>
+        <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>{votos} aplauso{votos===1?"":"s"}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reglas del Duelo (duelo_reglas_config) ─────────────────────────────────
+function DueloReglasCard({col, enJuego}){
+  const { loading, error: reglasError, reglaPorKey, actualizarRegla } = useReglasDuelo();
+  const duracion = reglaPorKey(REGLA_DUELO_DURACION);
+  const aplausos = reglaPorKey(REGLA_DUELO_APLAUSOS);
+  const segGuardado = typeof duracion?.value?.segundos === "number" ? duracion.value.segundos : null;
+  const maxGuardado = typeof aplausos?.value?.max === "number" ? aplausos.value.max : null;
+
+  const [segInput, setSegInput] = useState("");
+  const [maxInput, setMaxInput] = useState("");
+  const [guardando, setGuardando] = useState(null); // key que se está guardando
+  const [aviso, setAviso] = useState(null);          // {ok, text}
+
+  // Los inputs se resincronizan con lo PERSISTIDO. Apagar la duración no toca
+  // `value`: el número sigue acá aunque la regla esté en OFF.
+  useEffect(() => { setSegInput(segGuardado == null ? "" : String(segGuardado)); }, [segGuardado]);
+  useEffect(() => { setMaxInput(maxGuardado == null ? "" : String(maxGuardado)); }, [maxGuardado]);
+
+  const guardar = async (key, patch, okText) => {
+    if (guardando) return;
+    setGuardando(key); setAviso(null);
+    try { await actualizarRegla(key, patch); setAviso({ok:true, text:okText}); }
+    catch (e) { setAviso({ok:false, text:e?.message || String(e)}); }
+    finally { setGuardando(null); }
+  };
+
+  const inputStyle = {width:74,padding:"7px 9px",borderRadius:9,fontSize:13,
+    fontFamily:"Syne,sans-serif",fontWeight:800,textAlign:"center",
+    background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.12)",color:"#F0E8FF"};
+
+  if (loading) return (
+    <div className="card"><div className="ctitle">⚙️ Configuración</div>
+      <div style={{fontSize:11,color:"rgba(240,232,255,.3)"}}>Cargando configuración…</div>
+    </div>
+  );
+  if (reglasError || !duracion || !aplausos) return (
+    <div className="card"><div className="ctitle">⚙️ Configuración</div>
+      <div style={{fontSize:11,color:"#FCA5A5",lineHeight:1.5}}>
+        {reglasError || "Faltan reglas del Duelo en la base."}
+      </div>
+    </div>
+  );
+
+  const motivoSeg = motivoDuracionInvalida(segInput);
+  const motivoMax = motivoAplausosInvalido(maxInput);
+  const sucioSeg  = segInput !== (segGuardado == null ? "" : String(segGuardado));
+  const sucioMax  = maxInput !== (maxGuardado == null ? "" : String(maxGuardado));
+
+  return (
+    <div className="card">
+      <div className="ctitle">⚙️ Configuración de reglas</div>
+
+      {/* Duración de la votación: ON/OFF + segundos */}
+      <div className="rey-regla">
+        <div className="rey-regla-hdr">
+          <div className="rey-regla-t">Duración de la votación</div>
+          <div className={`rey-regla-estado ${duracion.enabled ? "rey-regla-on" : "rey-regla-off"}`}>
+            {duracion.enabled ? "ACTIVA" : "INACTIVA"}
+          </div>
+          <Toggle on={duracion.enabled} color={col}
+            label={guardando===REGLA_DUELO_DURACION ? "Guardando…" : ""}
+            onToggle={() => guardar(REGLA_DUELO_DURACION, { enabled: !duracion.enabled },
+              duracion.enabled ? "Duración desactivada: la votación la cierra el operador." : "Duración activada.")}/>
+        </div>
+        <div className="rey-regla-d">
+          {duracion.enabled
+            ? "La votación se cierra sola al terminar la cuenta regresiva."
+            : "Sin cuenta regresiva: sólo el operador cierra la votación."}
+        </div>
+        <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9}}>
+          <input value={segInput} onChange={(e)=>setSegInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
+          <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
+            disabled={!!guardando || !!motivoSeg || !sucioSeg}
+            onClick={() => guardar(REGLA_DUELO_DURACION, { value: { segundos: Number(segInput.trim()) } }, "Duración guardada.")}>
+            {guardando===REGLA_DUELO_DURACION ? "…" : "Guardar"}
+          </button>
+          <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
+            Segundos, entre {DUELO_DURACION_MIN} y {DUELO_DURACION_MAX}.
+          </div>
+        </div>
+        {motivoSeg && segInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoSeg}</div>}
+      </div>
+
+      {/* Máximo de aplausos por usuario: siempre activa, sólo el valor */}
+      <div className="rey-regla">
+        <div className="rey-regla-hdr">
+          <div className="rey-regla-t">Máximo de aplausos por persona</div>
+          <div className="rey-regla-estado rey-regla-on">SIEMPRE ACTIVA</div>
+        </div>
+        <div className="rey-regla-d">
+          Tope por persona y por ronda, sumando a los dos participantes.
+        </div>
+        <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9}}>
+          <input value={maxInput} onChange={(e)=>setMaxInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
+          <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
+            disabled={!!guardando || !!motivoMax || !sucioMax}
+            onClick={() => guardar(REGLA_DUELO_APLAUSOS, { value: { max: Number(maxInput.trim()) } }, "Máximo de aplausos guardado.")}>
+            {guardando===REGLA_DUELO_APLAUSOS ? "…" : "Guardar"}
+          </button>
+          <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
+            Entre {DUELO_APLAUSOS_MIN} y {DUELO_APLAUSOS_MAX}.
+          </div>
+        </div>
+        {motivoMax && maxInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoMax}</div>}
+      </div>
+
+      {enJuego && (
+        <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:6,lineHeight:1.5}}>
+          Los cambios aplican desde el próximo lanzamiento: la ronda en curso conserva sus reglas.
+        </div>
+      )}
+      {aviso && (
+        <div style={{fontSize:10.5,color:aviso.ok?"#00F5A0":"#FCA5A5",marginTop:8,lineHeight:1.5}}>
+          {aviso.ok ? "✓ " : "✕ "}{aviso.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DueloPanel — Duelo de Talentos V1
+// ══════════════════════════════════════════════════════════════════════════
+// Autoridad: las RPC del backend (services/duelo.js). El panel NO escribe la
+// ronda, los participantes ni el resultado: los lee de Supabase.
+//
+//   applause_sessions (última ronda 'duelo') + game_state → fase (faseDuelo)
+//   duelo_postulaciones                                  → lista de postulantes
+//
+// Lo único local es la SELECCIÓN previa al lanzamiento (quién va de P1 y de
+// P2) y el campo de video: elegir no es lanzar, y no se persiste hasta que
+// `duelo_launch_round` lo acepta.
+function DueloPanel({sec, controls, sessionId, gameState}){
+  const { postulaciones, quitar, reactivar, vaciar } = useDueloPostulaciones(sessionId, null);
+  const { round, counts, now } = useDueloRound(sessionId, { autoFinish: true });
+
+  const [selP1, setSelP1] = useState(null); // id de duelo_postulaciones
+  const [selP2, setSelP2] = useState(null);
   const [videoInput, setVideoInput] = useState("");
-  const [busy,  setBusy]            = useState(false);
-  const [alert, setAlert]           = useState(null);
-  const seededRef = useRef(false);
-  // Subida de MP4: el archivo va a Storage y lo que queda en `videoInput` es su
-  // URL pública, así el resto del flujo (parseo, launchDuelo, TV) es idéntico
-  // al de un link pegado a mano.
-  const videoFileRef                = useRef(null);
-  const [uploading, setUploading]   = useState(false);
+  const [busy, setBusy]   = useState(false);
+  const [err,  setErr]    = useState(null);
+  const [nota, setNota]   = useState(null);
+  const videoFileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
   const [uploadedName, setUploadedName] = useState(null);
 
-  const notify = (txt,col="#00F5A0") => { setAlert({txt,col}); setTimeout(()=>setAlert(null),3000); };
+  const fase    = faseDuelo(gameState, round);
+  const alAire  = gameState?.active_escenario === "duelo";
+  const votando = round?.status === "voting";
+  const [d1, d2] = duelistasDeRonda(round);
+  const pct = porcentajesDuelo(counts);
+  const seg = votando ? segundosRestantes(round, now) : null;
 
-  // Estado derivado — todo desde datos persistidos (game_state + applause_sessions),
-  // así el panel se reconstruye igual después de un F5:
-  //   A idle · B postulaciones abiertas · C duelo en curso · D resultado.
-  const escenario = gameState?.active_escenario;
-  const enCurso   = round?.status==="voting";
-  const cerrado   = round?.status==="finished";
-  const estado    = escenario!=="duelo" ? "A" : enCurso ? "C" : cerrado ? "D" : "B";
-  const estadoLabel = estado==="A" ? "En reposo"
-    : estado==="B" ? "Postulaciones abiertas"
-    : estado==="C" ? "Duelo en curso" : "Resultado";
+  // La selección se DERIVA de la lista por id: si la fila desaparece, se cae sola.
+  const p1 = postulaciones.find(p => p.id === selP1) || null;
+  const p2 = postulaciones.find(p => p.id === selP2) || null;
 
-  // Reconstruir slots desde postulaciones 'selected' tras refresh (una sola vez).
-  useEffect(()=>{
-    if(seededRef.current || estado!=="B" || slot1 || slot2) return;
-    const sel = postulaciones.filter(p=>p.status==="selected");
-    if(sel.length===0) return;
-    setSlot1(sel[0]||null);
-    setSlot2(sel[1]||null);
-    seededRef.current = true;
-  },[postulaciones, estado, slot1, slot2]);
+  // Duelistas de la ronda en curso: no se pueden quitar mientras votan.
+  const enRondaIds = votando ? [d1?.user_id, d2?.user_id] : [];
 
-  // Al salir de Estado B, limpiar el estado local de selección.
-  useEffect(()=>{
-    if(estado!=="B"){ setSlot1(null); setSlot2(null); setVideoInput(""); setUploadedName(null); seededRef.current=false; }
-  },[estado]);
-
-  // Mantener sincronizado el slot local si su fila desaparece (borrado en otra pantalla).
-  useEffect(()=>{
-    if(slot1 && !postulaciones.some(p=>p.id===slot1.id)) setSlot1(null);
-    if(slot2 && !postulaciones.some(p=>p.id===slot2.id)) setSlot2(null);
-  },[postulaciones, slot1, slot2]);
-
-  // ── Acciones ────────────────────────────────────────────────────────────────
-  const assignSlot = async (p, slot) => {
-    const cur    = slot===1 ? slot1 : slot2;
-    const setCur = slot===1 ? setSlot1 : setSlot2;
-    if(cur && cur.id===p.id){            // toggle: ya está en este slot → soltar
-      setCur(null);
-      await controls?.setPostulacionStatus(p.id, "waiting");
-      return;
-    }
-    if(cur && cur.id!==p.id){            // slot ocupado → la anterior vuelve a waiting
-      await controls?.setPostulacionStatus(cur.id, "waiting");
-    }
-    setCur(p);
-    await controls?.setPostulacionStatus(p.id, "selected");
+  const correr = async (fn) => {
+    if (busy) return;
+    setBusy(true); setErr(null); setNota(null);
+    try { await fn(); }
+    catch (e) { setErr(e?.message || String(e)); }
+    finally { setBusy(false); }
   };
 
-  const removePostulacion = async (p) => {
-    if(slot1?.id===p.id) setSlot1(null);
-    if(slot2?.id===p.id) setSlot2(null);
-    await controls?.deletePostulacion(p.id);
+  // ── Selección ────────────────────────────────────────────────────────────
+  const elegir = (p, slot) => {
+    if (slot === 1) { setSelP1(selP1 === p.id ? null : p.id); if (selP2 === p.id) setSelP2(null); }
+    else            { setSelP2(selP2 === p.id ? null : p.id); if (selP1 === p.id) setSelP1(null); }
   };
 
-  const doOpen = async () => {
-    setBusy(true);
-    try{ await controls?.openPostulacionesDuelo(); notify("🎤 Postulaciones abiertas"); }
-    catch(e){ notify("Error: "+(e?.message||e), "#FF2D78"); }
-    finally{ setBusy(false); }
-  };
+  const quitarPostulante = (p) => correr(async () => {
+    if (!window.confirm(`¿Quitar a ${p.user_name} de la lista?`)) return;
+    const r = await quitar(p.id);
+    if (r.error) throw new Error(r.error);
+    if (selP1 === p.id) setSelP1(null);
+    if (selP2 === p.id) setSelP2(null);
+  });
 
-  // Subida de MP4 al bucket `videos-locales` (el mismo que ya usa la carga
-  // local del DJ). Guardamos la URL pública, NO un blob: /tv corre en otra
-  // máquina y un blob:/file: de acá no se puede reproducir del otro lado.
+  const reactivarPostulante = (p) => correr(async () => {
+    const r = await reactivar(p.id);
+    if (r.error) throw new Error(r.error);
+  });
+
+  const vaciarLista = () => correr(async () => {
+    if (!window.confirm("¿Vaciar la lista de postulantes? La gente se va a poder volver a postular.")) return;
+    const keep = postulaciones.filter(p => enRondaIds.includes(p.user_id)).map(p => p.id);
+    const r = await vaciar(keep);
+    if (r.error) throw new Error(r.error);
+    setSelP1(null); setSelP2(null);
+    setNota("🧹 Lista de postulantes vaciada.");
+  });
+
+  // ── Video (opcional) ─────────────────────────────────────────────────────
   const handleVideoFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if(!file) return;
+    if (!file) return;
     const invalid = validateVideoFile(file);
-    if(invalid){ notify(invalid, "#FF2D78"); return; }
-    setUploading(true);
-    try{
+    if (invalid) { setErr(invalid); return; }
+    setUploading(true); setErr(null);
+    try {
       const { url, name } = await uploadDueloVideo(file, { sessionId });
-      setVideoInput(url);
-      setUploadedName(name);
-      notify("🎞️ Video subido");
-    }catch(err){ notify("Error al subir: "+(err?.message||err), "#FF2D78"); }
-    finally{ setUploading(false); }
+      setVideoInput(url); setUploadedName(name);
+      setNota("🎞️ Video subido.");
+    } catch (e2) { setErr(e2?.message || String(e2)); }
+    finally { setUploading(false); }
   };
+  const videoParseado  = parseDueloVideo(videoInput);
+  const videoIgnorado  = videoInput.trim().length > 0 && !videoParseado;
 
-  const clearVideo = () => { setVideoInput(""); setUploadedName(null); };
+  // ── Acciones ─────────────────────────────────────────────────────────────
+  // ANUNCIAR: sólo la placa `duelo` del catálogo común (PlacaScreen), igual que
+  // el anuncio de Arma / Sumate / Desafío. No abre convocatoria, no crea ronda
+  // ni toca postulaciones: es `sendPlaca("duelo")`, el mismo que ya usa la
+  // sección Placas. (No es `announceGame`: ese escribe `game_<id>` y la placa
+  // del Duelo se llama `duelo`.)
+  const anunciado = gameState?.active_placa === "duelo" && !alAire;
+  const anunciar = () => correr(async () => {
+    const e = await controls?.sendPlaca("duelo");
+    if (e?.error) throw new Error(e.error.message || String(e.error));
+    setNota("📢 Placa de Duelo en pantalla. Todavía no hay convocatoria.");
+  });
 
-  // El video es OPCIONAL: los DOS participantes son el único requisito.
-  // `launchBlocker` es la ÚNICA fuente de verdad del botón y además se muestra
-  // en pantalla: si alguna vez vuelve a no dejar lanzar, el operador lee el
-  // motivo exacto en vez de tener que adivinar si falta el video.
-  const launchBlocker = (!slot1 || !slot2) ? "Elegí los dos participantes"
-    : uploading ? "Esperá a que termine de subir el video"
-    : busy      ? "Procesando…"
+  // ABRIR CONVOCATORIA / NUEVA RONDA: deja el Duelo en el escenario sin ronda
+  // votando. Primero `duelo_cancel_round` sin bajar la pantalla (idempotente:
+  // NO_ACTIVE_ROUND es ok), después la capa. Los postulantes quedan.
+  const abrirConvocatoria = () => correr(async () => {
+    const c = await cancelarRondaDuelo(sessionId, false);
+    if (!c?.ok) throw new Error(mensajeDueloAdmin(c));
+    if (!alAire) {
+      await controls?.abrirConvocatoriaDuelo();
+      pushDuelo(sessionId, { title:"🎤 ¡Duelo de Talentos!", body:"Postulate para subir al escenario", tag:"duelo-open" });
+      setNota("📣 Convocatoria abierta. El público ya se puede postular.");
+    } else {
+      setNota("🔁 Listo para la próxima ronda. Elegí a los dos participantes.");
+    }
+  });
+
+  // LANZAR: una sola autoridad, `duelo_launch_round`. Cancela sola la ronda
+  // activa anterior, pone el Duelo al aire y congela participantes y reglas.
+  const puedeLanzar = !busy && !uploading && !!sessionId && !!p1 && !!p2 && p1.id !== p2.id
+    && p1.user_id !== p2.user_id && !votando;
+  const motivoNoLanzar = votando ? "Hay una ronda votando: finalizala o cancelala primero."
+    : (!p1 || !p2) ? "Elegí al participante 1 y al participante 2."
+    : p1.user_id === p2.user_id ? "Los dos participantes tienen que ser distintos."
+    : uploading ? "Esperá a que termine de subir el video."
     : null;
-  const canLaunch = !launchBlocker;
-  // Aviso (no bloqueante) para el operador: lo tipeado no es YouTube ni una URL.
-  const videoIgnorado = videoInput.trim().length>0 && !parseDueloVideo(videoInput);
-  const doLaunch = async () => {
-    if(!canLaunch) return;
-    setBusy(true);
-    try{
-      // null explícito cuando el campo está vacío: no hay ningún camino en el
-      // que la ausencia de video corte el lanzamiento.
-      const rawVideo = videoInput?.trim() || null;
-      await controls?.launchDuelo({ p1: slot1, p2: slot2, videoInput: rawVideo });
-      notify(rawVideo ? "🚀 Duelo lanzado" : "🚀 Duelo lanzado (sin video)");
-    }catch(e){ notify("Error al lanzar: "+(e?.message||e), "#FF2D78"); }
-    finally{ setBusy(false); }
-  };
 
-  const doCancel = async () => {
-    setBusy(true);
-    try{ await controls?.cerrarDuelo(); notify("Duelo cancelado","#FFD600"); }
-    catch(e){ notify("Error: "+(e?.message||e), "#FF2D78"); }
-    finally{ setBusy(false); }
-  };
+  const lanzar = () => correr(async () => {
+    if (!puedeLanzar) return;
+    await controls?.dismissActiveVideo();
+    const r = await lanzarRondaDuelo({
+      sessionId, postulacion1: p1.id, postulacion2: p2.id, video: videoParseado,
+    });
+    if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
+    setSelP1(null); setSelP2(null); setVideoInput(""); setUploadedName(null);
+    pushDuelo(sessionId, { title:"🎤 ¡Empezó el Duelo!",
+      body:`${r.p1?.name || "P1"} vs ${r.p2?.name || "P2"}. ¡Aplaudí a tu favorito!`, tag:"duelo-launch" });
+    setNota(r.timed
+      ? `🚀 Duelo lanzado — ${r.duration_seconds}s de votación, ${r.tap_limit} aplausos por persona.`
+      : `🚀 Duelo lanzado — sin límite de tiempo, ${r.tap_limit} aplausos por persona.`);
+  });
 
-  // Cierra la medición en el servidor. `busy` + el guard idempotente del RPC
-  // cubren el doble click y los dos admins simultáneos.
-  const doFinish = async () => {
-    if(busy || !round?.id) return;
-    setBusy(true);
-    try{ await controls?.finishDuelo(round.id); notify("🏁 Duelo finalizado"); }
-    catch(e){ notify("Error al finalizar: "+(e?.message||e), "#FF2D78"); }
-    finally{ setBusy(false); }
-  };
+  // FINALIZAR Y REVELAR: el resultado lo calcula y persiste el servidor.
+  const finalizar = () => correr(async () => {
+    if (!round?.id) return;
+    const r = await finalizarRondaDuelo(round.id, true);
+    if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
+    setNota(r.result === "tie" ? "🤝 Resultado: empate." : "🏆 Resultado revelado.");
+  });
 
-  // Slots para Estado C: leer de game_state (persistido en launchDuelo).
-  const cSlot1 = gameState?.duelo_slot1;
-  const cSlot2 = gameState?.duelo_slot2;
+  // CANCELAR RONDA (votando) / CERRAR DUELO (sin ronda): `duelo_cancel_round`.
+  // Votando: cancela y el Duelo sigue en el escenario (convocatoria). Sin
+  // ronda: saca el Duelo de la pantalla. NO_ACTIVE_ROUND con ok:true es éxito.
+  const cancelarOCerrar = () => correr(async () => {
+    if (anunciado && !votando) {
+      // Sólo estaba la placa de anuncio: se retira, sin tocar rondas.
+      const e = await controls?.clearPlaca();
+      if (e?.error) throw new Error(e.error.message || String(e.error));
+      setNota("⏹ Placa de Duelo retirada. La TV volvió a DJ Democracy.");
+    } else if (votando) {
+      if (!window.confirm("¿Cancelar la ronda en curso? No va a haber ganador.")) return;
+      const r = await cancelarRondaDuelo(sessionId, false);
+      if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
+      setNota("⛔ Ronda cancelada. El Duelo sigue en el escenario.");
+    } else {
+      const r = await cancelarRondaDuelo(sessionId, true);
+      if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
+      setNota("⏹ Duelo cerrado. La TV volvió a DJ Democracy.");
+    }
+  });
 
-  // Resultado: misma función que usa la TV (ganador de winner_slot, empate por
-  // totales). Si las dos pantallas divergen, divergen juntas.
-  const result = resolveDueloWinner(round, counts);
-  // Marcador en % — misma utilidad que /tv y el cliente. Los votos absolutos
-  // siguen a la vista, en chico, como dato técnico para el operador.
-  const pct = dueloPercentages(counts);
+  // Anunciar: sólo con el Duelo fuera del escenario y sin su placa ya puesta.
+  const puedeAnunciar  = !busy && !!sessionId && !alAire && !votando && !anunciado;
+  const puedeAbrir     = !busy && !!sessionId && (!alAire || fase === "result");
+  const puedeFinalizar = !busy && votando;
+  const puedeCancelar  = !busy && !!sessionId && (votando || alAire || anunciado);
 
-  return(
-    <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {alert&&<StatusAlert text={alert.txt} color={alert.col} onClose={()=>setAlert(null)}/>}
+  // ÚNICA ubicación de las acciones del Duelo. Fila 1: preparación (anunciar ·
+  // convocatoria). Fila 2: lanzar, a lo ancho. Fila 3: cierre (finalizar · cancelar).
+  const barraOperativa = (
+    <div className="card" style={{marginBottom:10, borderColor:"rgba(255,45,120,.3)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
+        <button className="btn btn-g" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeAnunciar} onClick={anunciar}
+          title={alAire ? "El Duelo ya está en el escenario" : anunciado ? "La placa ya está en pantalla" : "Mostrar la placa de Duelo de Talentos"}>
+          📢 Anunciar
+        </button>
+        <button className="btn btn-g" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeAbrir} onClick={abrirConvocatoria}
+          title={fase === "result" ? "Bajar el resultado y preparar otra ronda" : "Poner el Duelo en el escenario para recibir postulaciones"}>
+          {fase === "result" ? "🔁 Nueva ronda" : "📣 Abrir convocatoria"}
+        </button>
+        <button className="btn btn-p" style={{gridColumn:"span 2",padding:"10px 4px",fontSize:11,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeLanzar} onClick={lanzar}>
+          🚀 Lanzar duelo
+        </button>
+        <button className="btn btn-p" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeFinalizar} onClick={finalizar}>
+          🏁 Finalizar y revelar
+        </button>
+        <button className="btn btn-r" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeCancelar} onClick={cancelarOCerrar}>
+          {votando ? "⛔ Cancelar ronda" : (anunciado && !alAire) ? "⏹ Quitar placa" : "⏹ Cerrar Duelo"}
+        </button>
+      </div>
+      {motivoNoLanzar && !votando && (fase === "convocatoria" || fase === "result") && (
+        <div style={{fontSize:10,color:"rgba(240,232,255,.4)",textAlign:"center",marginTop:7}}>{motivoNoLanzar}</div>
+      )}
+    </div>
+  );
 
-      {/* HEADER */}
-      <div className="card" style={{marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <div className="ctitle" style={{margin:0}}>🎤 Duelo de Talentos</div>
-            <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>Estado: {estadoLabel}</div>
+  const ESTADO_LABEL = { off:"Fuera del escenario", convocatoria:"Convocatoria abierta",
+    voting:"Votación en curso", result:"Resultado en pantalla" };
+
+  // ── Lista de postulantes ─────────────────────────────────────────────────
+  const listaPostulantes = (
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8}}>
+        <div className="ctitle" style={{margin:0}}>Postulantes</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)"}}>
+            {postulaciones.filter(p=>p.status!=="rejected").length} disponibles
           </div>
-          {estado!=="A" && <div className="chip chip-live"><div className="dot-live"/>
-            {estado==="C"?"En vivo":estado==="D"?"Cerrado":"Invitando"}</div>}
+          <button className="btn btn-g" style={{padding:"3px 9px",fontSize:9.5}}
+            disabled={busy || postulaciones.length===0} onClick={vaciarLista}>🧹 Vaciar</button>
         </div>
       </div>
 
-      {/* ── ESTADO A — idle ── */}
-      {estado==="A" && (
-        <div className="card">
-          <p style={{fontSize:12,color:"rgba(240,232,255,.45)",lineHeight:1.5,marginBottom:12}}>
-            Abrí la convocatoria: llega un push nativo a todos los celulares conectados
-            invitándolos a postularse al Duelo de Talentos.
-          </p>
-          <button className="btn btn-p btn-full" onClick={doOpen} disabled={busy}>
-            🎤 Abrir postulaciones
-          </button>
+      {postulaciones.length===0 && (
+        <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",textAlign:"center",padding:"14px 0"}}>
+          {alAire ? "Todavía no se postuló nadie…" : "Abrí la convocatoria para recibir postulaciones."}
         </div>
       )}
 
-      {/* ── ESTADO B — postulaciones abiertas ── */}
-      {estado==="B" && (
-        <>
-          {/* Slots */}
-          <div className="card" style={{marginBottom:12}}>
-            <div className="ctitle">Competidores</div>
-            <div style={{display:"flex",gap:8}}>
-              {[{p:slot1,col:"#FF2D78",n:1},{p:slot2,col:"#FF9500",n:2}].map(({p,col,n})=>(
-                <div key={n} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
-                  background:p?`${col}14`:"rgba(240,232,255,.04)",
-                  border:`1.5px solid ${p?col:"rgba(240,232,255,.1)"}`}}>
-                  {p?(
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
-                      <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} col={col}/>
-                      <div style={{fontSize:11,fontWeight:700,color:col}}>{p.user_name}</div>
-                      <div style={{fontSize:9,color:"rgba(240,232,255,.3)"}}>Slot {n}</div>
-                    </div>
-                  ):(
-                    <div style={{fontSize:11,color:"rgba(240,232,255,.2)",fontWeight:600,padding:"14px 0"}}>
-                      Slot {n}<br/>vacío
-                    </div>
-                  )}
+      <div className="rey-list">
+        {postulaciones.map((p)=>{
+          const es1 = selP1===p.id, es2 = selP2===p.id;
+          const enRonda = enRondaIds.includes(p.user_id);
+          const rechazada = p.status==="rejected";
+          return (
+            <div key={p.id} className="qrow" style={{opacity:rechazada?.5:1}}>
+              <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} size={34}
+                col={es1?DUELO_P1:es2?DUELO_P2:undefined}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div className="qname">{p.user_name}</div>
+                <div style={{fontSize:9,color:"rgba(240,232,255,.35)"}}>
+                  {enRonda ? "🎤 en el escenario"
+                    : rechazada ? "inactiva (de un flujo anterior)"
+                    : p.status==="selected" ? "ya participó · disponible" : "esperando"}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Postulaciones (realtime) */}
-          <div className="card" style={{marginBottom:12}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div className="ctitle" style={{margin:0}}>Postulaciones</div>
-              <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)"}}>{postulaciones.length} en total</div>
-            </div>
-
-            {postulaciones.length===0 && (
-              <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",textAlign:"center",padding:"14px 0"}}>
-                Todavía no se postuló nadie…
               </div>
-            )}
-
-            {postulaciones.map((p,i)=>{
-              const inSlot1 = slot1?.id===p.id, inSlot2 = slot2?.id===p.id;
-              return (
-                <div key={p.id} className="qrow" style={{animationDelay:`${i*.05}s`}}>
-                  <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} size={34}/>
-                  <div className="qname" style={{flex:1}}>{p.user_name}</div>
-                  <div style={{display:"flex",gap:5}}>
-                    <button className="btn" style={{padding:"5px 9px",fontSize:10,opacity:inSlot2?.4:1,
-                      background:inSlot1?"#FF2D78":"rgba(255,45,120,.1)",
-                      border:"1px solid rgba(255,45,120,.3)",color:inSlot1?"#fff":"#FF2D78"}}
-                      onClick={()=>assignSlot(p,1)} disabled={inSlot2}>→ Slot 1</button>
-                    <button className="btn" style={{padding:"5px 9px",fontSize:10,opacity:inSlot1?.4:1,
-                      background:inSlot2?"#FF9500":"rgba(255,149,0,.1)",
-                      border:"1px solid rgba(255,149,0,.3)",color:inSlot2?"#fff":"#FF9500"}}
-                      onClick={()=>assignSlot(p,2)} disabled={inSlot1}>→ Slot 2</button>
-                    <button className="btn" style={{padding:"5px 8px",fontSize:10,
-                      background:"rgba(255,45,120,.06)",border:"1px solid rgba(255,45,120,.18)",color:"rgba(255,45,120,.7)"}}
-                      onClick={()=>removePostulacion(p)}>✕</button>
-                  </div>
+              {rechazada ? (
+                <button className="btn btn-g" style={{padding:"5px 9px",fontSize:10}}
+                  disabled={busy} onClick={()=>reactivarPostulante(p)}>Reactivar</button>
+              ) : (
+                <div style={{display:"flex",gap:5}}>
+                  <button className="btn" style={{padding:"5px 9px",fontSize:10,
+                    background:es1?DUELO_P1:"rgba(255,45,120,.1)",border:"1px solid rgba(255,45,120,.3)",
+                    color:es1?"#fff":DUELO_P1}} disabled={votando||enRonda} onClick={()=>elegir(p,1)}>P1</button>
+                  <button className="btn" style={{padding:"5px 9px",fontSize:10,
+                    background:es2?DUELO_P2:"rgba(255,149,0,.1)",border:"1px solid rgba(255,149,0,.3)",
+                    color:es2?"#fff":DUELO_P2}} disabled={votando||enRonda} onClick={()=>elegir(p,2)}>P2</button>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Video — OPCIONAL. Dos caminos: link (YouTube / URL directa) o
-              subir un MP4 al bucket. La subida deja su URL pública en el mismo
-              campo, así el duelo se lanza siempre por el mismo contrato. */}
-          <div className="card" style={{marginBottom:12}}>
-            <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8}}>
-              <div className="ctitle" style={{margin:0}}>Video del duelo</div>
-              <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)",textTransform:"uppercase",letterSpacing:1}}>Opcional</div>
+              )}
+              <button className="btn" style={{padding:"5px 8px",fontSize:10,background:"rgba(255,45,120,.06)",
+                border:"1px solid rgba(255,45,120,.18)",color:"rgba(255,45,120,.7)"}}
+                disabled={busy||enRonda} onClick={()=>quitarPostulante(p)} title="Quitar de la lista">✕</button>
             </div>
-            <div style={{fontSize:10.5,color:"rgba(240,232,255,.35)",margin:"4px 0 8px"}}>
-              Sin video el duelo arranca igual: la TV muestra a los dos participantes.
-            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-            <input value={videoInput} onChange={e=>{setVideoInput(e.target.value); setUploadedName(null);}}
-              placeholder="YouTube (URL o ID) o URL directa a un mp4"
-              style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:10,
-                background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.14)",
-                color:"#F0E8FF",fontSize:12.5,outline:"none"}}/>
-
-            <input ref={videoFileRef} type="file" accept="video/mp4,video/webm"
-              onChange={handleVideoFile} style={{display:"none"}}/>
-            <div style={{display:"flex",gap:6,marginTop:8}}>
-              <button className="btn" style={{flex:1,padding:"9px 10px",fontSize:11,
-                background:"rgba(155,47,255,.1)",border:"1px dashed rgba(155,47,255,.45)",color:"#C9A3FF",
-                opacity:uploading?.6:1}}
-                disabled={uploading} onClick={()=>videoFileRef.current?.click()}>
-                {uploading ? "⏳ Subiendo…" : "📂 Subir MP4"}
-              </button>
-              {videoInput.trim().length>0 && (
-                <button className="btn" style={{padding:"9px 12px",fontSize:11,
-                  background:"rgba(255,45,120,.06)",border:"1px solid rgba(255,45,120,.25)",color:"rgba(255,45,120,.85)"}}
-                  disabled={uploading} onClick={clearVideo}>Quitar</button>
+  // ── Preparación: slots + video ───────────────────────────────────────────
+  const preparacion = (
+    <>
+      <div className="card" style={{marginBottom:10}}>
+        <div className="ctitle">Duelistas seleccionados</div>
+        <div style={{display:"flex",gap:8}}>
+          {[{p:p1,col:DUELO_P1,n:1,limpiar:()=>setSelP1(null)},{p:p2,col:DUELO_P2,n:2,limpiar:()=>setSelP2(null)}].map(({p,col,n,limpiar})=>(
+            <div key={n} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
+              background:p?`${col}14`:"rgba(240,232,255,.04)",border:`1.5px ${p?"solid":"dashed"} ${p?col:"rgba(240,232,255,.14)"}`}}>
+              <div style={{fontSize:9,fontWeight:800,letterSpacing:1,color:col,marginBottom:6}}>PARTICIPANTE {n}</div>
+              {p ? (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+                  <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} col={col}/>
+                  <div style={{fontSize:11.5,fontWeight:700,color:col}}>{p.user_name}</div>
+                  <button className="btn btn-g" style={{padding:"2px 8px",fontSize:9}} onClick={limpiar}>Quitar</button>
+                </div>
+              ) : (
+                <div style={{fontSize:11,color:"rgba(240,232,255,.25)",padding:"14px 0"}}>
+                  Elegí con «P{n}» en la lista
+                </div>
               )}
             </div>
-            <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)",marginTop:5}}>
-              MP4 o WebM · máx 100 MB · bucket videos-locales (URL pública, la ve la TV)
-            </div>
+          ))}
+        </div>
+        <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:8,lineHeight:1.5}}>
+          Elegir no es lanzar: nadie se entera hasta que toques 🚀 Lanzar duelo.
+        </div>
+      </div>
 
-            {uploadedName && (
-              <div style={{fontSize:10.5,color:"#00F5A0",marginTop:6}}>✓ {uploadedName} subido</div>
-            )}
-            {videoIgnorado && (
-              <div style={{fontSize:10.5,color:"#FFD600",marginTop:6}}>
-                ⚠️ Eso no es un link de YouTube ni una URL http(s): el duelo se lanza sin video.
+      <div className="card" style={{marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8}}>
+          <div className="ctitle" style={{margin:0}}>Video del duelo</div>
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)",textTransform:"uppercase",letterSpacing:1}}>Opcional</div>
+        </div>
+        <input value={videoInput} onChange={e=>{setVideoInput(e.target.value); setUploadedName(null);}}
+          placeholder="YouTube (URL o ID) o URL directa a un mp4"
+          style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:10,marginTop:8,
+            background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.14)",
+            color:"#F0E8FF",fontSize:12.5,outline:"none"}}/>
+        <input ref={videoFileRef} type="file" accept="video/mp4,video/webm" onChange={handleVideoFile} style={{display:"none"}}/>
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <button className="btn" style={{flex:1,padding:"9px 10px",fontSize:11,background:"rgba(155,47,255,.1)",
+            border:"1px dashed rgba(155,47,255,.45)",color:"#C9A3FF",opacity:uploading?.6:1}}
+            disabled={uploading} onClick={()=>videoFileRef.current?.click()}>
+            {uploading ? "⏳ Subiendo…" : "📂 Subir MP4"}
+          </button>
+          {videoInput.trim().length>0 && (
+            <button className="btn" style={{padding:"9px 12px",fontSize:11,background:"rgba(255,45,120,.06)",
+              border:"1px solid rgba(255,45,120,.25)",color:"rgba(255,45,120,.85)"}}
+              disabled={uploading} onClick={()=>{setVideoInput(""); setUploadedName(null);}}>Quitar</button>
+          )}
+        </div>
+        <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)",marginTop:5}}>
+          MP4 o WebM · máx 100 MB · sólo administradores pueden subir
+        </div>
+        {uploadedName && <div style={{fontSize:10.5,color:"#00F5A0",marginTop:6}}>✓ {uploadedName} subido</div>}
+        {videoIgnorado && (
+          <div style={{fontSize:10.5,color:"#FFD600",marginTop:6}}>
+            ⚠️ Eso no es un link de YouTube ni una URL http(s): el duelo se lanza sin video.
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const resultado = round?.result; // 'p1' | 'p2' | 'tie' — lo decide el servidor
+
+  return(
+    <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
+      {err && (
+        <div className="card" style={{borderColor:"rgba(255,45,120,.4)",marginBottom:10}}>
+          <div style={{fontSize:11.5,color:"#FF2D78",fontWeight:700}}>✕ {err}</div>
+        </div>
+      )}
+      {!err && nota && (
+        <div className="card" style={{borderColor:"rgba(0,245,160,.3)",marginBottom:10}}>
+          <div style={{fontSize:11.5,color:"#00F5A0",fontWeight:700}}>{nota}</div>
+        </div>
+      )}
+
+      <div className="pal-split">
+        {/* ══ Izquierda: operación ══ */}
+        <div>
+          <div className="card" style={{marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <div className="ctitle" style={{margin:0}}>🎤 Duelo de Talentos</div>
+                <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>
+                  Estado: {fase === "off" && anunciado ? "Anunciado (placa en pantalla)" : ESTADO_LABEL[fase]}
+                </div>
+              </div>
+              {fase!=="off" && <div className="chip chip-live"><div className="dot-live"/>
+                {fase==="voting"?"Votando":fase==="result"?"Resultado":"Convocatoria"}</div>}
+              {fase==="off" && anunciado && <div className="chip chip-live"><div className="dot-live"/>Anunciado</div>}
+            </div>
+            {votando && !alAire && (
+              <div style={{fontSize:10.5,color:"#FFD600",marginTop:8,lineHeight:1.5}}>
+                ⚠️ Hay una ronda votando pero el Duelo no está en la pantalla (otro juego ocupó el escenario).
+                Finalizala o cancelala.
               </div>
             )}
           </div>
 
-          {/* Acciones. El video NO participa de `canLaunch`: con los dos
-              participantes elegidos el duelo se lanza, con o sin video. */}
-          <button className="btn btn-p btn-full" style={{marginBottom:launchBlocker?4:8}} disabled={!canLaunch} onClick={doLaunch}>
-            🚀 Lanzar Duelo
-          </button>
-          {launchBlocker && (
-            <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",textAlign:"center",marginBottom:8}}>
-              {launchBlocker}
+          {fase === "voting" && (
+            <div className="card" style={{marginBottom:10,borderColor:"rgba(255,45,120,.25)"}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
+                <div className="ctitle" style={{margin:0}}>Votación en curso</div>
+                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:16,
+                  color: seg!=null && seg<=10 ? "#FF2D78" : "#F0E8FF"}}>
+                  {seg==null ? "Sin límite de tiempo" : seg>0 ? `⏱ ${formatoReloj(seg)}` : "Tiempo cumplido…"}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,margin:"10px 0 8px"}}>
+                <DueloLado p={d1} col={DUELO_P1} pct={pct.p1} votos={counts.p1}/>
+                <DueloLado p={d2} col={DUELO_P2} pct={pct.p2} votos={counts.p2}/>
+              </div>
+              <DueloSplitBar p1={pct.p1}/>
+              <div style={{fontSize:10,color:"rgba(240,232,255,.35)"}}>
+                Tope: {round?.tap_limit} aplausos por persona en esta ronda.
+              </div>
             </div>
           )}
-          <button className="btn btn-g btn-full" disabled={busy} onClick={doCancel}>
-            Cancelar duelo
-          </button>
-        </>
-      )}
 
-      {/* ── ESTADO C — duelo en curso (voting) ── */}
-      {estado==="C" && (
-        <div className="card" style={{borderColor:"rgba(255,45,120,.25)"}}>
-          <div className="ctitle">Duelo en curso</div>
-          <div style={{display:"flex",gap:8,marginBottom:8}}>
-            {[{p:cSlot1,pc:pct.p1,votos:counts.p1,col:"#FF2D78"},{p:cSlot2,pc:pct.p2,votos:counts.p2,col:"#FF9500"}].map(({p,pc,votos,col},i)=>(
-              <div key={i} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
-                background:`${col}10`,border:`1.5px solid ${col}44`}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
-                  <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
-                  <div style={{fontSize:11,fontWeight:700,color:col}}>{p?.name||`Slot ${i+1}`}</div>
-                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:26,color:col}}>{pc}%</div>
-                  <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>{votos} voto{votos===1?"":"s"}</div>
+          {fase === "result" && (
+            <div className="card" style={{marginBottom:10,borderColor:"rgba(0,245,160,.25)"}}>
+              <div className="ctitle">Resultado</div>
+              <div style={{textAlign:"center",marginBottom:12}}>
+                <div style={{fontSize:34,lineHeight:1}}>{resultado==="tie"?"🤝":"🏆"}</div>
+                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
+                  color:resultado==="tie"?"#FFD600":"#00F5A0",marginTop:6}}>
+                  {resultado==="tie" ? "Empate"
+                    : resultado==="p1" ? `Ganó ${d1?.name}`
+                    : resultado==="p2" ? `Ganó ${d2?.name}` : "Calculando…"}
                 </div>
               </div>
-            ))}
-          </div>
-          <DueloSplitBar p1={pct.p1}/>
-          <button className="btn btn-p btn-full" style={{marginBottom:8}} disabled={busy} onClick={doFinish}>
-            🏁 Finalizar Duelo
-          </button>
-          {/* Salida directa desde el duelo en curso. Sin esto, la única forma de
-              bajar el Duelo de la TV era finalizar primero y cerrar después: si
-              el operador se iba a otra sección, el overlay quedaba al aire y el
-              DJ no volvía nunca. */}
-          <button className="btn btn-g btn-full" disabled={busy} onClick={doCancel}>
-            Cerrar duelo
-          </button>
-        </div>
-      )}
-
-      {/* ── ESTADO D — resultado (ronda cerrada) ── */}
-      {estado==="D" && (
-        <div className="card" style={{borderColor:"rgba(0,245,160,.25)"}}>
-          <div className="ctitle">Resultado</div>
-          <div style={{textAlign:"center",marginBottom:12}}>
-            <div style={{fontSize:34,lineHeight:1}}>{result.tie?"🤝":"🏆"}</div>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
-              color:result.tie?"#FFD600":"#00F5A0",marginTop:6}}>
-              {result.tie
-                ? "Empate"
-                : (result.slot===1 ? cSlot1?.name : cSlot2?.name) || `Slot ${result.slot}`}
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <DueloLado p={d1} col={DUELO_P1} pct={pct.p1} votos={counts.p1} ganador={resultado==="p1"}/>
+                <DueloLado p={d2} col={DUELO_P2} pct={pct.p2} votos={counts.p2} ganador={resultado==="p2"}/>
+              </div>
             </div>
-          </div>
-          <div style={{display:"flex",gap:8,marginBottom:8}}>
-            {[{p:cSlot1,pc:pct.p1,votos:result.p1,col:"#FF2D78",n:1},{p:cSlot2,pc:pct.p2,votos:result.p2,col:"#FF9500",n:2}].map(({p,pc,votos,col,n})=>(
-              <div key={n} style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
-                background:`${col}10`,
-                border:`1.5px solid ${result.slot===n?col:`${col}44`}`}}>
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
-                  <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
-                  <div style={{fontSize:11,fontWeight:700,color:col}}>{p?.name||`Slot ${n}`}</div>
-                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:26,color:col}}>{pc}%</div>
-                  <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>{votos} voto{votos===1?"":"s"}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{marginBottom:12}}><DueloSplitBar p1={pct.p1}/></div>
-          <button className="btn btn-p btn-full" style={{marginBottom:8}} disabled={busy} onClick={doOpen}>
-            🔁 Nueva ronda
-          </button>
-          <button className="btn btn-g btn-full" disabled={busy} onClick={doCancel}>
-            Cerrar duelo
-          </button>
+          )}
+
+          {!votando && preparacion}
+          {listaPostulantes}
         </div>
-      )}
+
+        {/* ══ Derecha: acciones + reglas ══ */}
+        <div>
+          {barraOperativa}
+          <DueloReglasCard col={DUELO_P1} enJuego={votando}/>
+        </div>
+      </div>
     </div>
   );
 }
@@ -5049,7 +5241,7 @@ function PantallaPreview() {
   } else if (activeGame === "trivia") {
     content = <TriviaScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (hasEscenario) {
-    content = <EscenarioScreen gameState={gameState}/>;
+    content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (liveVideo && !hasGame) {
     // En el preview, audio siempre activo (no muestra overlay 🔊)
     content = <VideoScreen video={liveVideo} audioEnabled={false} onEnded={()=>{}}/>;

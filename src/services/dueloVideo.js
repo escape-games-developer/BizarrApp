@@ -69,7 +69,15 @@ export async function uploadDueloVideo(file, { sessionId } = {}) {
   const { error: upErr } = await supabase.storage
     .from(DUELO_VIDEO_BUCKET)
     .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type });
-  if (upErr) throw new Error(`No se pudo subir el video: ${upErr.message}`);
+  if (upErr) {
+    // Desde la migración 20260930005253 subir y borrar en `videos-locales` es
+    // sólo de admin (la lectura sigue pública para la TV).
+    const sinPermiso = String(upErr.statusCode) === "403"
+      || /row-level security|unauthorized|not allowed/i.test(upErr.message || "");
+    throw new Error(sinPermiso
+      ? "Tu usuario no tiene permiso para subir videos. Sólo un administrador puede hacerlo."
+      : `No se pudo subir el video: ${upErr.message}`);
+  }
 
   const { data } = supabase.storage.from(DUELO_VIDEO_BUCKET).getPublicUrl(path);
   const url = data?.publicUrl;

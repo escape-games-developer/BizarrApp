@@ -778,14 +778,14 @@ export function PalabraScreen({ sessionId, demoRound = null }) {
   );
 }
 
-export function EscenarioScreen({ gameState, sessionId }) {
+export function EscenarioScreen({ gameState, sessionId, demoDuelo = null }) {
   const type = gameState?.active_escenario || "duelo";
 
   // El Duelo tiene su propio render (video + votos + burbujas + QR).
   // Los demás escenarios (ftl, pt, karaoke) siguen con el render clásico de abajo.
   if (type === "duelo") {
     return <DueloBigscreen gameState={gameState} sessionId={sessionId}
-      webappUrl={window.location.origin} />;
+      webappUrl={window.location.origin} demo={demoDuelo} />;
   }
 
   const INFO = {
@@ -832,6 +832,29 @@ export function EscenarioScreen({ gameState, sessionId }) {
 }
 
 // Placa de pantalla entera
+// ── Placas de ANUNCIAR de los juegos ─────────────────────────────────────────
+// Todas usan la estructura de la placa de Rey del Orto, que es la referencia:
+//   · degradé oscuro a 160°: base casi negra del tono → tono del juego → #08040F
+//   · dos orbs difuminados con el glow del juego (ambiente, esquinas)
+//   · logo oficial centrado (.placa-img) con drop-shadow del mismo glow
+//   · borde fino (.placa-border, 1px, radio 24px) con una variante del color
+//   · sin título, subtítulo, textos operativos ni QR: el logo ya dice el nombre
+// Sólo cambia la paleta. Los tonos salen de la misma receta que Rey:
+//   deep = hsl(h,100%,5%) · mid = hsl(h,100%,12%) · glow al 50% · borde al 30%.
+// Rey conserva sus valores originales exactos.
+const placaDeJuego = (image, nombre, { deep, mid, glow, border }) => ({
+  image, title: nombre, bg: `linear-gradient(160deg,${deep},${mid},#08040F)`, glow, border,
+});
+const PALETA_PLACA = {
+  rey:     { deep:"#1A0800", mid:"#3D1500", glow:"rgba(255,214,0,.5)",  border:"rgba(255,149,0,.3)"  }, // dorado / ámbar (original)
+  trivia:  { deep:"#13001A", mid:"#2E003D", glow:"rgba(155,47,255,.5)", border:"rgba(255,45,149,.3)" }, // violeta / fucsia
+  palabra: { deep:"#00111A", mid:"#00293D", glow:"rgba(0,229,255,.5)",  border:"rgba(45,123,255,.3)" }, // cyan / azul eléctrico
+  suma:    { deep:"#1A0300", mid:"#3D0800", glow:"rgba(255,90,31,.5)",  border:"rgba(255,45,45,.3)"  }, // naranja / rojo cálido
+  duelo:   { deep:"#1A000B", mid:"#3D001A", glow:"rgba(255,45,149,.5)", border:"rgba(255,45,120,.3)" }, // magenta / bordó
+  ftl:     { deep:"#001A13", mid:"#003D2E", glow:"rgba(0,245,160,.5)",  border:"rgba(0,201,183,.3)"  }, // verde / teal
+  pt:      { deep:"#02001A", mid:"#05003D", glow:"rgba(61,107,255,.5)", border:"rgba(123,77,255,.3)" }, // azul / violeta
+};
+
 export function PlacaScreen({ logo, gameState }) {
   // gameState.active_placa: id de la placa
   // gameState.placa_custom: { emoji, title, subtitle, grad, bg, glow, border }
@@ -852,22 +875,11 @@ export function PlacaScreen({ logo, gameState }) {
       subtitle: custom?.subtitle || "Solo esta noche · Presentá el cupón al staff",
       grad:"linear-gradient(135deg,#00E5FF,#00F5A0)", bg:"linear-gradient(160deg,#001A1A,#001A2E,#08040F)",
       glow:"rgba(0,229,255,.35)", border:"rgba(0,229,255,.2)" },
-    game_rey: { image:"/placas/Rey_del_orto-removebg-preview.png", emoji:"🎰", title:"REY DEL ORTO",
-      subtitle:"El sorteo más espectacular de Buenos Aires",
-      grad:"linear-gradient(135deg,#FFD600,#FF9500,#FF2D78)", bg:"linear-gradient(160deg,#1A0800,#3D1500,#08040F)",
-      glow:"rgba(255,214,0,.5)", border:"rgba(255,149,0,.3)" },
-    game_trivia: { image:"/placas/Desafio_demente-removebg-preview.png", emoji:"🧠", title:"DESAFÍO DEMENTE!",
-      subtitle:"Team Batata 🍠 vs Team Membrillo 🍋",
-      grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)", bg:"linear-gradient(160deg,#0D0820,#1A0D30,#08040F)",
-      glow:"rgba(155,47,255,.5)", border:"rgba(155,47,255,.3)" },
-    game_suma: { image:"/placas/Sumate_que_sumamos-removebg-preview.png", emoji:"🔢", title:"SUMATE QUE SUMAMOS",
-      subtitle:"Juntate con otros · Llegá al escenario primero",
-      grad:"linear-gradient(135deg,#FF9500,#FFD600)", bg:"linear-gradient(160deg,#1A0C00,#2A1400,#08040F)",
-      glow:"rgba(255,149,0,.5)", border:"rgba(255,149,0,.3)" },
-    game_palabra: { image:"/placas/Arma_la_palabra-removebg-preview.png", emoji:"🔤", title:"ARMA LA PALABRA",
-      subtitle:"Encontrá a los que tienen las otras letras",
-      grad:"linear-gradient(135deg,#A855F7,#FF2D78)", bg:"linear-gradient(160deg,#0D0820,#1A0030,#08040F)",
-      glow:"rgba(168,85,247,.5)", border:"rgba(168,85,247,.3)" },
+    // Placas de ANUNCIAR de juegos — estructura única, paleta propia (ver arriba).
+    game_rey:     placaDeJuego("/placas/Rey_del_orto-removebg-preview.png",       "Rey del Orto",       PALETA_PLACA.rey),
+    game_trivia:  placaDeJuego("/placas/Desafio_demente-removebg-preview.png",    "Desafío Demente",    PALETA_PLACA.trivia),
+    game_suma:    placaDeJuego("/placas/Sumate_que_sumamos-removebg-preview.png", "Sumate que sumamos", PALETA_PLACA.suma),
+    game_palabra: placaDeJuego("/placas/Arma_la_palabra-removebg-preview.png",    "Arma la palabra",    PALETA_PLACA.palabra),
     escenario: { image:"/placas/Escenario_Bizarren-removebg-preview.png", emoji:"🎤", title:"ESCENARIO BIZARREN",
       subtitle:"¡El protagonista sos vos!",
       grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)", bg:"linear-gradient(160deg,#1A0010,#2D0520,#08040F)",
@@ -880,19 +892,12 @@ export function PlacaScreen({ logo, gameState }) {
       subtitle:"Bizarren Miusik Bar · Av. Hipólito Yrigoyen 851",
       grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)", bg:"linear-gradient(160deg,#08040F,#0D0820,#08040F)",
       glow:"rgba(155,47,255,.4)", border:"rgba(155,47,255,.25)" },
-    // Placas de invitación al escenario (active_placa que setea useAdminControls)
-    duelo: { image:"/placas/Duelo_de_talento-removebg-preview.png",
-      emoji:"⚔️", title:"DUELO DE TALENTOS", subtitle:"¿Quién la rompe más?",
-      grad:"linear-gradient(135deg,#FF2D78,#FF9500)", bg:"linear-gradient(160deg,#1A0010,#2D0520,#08040F)",
-      glow:"rgba(255,45,120,.5)", border:"rgba(255,45,120,.3)" },
-    escenario_ftl: { image:"/placas/Follow_de_leader-removebg-preview.png",
-      emoji:"💃", title:"FOLLOW THE LEADER", subtitle:"Seguí al líder en la pista",
-      grad:"linear-gradient(135deg,#FF9500,#FFD600)", bg:"linear-gradient(160deg,#1A0C00,#2A1400,#08040F)",
-      glow:"rgba(255,149,0,.5)", border:"rgba(255,149,0,.3)" },
-    escenario_pt: { image:"/placas/Personal_Trainer-removebg-preview.png",
-      emoji:"🏋️", title:"PERSONAL TRAINER", subtitle:"A mover el cuerpo",
-      grad:"linear-gradient(135deg,#00F5A0,#00E5FF)", bg:"linear-gradient(160deg,#001A14,#001A2E,#08040F)",
-      glow:"rgba(0,245,160,.5)", border:"rgba(0,245,160,.3)" },
+    // Placas de ANUNCIAR de los juegos de escenario (mismo criterio).
+    // `duelo` es sólo el ANUNCIO; la convocatoria con QR es otra pantalla
+    // (DueloBigscreen), que se muestra al abrir la convocatoria.
+    duelo:         placaDeJuego("/placas/Duelo_de_talento-removebg-preview.png",  "Duelo de Talentos",  PALETA_PLACA.duelo),
+    escenario_ftl: placaDeJuego("/placas/Follow_de_leader-removebg-preview.png",  "Follow the Leader",  PALETA_PLACA.ftl),
+    escenario_pt:  placaDeJuego("/placas/Personal_Trainer-removebg-preview.png",  "Personal Trainer",   PALETA_PLACA.pt),
     escenario_karaoke: { image:"/placas/Si_lo_sabe_cante-removebg-preview.png",
       emoji:"🎤", title:"SI LO SABE CANTE", subtitle:"El escenario es tuyo",
       grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)", bg:"linear-gradient(160deg,#0D0820,#1A0030,#08040F)",
@@ -1123,7 +1128,14 @@ export default function PantallaGigante() {
     // tener una ronda real abierta en la sesión.
     if (["suma","sumaWinner","sumaCancelled"].includes(designerState)) return { active_game:"suma" };
     if (["palabra","palabraStandby"].includes(designerState)) return { active_game:"palabra" };
-    if (["duelo","ftl","pt","karaoke"].includes(designerState)) return { active_escenario:designerState, escenario_participant:"PARTICIPANTE", escenario_avatar:"🎤" };
+    // Duelo: la ronda vive en `applause_sessions`, así que las fases se arman
+    // con `demoDuelo` (abajo). `duelo` sin sufijo es la convocatoria.
+    if (["dueloVoting","dueloWinner","dueloTie"].includes(designerState)) return {
+      active_escenario:"duelo", duelo_state: designerState === "dueloVoting" ? "voting" : "revealed",
+      duelo_video:null,
+    };
+    if (designerState === "duelo") return { active_escenario:"duelo", duelo_state:"idle" };
+    if (["ftl","pt","karaoke"].includes(designerState)) return { active_escenario:designerState, escenario_participant:"PARTICIPANTE", escenario_avatar:"🎤" };
     if (designerState.startsWith("placa:")) return { active_placa:designerState.slice(6) };
     return {};
   })();
@@ -1148,6 +1160,26 @@ export default function PantallaGigante() {
   const demoPalabraRound = (() => {
     if (designerState === "palabra") return { id:"demo", target_word:"AVE", status:"playing" };
     if (designerState === "palabraStandby") return { id:"demo", target_word:"AVE", status:"cancelled" };
+    return null;
+  })();
+  // Duelo de Talentos: ronda de muestra para el Diseñador (sin suscripciones).
+  const demoDuelo = (() => {
+    if (!designerState || !designerState.startsWith("duelo")) return null;
+    if (designerState === "duelo") return { round:null, counts:{ p1:0, p2:0 } };
+    const base = {
+      id:"demo", game_type:"duelo", p1_user_id:"d1", p1_name:"SOFI", p1_avatar:JSON.stringify({ avatar_emoji:"🦄" }),
+      p2_user_id:"d2", p2_name:"JUAN", p2_avatar:JSON.stringify({ avatar_emoji:"🎸" }), tap_limit:100,
+    };
+    if (designerState === "dueloVoting") return {
+      round:{ ...base, status:"voting", voting_ends_at:new Date(Date.now() + 45000).toISOString() },
+      counts:{ p1:132, p2:98 },
+    };
+    if (designerState === "dueloWinner") return {
+      round:{ ...base, status:"finished", result:"p1", winner_slot:1 }, counts:{ p1:212, p2:167 },
+    };
+    if (designerState === "dueloTie") return {
+      round:{ ...base, status:"finished", result:"tie", winner_slot:null }, counts:{ p1:150, p2:150 },
+    };
     return null;
   })();
   const { approved: messages } = useMessages(session?.id ?? null, "screen");
@@ -1196,7 +1228,7 @@ export default function PantallaGigante() {
   } else if (gameState?.active_game === "palabra") {
     content = <PalabraScreen sessionId={session?.id ?? null} demoRound={demoPalabraRound}/>;
   } else if (hasEscenario) {
-    content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null}/>;
+    content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null} demoDuelo={demoDuelo}/>;
   } else if (liveVideo && !hasGame) {
     content = <VideoScreen
       video={liveVideo}

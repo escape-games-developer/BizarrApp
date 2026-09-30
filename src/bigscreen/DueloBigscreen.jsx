@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import QRCode from "react-qr-code";
-import { useApplauseRound, resolveDueloWinner, dueloPercentages } from "../hooks/realtime/useApplauseRound";
-import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
+import { useDueloRound } from "../hooks/realtime/useDueloRound";
+import {
+  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
+} from "../services/duelo";
 
-const P1_COLOR = "#ff1688"; // Marcelo — fucsia
-const P2_COLOR = "#ff8a00"; // Jorgelín — naranja
+const P1_COLOR = "#ff1688"; // Participante 1 — fucsia
+const P2_COLOR = "#ff8a00"; // Participante 2 — naranja
 const PLACA    = "/placas/Duelo_de_talento-removebg-preview.png";
 const LOGO_APP  = "/logo.png";
 const LOGO_DUELO = "/logos/duelo_horizontal.png";
@@ -37,7 +39,7 @@ const YouTubeVideoPlayer = memo(function YouTubeVideoPlayer({ video }) {
   prev.video?.video_url === next.video?.video_url
 );
 
-// ── Cara circular simple (foto o emoji) — usada en la nube de inviting ─────────
+// ── Cara circular simple (foto o emoji) — usada en el resultado ────────────────
 function Face({ emoji, photo, size, borderColor }) {
   const base = {
     width: size, height: size, borderRadius: "50%", overflow: "hidden",
@@ -49,15 +51,8 @@ function Face({ emoji, photo, size, borderColor }) {
   return <div style={base}>{emoji || "🎤"}</div>;
 }
 
-// Posición fija por índice para la nube de avatares (inviting).
-function cloudPos(i) {
-  const rx = Math.abs((Math.sin((i + 1) * 12.9898) * 43758.5453) % 1);
-  const ry = Math.abs((Math.sin((i + 1) * 78.233) * 12345.6789) % 1);
-  return { left: `${8 + rx * 78}%`, top: `${ry * 55}%` };
-}
-
 // ── DuelHeader — logos centrales posicionados independientes (dentro del área central) ──
-// BizarrApp: chico, hacia Marcelo (izq). Duelo: grande, centrado sobre el video.
+// BizarrApp: chico, hacia el participante 1 (izq). Duelo: grande, centrado sobre el video.
 function DuelHeader() {
   return (
     <div className="center-header">
@@ -592,24 +587,34 @@ const duelStyles = (
 );
 
 /**
- * TalentDuelScreen — render del Duelo en /pantalla (gráfica televisiva).
- * Fases: inviting (placa + postulados + QR) · voting (video + gráfica + partículas) · finished.
+ * TalentDuelScreen — el Duelo en /tv y /pantalla (gráfica televisiva).
+ *
+ * Fases (faseDuelo, la misma que usan Admin y Cliente):
+ *   convocatoria → logo oficial + QR chico abajo a la izquierda (nada más)
+ *   voting       → duelistas, VS, video, aplausómetro, reloj si la ronda lo tiene
+ *   result       → ganador o EMPATE según applause_sessions.result
+ * Cancelar / cerrar deja la fase en convocatoria u `off` (la TV vuelve al DJ).
+ *
+ * Todo sale de Supabase: la ronda y sus totales (useDueloRound) y game_state.
+ * Un F5 reconstruye la misma pantalla. El ganador NO se calcula acá.
+ * La TV NO lee `duelo_postulaciones`: corre como anon y no tiene SELECT sobre
+ * esa tabla; los postulantes los gestiona el Admin.
+ *
+ * `demo` (sólo Diseñador): { round, counts } de muestra; con él no se abre
+ * ninguna suscripción.
  */
-export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
-  // El hook ya trae la ronda de duelo (filtrada por game_type) con su propio
-  // canal realtime. Antes había acá un segundo fetch+canal sobre la misma tabla:
-  // dos suscripciones para el mismo dato, que además podían quedar desfasadas.
-  const { round: currentRound, counts } = useApplauseRound(sessionId, "duelo");
-  const { postulaciones } = useDueloPostulaciones(sessionId, null);
+export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo = null }) {
+  const live = useDueloRound(demo ? null : sessionId);
+  const currentRound = demo ? demo.round : live.round;
+  const counts = demo ? (demo.counts || { p1: 0, p2: 0 }) : live.counts;
+  const nowMs = demo ? Date.now() : live.now;
 
-  // ── Fase derivada ───────────────────────────────────────────────────────────
-  const escenario = gameState?.active_escenario;
-  let fase = null;
-  if (escenario === "duelo") {
-    if (currentRound?.status === "voting")        fase = "voting";
-    else if (currentRound?.status === "finished") fase = "finished";
-    else                                          fase = "inviting";
-  }
+  const fase = (() => {
+    const f = faseDuelo(gameState, currentRound);
+    return f === "off" ? null : f === "convocatoria" ? "inviting" : f;
+  })();
+  const [s1, s2] = duelistasDeRonda(currentRound);
+  const seg = fase === "voting" ? segundosRestantes(currentRound, nowMs) : null;
 
   // ── Estado de partículas / pulsos / popups ──────────────────────────────────
   const [particles, setParticles]   = useState([]);
@@ -630,22 +635,19 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
     const active = particles.filter((p) => p.slot === slot && p.kind !== "plus" && p.kind !== "spark").length;
     const room = MAX_ACTIVE_PER_SLOT - active;
 
-    // Reparto: cuántas individuales y cuánto va en la "+N" compensadora.
     let indiv, groupSize;
-    if (room <= 0) {                        // sin cupo → todo agrupado
+    if (room <= 0) {
       indiv = 0; groupSize = delta;
-    } else if (delta <= room) {             // entra todo individual
+    } else if (delta <= room) {
       indiv = delta; groupSize = 0;
-    } else {                                // parte individual + resto en "+N"
+    } else {
       indiv = Math.max(0, room - 1); groupSize = delta - indiv;
     }
 
-    // Agrupada ("+N"): una sola partícula compensadora, sin delay.
     if (groupSize > 0) {
       setParticles((prev) => [...prev, mk(slot, true, groupSize)]);
     }
 
-    // Individuales: escalonadas ~120-200ms. Cada pulgar viaja con un "+1" y 1-3 chispas.
     for (let i = 0; i < indiv; i++) {
       const to = setTimeout(() => {
         const companions = [mk(slot, false, 1, "thumb"), mk(slot, false, 1, "plus")];
@@ -658,13 +660,12 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
     }
   }, [particles]);
 
-  // Limpieza de los timeouts de spawn escalonado al desmontar.
   useEffect(() => () => {
     spawnTimeoutsRef.current.forEach(clearTimeout);
     spawnTimeoutsRef.current = [];
   }, []);
 
-  // Nuevos votos → spawn (el número se actualiza aparte, inmediato, sin esperar la animación).
+  // Nuevos aplausos → partículas (el número se actualiza aparte, sin esperar la animación).
   useEffect(() => {
     if (fase !== "voting") { initedRef.current = false; return; }
     const p1 = counts?.p1 ?? 0, p2 = counts?.p2 ?? 0;
@@ -678,10 +679,8 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [counts?.p1, counts?.p2, fase]);
 
-  // Llegada de partícula → pulso (throttle 100ms individuales) + "+N".
   const onParticleDone = useCallback((particle) => {
     setParticles((prev) => prev.filter((p) => p.id !== particle.id));
-    // Acompañantes (+1 y chispas): solo se remueven, no pulsan avatar/contador ni popup.
     if (particle.kind === "plus" || particle.kind === "spark") return;
     const slot = particle.slot;
     const now = Date.now();
@@ -693,13 +692,10 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
     setTimeout(() => setPopups((prev) => prev.filter((p) => p.id !== pid)), 800);
   }, []);
 
-  // Cambio de líder → glow breve en el nuevo líder (sin popup).
-  // c1/c2 son los votos ABSOLUTOS: alimentan partículas, pulsos e intensidad, y
-  // deciden el líder sin errores de redondeo (101 vs 100 es líder P1 aunque las
-  // dos se muestren 50%). El porcentaje es sólo lo que se dibuja en el marcador.
+  // Líder por aplausos absolutos (sólo para el brillo visual; no es el resultado).
   const c1 = counts?.p1 ?? 0, c2 = counts?.p2 ?? 0;
   const leader = c1 > c2 ? 1 : (c2 > c1 ? 2 : 0);
-  const pct = dueloPercentages(counts);
+  const pct = porcentajesDuelo(counts);
   const prevLeaderRef = useRef(0);
   useEffect(() => {
     if (fase !== "voting") { prevLeaderRef.current = leader; return; }
@@ -712,105 +708,111 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
   const keyframes = (
     <style>{`
       @keyframes dueloPop   { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-      @keyframes dueloTitleGlow {
-        0%,100% { text-shadow: 0 0 18px rgba(255,31,122,.7), 0 0 40px rgba(255,138,0,.4); }
-        50%     { text-shadow: 0 0 28px rgba(255,31,122,.95), 0 0 60px rgba(255,138,0,.55); }
-      }
-      @keyframes dueloVotePopup {
-        0%   { opacity: 0; transform: translateY(0); }
-        30%  { opacity: 1; }
-        100% { opacity: 0; transform: translateY(-20px); }
-      }
+      @keyframes dueloWinnerIn { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
     `}</style>
   );
 
   if (!fase) return null;
 
-  // ── FASE INVITING (preservada) ──────────────────────────────────────────────
+  // ── CONVOCATORIA ────────────────────────────────────────────────────────────
   if (fase === "inviting") {
     return (
       <div style={{
         position: "absolute", inset: 0, overflow: "hidden",
         background: "radial-gradient(circle at 50% 30%, rgba(255,31,122,.18), rgba(8,4,15,1) 60%)",
-        display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "5vh",
+        display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         {keyframes}
-        <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(40px,6vw,90px)",
-          color: P1_COLOR, letterSpacing: 2, animation: "dueloTitleGlow 2.5s ease-in-out infinite",
-        }}>DUELO DE TALENTOS</div>
-
+        {/* Única identificación del juego: el logo oficial (asset existente). */}
         <img src={PLACA} alt="Duelo de Talentos"
-          style={{ height: "40vh", objectFit: "contain", margin: "2vh 0" }}
+          style={{ height: "68vh", maxWidth: "80vw", objectFit: "contain", animation: "dueloPop .5s ease" }}
           onError={(e) => { e.currentTarget.style.display = "none"; }} />
 
-        <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(30px,4vw,60px)", color: "#F0E8FF" }}>
-          {postulaciones.length} postulado{postulaciones.length === 1 ? "" : "s"}
-        </div>
-
-        <div style={{ position: "relative", width: "70vw", height: "26vh", marginTop: "2vh" }}>
-          {postulaciones.map((p, i) => (
-            <div key={p.id} style={{ position: "absolute", ...cloudPos(i), animation: "dueloPop .5s ease" }}>
-              <Face emoji={p.avatar_emoji} photo={p.photo_url} size="60px" borderColor={P1_COLOR} />
-            </div>
-          ))}
-        </div>
-
-        <div style={{ position: "absolute", right: 32, bottom: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-          <div style={{ background: "#fff", padding: 12, borderRadius: 14 }}>
-            <QRCode value={`${webappUrl}/?view=games&game=duelo`} size={180} />
+        {/* QR + leyenda: bloque compacto abajo a la izquierda. */}
+        <div style={{
+          position: "absolute", left: "2.2vw", bottom: "3vh",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.8vh",
+          width: "clamp(110px, 8.5vw, 170px)",
+        }}>
+          <div style={{ background: "#fff", padding: "clamp(6px, 0.5vw, 10px)", borderRadius: 10, width: "100%", boxSizing: "border-box" }}>
+            <QRCode value={`${webappUrl}/?view=games&game=duelo`} size={256}
+              style={{ width: "100%", height: "auto", display: "block" }} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#F0E8FF" }}>📱 Escaneame para postularte</div>
+          <div style={{
+            fontSize: "clamp(11px, 0.8vw, 16px)", fontWeight: 700, color: "#F0E8FF",
+            textAlign: "center", lineHeight: 1.2,
+          }}>Escaneame para postularte</div>
         </div>
       </div>
     );
   }
 
-  // ── FASE FINISHED ───────────────────────────────────────────────────────────
-  // El ganador NO se recalcula acá: sale de applause_sessions.winner_slot, que
-  // escribió el RPC. Es el mismo dato y la misma función que muestra el Admin.
-  if (fase === "finished") {
-    const s1 = gameState?.duelo_slot1, s2 = gameState?.duelo_slot2;
-    const result = resolveDueloWinner(currentRound, counts);
-    const ganador = result.slot === 1 ? s1 : result.slot === 2 ? s2 : null;
-    // El ganador ya salió de los votos absolutos; el porcentaje es sólo cómo se
-    // cuenta el reparto final en pantalla.
-    const finalPct = dueloPercentages(counts);
+  // ── RESULTADO — `result` lo persistió duelo_finish_round ────────────────────
+  if (fase === "result") {
+    const result = currentRound?.result;
+    const empate = result === "tie";
+    const ganador = result === "p1" ? s1 : result === "p2" ? s2 : null;
+    const colGanador = result === "p1" ? P1_COLOR : P2_COLOR;
     return (
       <div style={{
         position: "absolute", inset: 0,
-        background: "radial-gradient(circle at 50% 40%, rgba(0,245,160,.15), rgba(8,4,15,1) 60%)",
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16,
+        background: empate
+          ? "radial-gradient(circle at 50% 40%, rgba(255,214,0,.16), rgba(8,4,15,1) 60%)"
+          : `radial-gradient(circle at 50% 40%, ${colGanador}33, rgba(8,4,15,1) 62%)`,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "2.2vh",
       }}>
         {keyframes}
-        <div style={{ fontSize: "clamp(50px,8vw,120px)" }}>{result.tie ? "🤝" : "🏆"}</div>
-        <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(34px,6vw,90px)",
-          color: result.tie ? "#FFD600" : "#00F5A0", textAlign: "center",
-        }}>
-          {result.tie
-            ? `¡EMPATE! ${s1?.name || "—"} vs ${s2?.name || "—"}`
-            : `GANADOR: ${ganador?.name || "—"}`}
-        </div>
-        <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: "clamp(20px,2.4vw,38px)",
-          color: "#F0E8FF", opacity: .8,
-        }}>
-          👍 {finalPct.p1}% · {s1?.name || "—"} &nbsp;|&nbsp; {s2?.name || "—"} · {finalPct.p2}% 👍
-        </div>
+        {!result ? (
+          <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(30px,4vw,64px)", color: "#F0E8FF" }}>
+            Contando aplausos…
+          </div>
+        ) : empate ? (
+          <>
+            <div style={{ fontSize: "clamp(60px,9vw,140px)", animation: "dueloWinnerIn .7s ease" }}>🤝</div>
+            <div style={{
+              fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(60px,10vw,170px)",
+              color: "#FFD600", letterSpacing: 4, animation: "dueloWinnerIn .7s ease",
+            }}>¡EMPATE!</div>
+            <div style={{ display: "flex", gap: "6vw", alignItems: "center" }}>
+              {[{ s: s1, c: P1_COLOR }, { s: s2, c: P2_COLOR }].map(({ s, c }, i) => (
+                <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                  <Face emoji={s?.avatar_emoji} photo={s?.photo_url} size="clamp(90px,9vw,150px)" borderColor={c} />
+                  <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(22px,2.6vw,44px)", color: c }}>{s?.name}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{
+              fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(26px,3vw,52px)",
+              color: "#F0E8FF", letterSpacing: 8, opacity: .85,
+            }}>🏆 GANADOR 🏆</div>
+            <div style={{ animation: "dueloWinnerIn .8s ease" }}>
+              <Face emoji={ganador?.avatar_emoji} photo={ganador?.photo_url} size="clamp(150px,16vw,260px)" borderColor={colGanador} />
+            </div>
+            <div style={{
+              fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(56px,9vw,160px)",
+              color: colGanador, textAlign: "center", lineHeight: 1,
+              textShadow: `0 0 40px ${colGanador}aa`, animation: "dueloWinnerIn .8s ease",
+            }}>{ganador?.name}</div>
+          </>
+        )}
+        {result && (
+          <div style={{
+            fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: "clamp(20px,2.4vw,38px)",
+            color: "#F0E8FF", opacity: .8,
+          }}>
+            {s1?.name} · {pct.p1}% &nbsp;|&nbsp; {pct.p2}% · {s2?.name}
+          </div>
+        )}
       </div>
     );
   }
 
-  // ── FASE VOTING (gráfica TV: 3 columnas — Marcelo · Video+logos · Jorgelín) ──
+  // ── VOTACIÓN (3 columnas: P1 · video + VS + reloj · P2) ────────────────────
+  // El video y los participantes salen de la ronda / game_state de ESTA ronda.
   const video = gameState?.duelo_video;
-  const s1 = gameState?.duelo_slot1, s2 = gameState?.duelo_slot2;
-
-  // El video es OPCIONAL. Sin video reproducible no montamos el contenedor:
-  // `.youtube-player-container` tiene fondo negro y 82vh de alto, así que
-  // dibujarlo vacío dejaba un rectángulo negro enorme en el centro de la TV.
-  // Sin él, la columna central queda con el fondo del duelo y sus logos, y las
-  // dos columnas de participantes ocupan la pantalla como siempre.
   const hasVideo = (video?.source === "youtube" && !!video?.yt_id)
                 || (video?.source === "url"     && !!video?.video_url);
 
@@ -826,11 +828,29 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
 
       <main className="video-zone">
         <DuelHeader />
-        {hasVideo && (
+        {hasVideo ? (
           <div className="video-wrapper">
             <div className="youtube-player-container">
               <YouTubeVideoPlayer video={video} />
             </div>
+          </div>
+        ) : (
+          <div style={{
+            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(80px,11vw,200px)",
+            color: "#F0E8FF", opacity: .9, textShadow: `0 0 30px ${P1_COLOR}, 0 0 60px ${P2_COLOR}`,
+            pointerEvents: "none",
+          }}>VS</div>
+        )}
+        {seg != null && (
+          <div style={{
+            position: "absolute", left: "50%", bottom: "4vh", transform: "translateX(-50%)", zIndex: 20,
+            padding: "0.6vh 2.4vw", borderRadius: 999, background: "rgba(8,4,15,.78)",
+            border: `2px solid ${seg <= 10 ? P1_COLOR : "rgba(240,232,255,.25)"}`,
+            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(28px,3.4vw,64px)",
+            color: seg <= 10 ? P1_COLOR : "#F0E8FF",
+          }}>
+            {seg > 0 ? `⏱ ${formatoReloj(seg)}` : "¡TIEMPO!"}
           </div>
         )}
       </main>
@@ -840,7 +860,6 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl }) {
         popups={popups.filter((p) => p.slot === 2)}
         particles={particles.filter((p) => p.slot === 2)} onParticleDone={onParticleDone} />
 
-      {/* Reparto del 100% — la división se mueve con cada voto. */}
       <div className="duel-split">
         <div className="duel-split-fill" style={{ width: `${pct.p1}%` }} />
       </div>
