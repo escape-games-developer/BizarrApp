@@ -20,7 +20,9 @@ import UsuariosPanel from "./UsuariosPanel";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
 import { useRaffle, raffleCountdown } from "../hooks/useRaffle";
 import PantallaDjPanel from "./pantalla/PantallaDjPanel";
-import PantallaSidebarMenu from "./pantalla/PantallaSidebarMenu";
+import AdminSidebar from "./AdminSidebar";
+import AjustesPanel from "./AjustesPanel";
+import { useSidebarConfig } from "../hooks/useSidebarConfig";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { getTvLink, tvUrl } from "../services/pantallaDj";
 import { avanzarDjAlSiguiente, recorteDeEscenario } from "../services/escenarioDj";
@@ -91,20 +93,34 @@ const css = `
   /* Sidebar */
   .sb{width:210px;min-width:210px;height:100vh;background:#0A0514;border-right:1px solid #9B2FFF44;display:flex;flex-direction:column;overflow:hidden;transition:width .2s ease,min-width .2s ease;}
   .sb.collapsed{width:60px;min-width:60px;}
-  .sb-nav{flex:1 1 0;min-height:0;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:1px;}
+  /* Lista: scroll vertical interno. El gutter estable reserva el lugar de la
+     scrollbar a ambos lados, así el eje de los íconos no se corre cuando la
+     lista no entra en la altura y aparece la barra. */
+  .sb-nav{flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable both-edges;padding:4px 2px;display:flex;flex-direction:column;gap:2px;}
   .sb-nav::-webkit-scrollbar{width:4px;}
   .sb-nav::-webkit-scrollbar-track{background:transparent;}
   .sb-nav::-webkit-scrollbar-thumb{background:#9B2FFF44;border-radius:2px;}
   .sb-footer{padding:8px 6px;border-top:1px solid #9B2FFF44;flex-shrink:0;background:#0A0514;}
-  .sb-group-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.3px;color:#FFD600;padding:8px 8px 3px;opacity:.9;}
-  .sb-group-sep{height:1px;background:#9B2FFF33;margin:4px 8px;}
-  .sb-btn{display:flex;align-items:center;width:100%;background:none;border:none;color:#F0E8FF;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;text-align:left;transition:background .12s;position:relative;}
+  .sb-sep{height:1px;background:#9B2FFF2A;margin:4px 8px;flex-shrink:0;}
+  /* Botón del sidebar (items, padres de flyout, DJ Democracy, cerrar sesión):
+     mismo alto y mismo eje en los dos modos. */
+  .sb-btn{display:flex;align-items:center;justify-content:flex-start;width:100%;min-height:34px;background:none;border:none;color:#F0E8FF;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;text-align:left;transition:background .12s;position:relative;flex-shrink:0;}
   .sb-btn:hover{background:#9B2FFF22;}
   .sb-btn-active{background:#9B2FFF33;color:#FFD600;}
-  .sb-btn-icon{font-size:17px;width:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
-  .sb-btn-label{margin-left:8px;flex:1;}
+  .sb-btn-icon{font-size:17px;width:24px;height:24px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .sb-btn-label{margin-left:8px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sb.collapsed .sb-btn{justify-content:center;padding-left:0;padding-right:0;}
+  .sb-logout{border:1px solid #FF2D7855;border-radius:8px;color:#FF2D78;font-weight:700;padding-left:7px;padding-right:7px;}
+  .sb-logout:hover{background:#FF2D7818;}
   .sb-top{padding:12px 10px 8px;border-bottom:1px solid rgba(155,47,255,.1);flex-shrink:0;}
   .sb-logo{height:48px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(255,214,0,.5));display:block;margin-bottom:5px;}
+  /* La hamburguesa ocupa una caja de 32px centrada sobre la columna de íconos. */
+  .sb-toggle-row{padding:10px 0 6px;display:flex;justify-content:flex-start;}
+  .sb-toggle{width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:none;border-radius:7px;color:#F0E8FF;font-size:20px;line-height:1;cursor:pointer;}
+  .sb-toggle:hover{background:#9B2FFF22;}
+  .sb.collapsed .sb-top{padding:12px 0 8px;display:flex;flex-direction:column;align-items:center;}
+  .sb.collapsed .sb-logo{width:40px;height:40px;}
+  .sb.collapsed .sb-toggle-row{justify-content:center;width:100%;}
   .sb-pills{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
   .pill{font-size:7.5px;font-weight:800;padding:2px 7px;border-radius:10px;letter-spacing:.5px;}
   .pill-live{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#FCA5A5;}
@@ -413,30 +429,35 @@ function StatusAlert({text,color,onClose}){
 }
 
 // ── SECCIONES ──────────────────────────────────────────────────────────────
+// Secciones del panel: id, ícono, label (título del panel) y gradiente.
+// `labelMenu` (opcional) es el nombre corto dentro de un flyout del sidebar.
+// Dónde y en qué orden aparecen en el sidebar lo define SIDEBAR_MENU (sidebarMenu.js).
 const SECS = [
-  {id:"launch",   icon:"🚀",label:"Lanzar",          group:"Control",    grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
-  {id:"placas",   icon:"🖼️", label:"Placas",          group:"Control",    grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
-  // Hijos del desplegable «DJ Democracy». `parent` los saca de la lista plana del
-  // sidebar: los dibuja PantallaSidebarMenu. Siguen siendo secciones normales.
-  {id:"pantallaEditor",icon:"✏️",label:"DJ Democracy · Editor",group:"Moderación",parent:"pantalla",grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
-  {id:"pantallaLive",icon:"🔴",label:"DJ Democracy · En vivo",group:"Moderación",parent:"pantalla",grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)",glow:"rgba(255,45,120,.3)"},
-  {id:"duelo",    icon:"⚔️", label:"Duelo de Talentos",group:"Escenario", grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
-  {id:"ftl",      icon:"💃",label:"Follow the Leader",group:"Escenario",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
-  {id:"pt",       icon:"🏋️",label:"Personal Trainer", group:"Escenario",  grad:"linear-gradient(135deg,#00F5A0,#00E5FF)",glow:"rgba(0,245,160,.3)"},
-  {id:"karaoke",  icon:"🎤",label:"Si lo sabe cante", group:"Escenario",  grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
-  {id:"rey",      icon:"🎰",label:"Rey del Orto",     group:"Juegos",     grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
-  {id:"suma",     icon:"🔢",label:"Sumate que sumamos",   group:"Juegos",     grad:"linear-gradient(135deg,#FF9500,#A855F7)",glow:"rgba(255,149,0,.3)"},
-  {id:"palabra",  icon:"🔤",label:"Arma la palabra", group:"Juegos",     grad:"linear-gradient(135deg,#A855F7,#FF2D78)",glow:"rgba(168,85,247,.3)"},
-  {id:"trivia",   icon:"🧠",label:"Desafío Demente",  group:"Juegos",     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
-  {id:"menu",     icon:"🍹",label:"Menú del Bar",     group:"Contenido",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
-  {id:"novedades",icon:"📣",label:"Novedades",        group:"Contenido",  grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
-  {id:"playlists",icon:"▶️", label:"Playlists YouTube",group:"Contenido",  grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
-  {id:"dashboard",icon:"📊",label:"Dashboard",        group:"General",    grad:"linear-gradient(135deg,#FFD600,#00E5FF)",glow:"rgba(255,214,0,.3)"},
-  {id:"designer", icon:"✦", label:"Diseñador",        group:"General",    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
-  {id:"designerTv",icon:"📺",label:"Pantalla TV",group:"Diseñadores de Pantalla",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
-  {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",group:"Diseñadores de Pantalla",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
-  {id:"usuarios", icon:"👥", label:"Usuarios", group:"Administración", adminOnly:true,
+  {id:"launch",   icon:"🚀",label:"Lanzar",    grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
+  {id:"placas",   icon:"🖼️", label:"Placas",    grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
+  {id:"pantallaEditor",icon:"✏️",label:"DJ Democracy · Editor",labelMenu:"Editor",grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
+  {id:"pantallaLive",icon:"🔴",label:"DJ Democracy · En vivo",labelMenu:"En vivo",grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)",glow:"rgba(255,45,120,.3)"},
+  {id:"duelo",    icon:"⚔️", label:"Duelo de Talentos", grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
+  {id:"ftl",      icon:"💃",label:"Follow the Leader",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
+  {id:"pt",       icon:"🏋️",label:"Personal Trainer",  grad:"linear-gradient(135deg,#00F5A0,#00E5FF)",glow:"rgba(0,245,160,.3)"},
+  {id:"karaoke",  icon:"🎤",label:"Si lo sabe cante",  grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"rey",      icon:"🎰",label:"Rey del Orto",     grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
+  {id:"suma",     icon:"🔢",label:"Sumate que sumamos",     grad:"linear-gradient(135deg,#FF9500,#A855F7)",glow:"rgba(255,149,0,.3)"},
+  {id:"palabra",  icon:"🔤",label:"Arma la palabra",     grad:"linear-gradient(135deg,#A855F7,#FF2D78)",glow:"rgba(168,85,247,.3)"},
+  {id:"trivia",   icon:"🧠",label:"Desafío Demente",     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"menu",     icon:"🍹",label:"Menú del Bar",  grad:"linear-gradient(135deg,#FF9500,#FFD600)",glow:"rgba(255,149,0,.3)"},
+  {id:"novedades",icon:"📣",label:"Novedades",  grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
+  {id:"playlists",icon:"▶️", label:"Playlists YouTube",  grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
+  {id:"dashboard",icon:"📊",label:"Dashboard",    grad:"linear-gradient(135deg,#FFD600,#00E5FF)",glow:"rgba(255,214,0,.3)"},
+  {id:"designer", icon:"✦", label:"Diseñador",    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"designerTv",icon:"📺",label:"Pantalla TV",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
+  {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
+  {id:"clientes", icon:"🧑‍🤝‍🧑", label:"Clientes", adminOnly:true,
     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"usuarios", icon:"🛡️", label:"Usuarios del sistema", adminOnly:true,
+    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"ajustes",  icon:"⚙️", label:"Ajustes",
+    grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
 ];
 
 // Módulos congelados por producto. Conservamos sus entradas y paneles para
@@ -6246,11 +6267,12 @@ export default function AdminPanel(){
   useEffect(()=>{ window.__bizarrToast = showToast; },[]);
   const canManageUsers = adminRole === "general_admin";
   const visibleSecs = SECS.filter(s=>(!s.adminOnly || canManageUsers) && !FROZEN_MODULE_IDS.has(s.id));
+  // Orden y visibilidad del sidebar guardados en Ajustes (null = orden base).
+  const sidebarConfig = useSidebarConfig(isAdmin === true);
   const curSec = visibleSecs.find(s=>s.id===sec)||visibleSecs[0]||SECS[0];
   useEffect(()=>{
-    if(adminRole && sec==="usuarios" && !canManageUsers) setSec("launch");
+    if(adminRole && (sec==="usuarios"||sec==="clientes") && !canManageUsers) setSec("launch");
   },[adminRole,sec,canManageUsers]);
-  const groups = [...new Set(SECS.map(s=>s.group))];
   const goTo   = useCallback(id=>setSec(id),[]);
   useEffect(()=>{
     if(new URLSearchParams(window.location.search).get("designerPreview")==="1") return;
@@ -6295,7 +6317,10 @@ export default function AdminPanel(){
       case "designer":  return <DesignerView/>;
       case "designerTv": return <TvDesigner sessionId="default"/>;
       case "designerGuest": return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Diseñador de Pantalla Invitado — próxima etapa</div>;
+      case "clientes": return canManageUsers ? <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Gestión de clientes — próxima etapa</div> : null;
       case "usuarios": return canManageUsers ? <UsuariosPanel/> : null;
+      case "ajustes":  return <AjustesPanel config={sidebarConfig} secs={SECS} visibleSecs={visibleSecs}
+                                 puedeEditar={isAdmin === true}/>;
       default: return <div style={{padding:20,color:"rgba(240,232,255,.25)",fontSize:12}}>Sección en construcción</div>;
     }
   };
@@ -6356,53 +6381,11 @@ export default function AdminPanel(){
         </div>
 
         {/* Sidebar */}
-        <aside className={`sb${sbCollapsed?" collapsed":""}`}>
-          <div className="sb-top">
-            <img src={LOGO} alt="BizarrApp" className="sb-logo"
-              onError={e=>{e.target.style.display="none";}}/>
-            <div style={{padding:"10px 10px 6px",display:"flex",justifyContent:"flex-start"}}>
-              <button onClick={()=>setSbCollapsed(c=>!c)}
-                title={sbCollapsed?"Expandir menú":"Contraer menú"}
-                style={{background:"none",border:"none",color:"#F0E8FF",fontSize:20,cursor:"pointer",lineHeight:1,padding:"2px 6px"}}>
-                ☰
-              </button>
-            </div>
-          </div>
-          <div className="sb-nav">
-            {[...new Set(visibleSecs.map(s=>s.group))].map((grp, gi)=>(
-              <div key={grp}>
-                {!sbCollapsed ? (
-                  <div className="sb-group-label">{grp}</div>
-                ) : (
-                  gi>0 && <div className="sb-group-sep"/>
-                )}
-                {visibleSecs.filter(s=>s.group===grp&&!s.parent).map(s=>(
-                  <button key={s.id}
-                    className={`sb-btn${sec===s.id?" sb-btn-active":""}`}
-                    onClick={()=>setSec(s.id)}
-                    title={s.label}
-                    style={{justifyContent:sbCollapsed?"center":"flex-start"}}>
-                    <span className="sb-btn-icon">{s.icon}</span>
-                    {!sbCollapsed && <span className="sb-btn-label">{s.label}</span>}
-                    {!sbCollapsed && s.id==="mensajes" && msgCount>0 && <span className="sb-badge">{msgCount}</span>}
-                    {!sbCollapsed && s.id==="videos" && vidCount>0 && <span className="sb-badge">{vidCount}</span>}
-                  </button>
-                ))}
-                {grp==="Moderación" && (
-                  <PantallaSidebarMenu sec={sec} setSec={setSec} collapsed={sbCollapsed}/>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="sb-footer">
-            <button onClick={async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; }}
-              title="Cerrar sesión"
-              style={{width:"100%",background:"none",border:"1px solid #FF2D7855",color:"#FF2D78",borderRadius:8,padding:"7px 6px",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:sbCollapsed?"center":"flex-start"}}>
-              <span style={{fontSize:15,width:24,display:"flex",justifyContent:"center"}}>🚪</span>
-              {!sbCollapsed && <span style={{marginLeft:8}}>Cerrar sesión</span>}
-            </button>
-          </div>
-        </aside>
+        <AdminSidebar logo={LOGO} sec={sec} setSec={setSec}
+          collapsed={sbCollapsed} onToggle={()=>setSbCollapsed(c=>!c)}
+          visibleSecs={visibleSecs} configItems={sidebarConfig.items}
+          badges={{mensajes:msgCount, videos:vidCount}}
+          onLogout={async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; }}/>
 
         {/* Main */}
         <div className="main">
