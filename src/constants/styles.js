@@ -76,7 +76,7 @@ const globalCss = `
     background: rgba(13,7,0,.98);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255,215,0,.1);
-    padding: 10px 16px;
+    padding: 7px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -84,7 +84,7 @@ const globalCss = `
     z-index: 10;
   }
   .app-header-brand { display:flex; align-items:center; gap:10px; min-width:0; }
-  .app-header-logo { height: 34px; width:auto; object-fit:contain; filter:drop-shadow(0 0 8px rgba(255,215,0,.3)); }
+  .app-header-logo { height: 69px; width:auto; object-fit:contain; filter:drop-shadow(0 0 8px rgba(255,215,0,.3)); }
   .app-header-name { font-family:'Syne',sans-serif; font-weight:900; font-size:14px; color:#FFD700; }
 
   /* ── Content area ── */
@@ -123,11 +123,11 @@ const globalCss = `
     -webkit-tap-highlight-color: transparent;
   }
   .nav-btn.active { background: rgba(255,215,0,.1); color: #FFD700; }
-  .nav-btn .nav-icon { font-size: 18px; line-height:1; }
+  .nav-btn .nav-icon { font-size: 26px; line-height:1; }
   .nav-btn .nav-image {
     display: block;
-    width: 24px;
-    height: 24px;
+    width: 35px;
+    height: 35px;
     max-width: 100%;
     object-fit: contain;
     flex-shrink: 0;
@@ -184,16 +184,6 @@ const globalCss = `
   .btn-primary:disabled { opacity: .3; cursor: not-allowed; }
   .btn-primary:active:not(:disabled) { transform: scale(.97); }
 
-  /* Controles de Pantalla conservan comportamiento actual con foco dorado. */
-  .btn-pantalla {
-    outline: none;
-    box-shadow: none;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-  .btn-pantalla:focus, .btn-pantalla:focus-visible { outline: none; box-shadow: none; }
-
   .btn-enviar { transition: all 150ms ease; outline: none; -webkit-tap-highlight-color: transparent; }
   .btn-enviar:focus, .btn-enviar:focus-visible { outline: none; }
   .btn-enviar:active:not(:disabled) { transform: scale(.97); }
@@ -207,7 +197,7 @@ const globalCss = `
     font-weight: 600;
     cursor: pointer;
     transition: all .18s;
-    padding: 10px 16px;
+    padding: 7px 16px;
   }
 
   /* ── Inputs ── */

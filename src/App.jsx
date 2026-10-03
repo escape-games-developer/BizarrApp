@@ -3,11 +3,8 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import globalCss                from "./constants/styles";
 import { useAuth }              from "./hooks/useAuth";
 import { useGameState }         from "./hooks/realtime/useGameState";
-import { useMessages }          from "./hooks/realtime/useMessages";
-import { useVideoRequests }     from "./hooks/realtime/useVideoRequests";
 import { useBanners }           from "./hooks/realtime/useBanners";
 import { usePresence }          from "./hooks/realtime/usePresence";
-import { AvatarDisplay }        from "./components/AvatarDisplay";
 import { PushPermissionBanner } from "./components/PushPermissionBanner";
 import { NotificationBell }     from "./components/NotificationBell";
 import { DueloTeaserBanner }    from "./components/DueloTeaserBanner";
@@ -37,6 +34,12 @@ export default function BizarrApp() {
     return VIEWS.includes(requested) ? requested : "novedades";
   });
 
+  // MENÚ se monta recién la primera vez que el usuario entra (no precargamos
+  // el WordPress) y después queda montado, oculto, el resto de la sesión: así
+  // hay un solo iframe y volver al menú no lo descarga de nuevo.
+  const [menuMontado, setMenuMontado] = useState(view === "menu");
+  if (view === "menu" && !menuMontado) setMenuMontado(true);
+
   // Cartel de vuelta del mail: /auth/callback nos manda con ?confirmed=1 o
   // ?passwordChanged=1 después de validar el link.
   const [authNotice, setAuthNotice] = useState(() => {
@@ -58,10 +61,6 @@ export default function BizarrApp() {
 
   // Presencia: check-in del usuario en la sesión activa
   usePresence(session?.id, user, isGuest);
-
-  // Mensajes del usuario
-  const { messages, send: sendMsg } = useMessages(session?.id, "user");
-  const { send: sendVideo } = useVideoRequests(session?.id);
 
   // Novedades publicadas por el staff (cards 1440x600)
   const { banners, loading: bannersLoading } = useBanners(session?.id);
@@ -109,12 +108,12 @@ export default function BizarrApp() {
     { id: "pantalla",  icon: "📺", label: "Pantalla",    image: "/botones/Pantalla.png" },
     { id: "games",     icon: "🎮", label: "Juegos",      image: "/botones/juegos.png"   },
     { id: "escenario", icon: "🎤", label: "Escenario",   image: "/botones/Escenario.png" },
-    ...(!isLoggedIn ? [{ id: "profile", icon: "👤", label: "Registro", image: "/botones/Perfil.png" }] : []),
+    { id: "profile",   icon: "👤", label: isLoggedIn ? "Perfil" : "Registro", image: "/botones/Perfil.png" },
   ], [isLoggedIn]);
 
   const renderContent = () => {
     switch (view) {
-      case "menu":       return <MenuFrame />;
+      case "menu":       return null; // MenuFrame vive fuera del switch, ver abajo
       case "novedades":  return <NovedadesView banners={banners} loading={bannersLoading} />;
       case "games":
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
@@ -127,10 +126,7 @@ export default function BizarrApp() {
                  ytConfig={ytConfig} gameState={gameState}/>;
       case "pantalla":
         return <PantallaView user={user}
-                 messages={messages.filter(m => m.user_id === user?.id)}
-                 onSend={text => sendMsg(text, user)}
-                 isRestricted={isRestricted} isGuest={isGuest} onGoProfile={goProfile} ytConfig={ytConfig}
-                 onSendVideo={(video) => sendVideo({ ytId: video.ytId, title: video.title, artist: video.artist, user })}/>;
+                 isRestricted={isRestricted} isGuest={isGuest} onGoProfile={goProfile}/>;
       case "profile":
         if (!user?.registered) {
           if (authMode === "forgot")
@@ -145,7 +141,7 @@ export default function BizarrApp() {
         }
         return <ProfileView user={user} onSave={updateUser} onRegister={register}
                  regStep={regStep} setRegStep={setRegStep}/>;
-      default: return <MenuFrame />;
+      default: return null; // `view` siempre sale de VIEWS / NAV
     }
   };
 
@@ -173,34 +169,10 @@ export default function BizarrApp() {
             <div className="app-header-brand">
               <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
                 onError={e => { e.target.style.display="none"; }}/>
-              <span className="app-header-name">BizarrApp</span>
             </div>
-            {/* Campana: a la izquierda del avatar cuando hay sesión, si no al borde */}
-            <NotificationBell user={user} offset={isLoggedIn ? 60 : 16}/>
-            {isLoggedIn && (
-              <button onClick={goProfile} style={{
-                background:  view==="profile" ? "rgba(255,215,0,.12)" : "transparent",
-                border:      `1px solid ${view==="profile" ? "rgba(255,215,0,.3)" : "transparent"}`,
-                borderRadius:"50%", padding:0, cursor:"pointer",
-                width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center",
-                position:"absolute", right:16, top:"50%", transform:"translateY(-50%)",
-                WebkitTapHighlightColor:"transparent",
-              }}>
-                <AvatarDisplay user={user} size={32} fontSize={14}/>
-              </button>
-            )}
+            {/* Campana pegada al borde derecho, a 5 px. */}
+            <NotificationBell user={user}/>
           </header>
-          {/* Va fuera de <main> para que no scrollee con el contenido, y en
-              ámbar para que no se confunda con el aviso verde de "cuenta
-              confirmada" que aparece justo abajo. Sin botón de cerrar. */}
-          {isGuest && (
-            <div style={{ display:"flex",alignItems:"center",gap:8,padding:"7px 14px",
-              background:"rgba(245,158,11,.15)",borderBottom:"1px solid rgba(245,158,11,.35)",
-              color:"#FCD34D",fontSize:11.5,fontWeight:700,flexShrink:0,letterSpacing:.2 }}>
-              <span style={{ fontSize:13 }}>⚠</span>
-              <span>Modo invitado — datos de prueba</span>
-            </div>
-          )}
           <main className="app-content">
             {authNotice && (
               <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
@@ -225,6 +197,7 @@ export default function BizarrApp() {
               </div>
             )}
             {renderContent()}
+            {menuMontado && <MenuFrame visible={view === "menu"}/>}
           </main>
           <nav className="app-nav">
             {NAV.map(n => {

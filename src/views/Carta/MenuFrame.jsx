@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * MENÚ — la carta del bar embebida desde WordPress.
  *
- * El contenido NO se replica acá: viene siempre de
- * https://bizarrenbar.com.ar/chupi-morfi/, así que lo que el staff publica en
- * WordPress es lo que ve el cliente, sin tocar la app.
+ * El contenido NO se replica acá: viene siempre de MENU_URL, así que lo que el
+ * staff publica en WordPress es lo que ve el cliente, sin tocar la app.
  *
- * Vive DENTRO de la app: se monta como cualquier otra vista, dentro de
- * `<main class="app-content">`, con el header y la nav de siempre alrededor.
- * No abre pestañas ni saca al usuario de la interfaz — salvo el botón de
- * emergencia del fallback, que es la única salida y sólo aparece si el iframe
- * no cargó.
+ * Vive DENTRO de la app: se monta dentro de `<main class="app-content">`, con
+ * el header y la nav de siempre alrededor.
+ *
+ * Ciclo de vida: App.jsx lo monta la primera vez que el usuario entra a MENÚ y
+ * a partir de ahí sólo lo oculta (`visible`). Nunca se desmonta mientras dure
+ * la SPA, así que hay UN solo iframe por sesión: salir y volver no vuelve a
+ * descargar WordPress, y si todavía estaba cargando, sigue donde estaba.
  *
  * Sobre el alto: `.app-content` es un flex item (`flex: 1`) dentro de
  * `.phone-shell`, que mide 100dvh — o sea que su alto YA es "lo que queda
@@ -21,46 +22,44 @@ import { useEffect, useRef, useState } from "react";
  * PAD_* acá.
  */
 
-const MENU_URL = "https://bizarrenbar.com.ar/chupi-morfi/";
+// Cuando WordPress implemente el modo app, pasa a
+// "https://bizarrenbar.com.ar/chupi-morfi/?bizarrapp=1".
+// NO usar `?embed=1`: `embed` es un query var de WordPress y devuelve la
+// tarjeta oEmbed en vez de la página.
+// Ese modo además podría avisar "menú listo" por postMessage; hasta que exista
+// el contrato, el único indicador de listo es `onLoad`.
+const MENU_URL ="https://bizarrenbar.com.ar/chupi-morfi/";
 
 // Padding de `.app-content` en src/constants/styles.js: 14px 16px 16px.
 const PAD_TOP = 14;
 const PAD_X   = 16;
 const PAD_BOT = 16;
 
-// WordPress + Cloudflare en un celular del bar puede tardar. Pasado esto sin
-// un `load`, se muestra el fallback — el iframe sigue montado detrás por si
-// termina de cargar tarde.
-const TIMEOUT_MS = 12000;
+// Pasado esto sin `load` el cartel avisa que está tardando. Es sólo un cambio
+// de texto: la carga sigue, el iframe no se toca. Lentitud no es error — el
+// WordPress actual puede tardar 25–40 s en una red móvil.
+const LENTO_MS = 12000;
 
-export default function MenuFrame() {
-  const [estado, setEstado] = useState("cargando"); // cargando | listo | error
-  const timerRef = useRef(null);
+export default function MenuFrame({ visible = true }) {
+  const [estado, setEstado]   = useState("cargando"); // cargando | lento | listo | error
+  // Cambiarla remonta el iframe. Sólo lo hace el botón de reintentar, que
+  // aparece únicamente ante un error real.
+  const [intento, setIntento] = useState(0);
 
-  // Se rearma en cada intento: al reintentar, el iframe se remonta y necesita
-  // su propio timeout. Con el efecto corriendo una sola vez, un segundo intento
-  // que también fallara se quedaba con "Cargando menú…" para siempre.
   useEffect(() => {
     if (estado !== "cargando") return undefined;
-    timerRef.current = setTimeout(() => setEstado("error"), TIMEOUT_MS);
-    return () => clearTimeout(timerRef.current);
-  }, [estado]);
+    const t = setTimeout(() => setEstado(e => (e === "cargando" ? "lento" : e)), LENTO_MS);
+    return () => clearTimeout(t);
+  }, [estado, intento]);
 
-  const alCargar = () => {
-    clearTimeout(timerRef.current);
-    setEstado("listo");
-  };
-
-  // `onError` casi nunca dispara en iframes bloqueados por X-Frame-Options
-  // (el navegador rellena con una página de error propia y emite `load`), por
-  // eso el timeout de arriba es el detector real. Se deja igual por los fallos
-  // de red, que sí lo emiten.
-  const alFallar = () => {
-    clearTimeout(timerRef.current);
-    setEstado("error");
-  };
+  // `onError` casi nunca dispara en un iframe cross-origin; cuando lo hace es
+  // una falla de red real. Fuera de eso no hay forma confiable de detectar un
+  // error, así que ante la duda se sigue mostrando "cargando".
+  const alFallar = () => setEstado("error");
+  const reintentar = () => { setEstado("cargando"); setIntento(n => n + 1); };
 
   const contenedor = {
+    display: visible ? "block" : "none",
     position: "relative",
     // Cancela el padding de `.app-content` para que la carta vaya a sangre.
     margin: `-${PAD_TOP}px -${PAD_X}px -${PAD_BOT}px`,
@@ -84,40 +83,48 @@ export default function MenuFrame() {
     background: "#0D0700",
   };
 
+  const titulo = {
+    fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14,
+    color: "rgba(255,215,0,.7)", maxWidth: 280, lineHeight: 1.4,
+  };
+
   return (
     <div style={contenedor}>
-      {estado !== "error" && (
-        <iframe
-          src={MENU_URL}
-          title="Menú Bizarren"
-          onLoad={alCargar}
-          onError={alFallar}
-          // `allow-scripts` + `allow-same-origin` para que WordPress funcione;
-          // `allow-popups` para que un link del menú no quede muerto.
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms"
-          referrerPolicy="no-referrer-when-downgrade"
-          loading="eager"
-          style={{
-            display: "block",
-            width: "100%",
-            height: "100%",
-            border: "none",
-            background: "#0D0700",
-            // Sin esto, iOS no deja scrollear dentro del iframe.
-            WebkitOverflowScrolling: "touch",
-          }}
-        />
-      )}
+      <iframe
+        key={intento}
+        src={MENU_URL}
+        title="Menú Bizarren"
+        onLoad={() => setEstado("listo")}
+        onError={alFallar}
+        // `allow-scripts` + `allow-same-origin` para que WordPress funcione;
+        // `allow-popups` para que un link del menú no quede muerto.
+        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms"
+        referrerPolicy="no-referrer-when-downgrade"
+        loading="eager"
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          border: "none",
+          background: "#0D0700",
+          // Sin esto, iOS no deja scrollear dentro del iframe.
+          WebkitOverflowScrolling: "touch",
+        }}
+      />
 
-      {estado === "cargando" && (
-        <div style={capa}>
+      {(estado === "cargando" || estado === "lento") && (
+        <div style={capa} role="status" aria-live="polite">
           <div style={{ fontSize: 34 }}>🍹</div>
-          <div style={{
-            fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14,
-            color: "rgba(255,215,0,.7)",
-          }}>
-            Cargando menú…
-          </div>
+          {estado === "cargando" ? (
+            <div style={titulo}>Cargando menú…</div>
+          ) : (
+            <>
+              <div style={titulo}>El menú está tardando un poco más de lo normal…</div>
+              <div style={{ fontSize: 12, color: "rgba(245,230,192,.42)", lineHeight: 1.5 }}>
+                Seguimos cargándolo.
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -135,7 +142,7 @@ export default function MenuFrame() {
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
             <button
-              onClick={() => setEstado("cargando")}
+              onClick={reintentar}
               style={{
                 padding: "11px 18px", borderRadius: 11, cursor: "pointer",
                 background: "rgba(255,215,0,.08)", border: "1px solid rgba(255,215,0,.28)",

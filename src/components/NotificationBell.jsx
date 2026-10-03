@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePushSubscription } from "../hooks/realtime/usePushSubscription";
+import Icono from "./iconos/Icono";
 
 /**
  * NotificationBell
@@ -7,7 +8,9 @@ import { usePushSubscription } from "../hooks/realtime/usePushSubscription";
  * no están activadas; al tocarla se dispara la suscripción push (la misma
  * que ofrece PushPermissionBanner).
  */
-export function NotificationBell({ user, offset = 16 }) {
+// `offset` es la distancia entre la campana (el dibujo, no el área táctil) y
+// el borde derecho del header.
+export function NotificationBell({ user, offset = 5 }) {
   const { supported, permission, isSubscribed, loading, subscribe } = usePushSubscription(user?.id);
   const [toast, setToast] = useState(null);
 
@@ -42,20 +45,20 @@ export function NotificationBell({ user, offset = 16 }) {
         aria-label={pending ? "Activar notificaciones" : "Notificaciones"}
         style={{
           position: "absolute", right: offset, top: "50%", transform: "translateY(-50%)",
+          // 38 px de área táctil, con el ícono alineado al borde derecho.
           width: 38, height: 38,
-          display: "flex", alignItems: "center", justifyContent: "center",
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
           background: "transparent", border: "none", padding: 0,
-          borderRadius: "50%", cursor: "pointer",
+          cursor: "pointer",
           opacity: loading ? .5 : 1,
           WebkitTapHighlightColor: "transparent",
         }}
       >
-        <span style={{ fontSize: 22, lineHeight: 1, filter: "drop-shadow(0 0 6px rgba(255,214,0,.45))" }}>
-          🔔
-        </span>
+        <Icono nombre="bell" size={32} strokeWidth={2.2}
+          style={{ color: "#FFD700", filter: "drop-shadow(0 0 6px rgba(255,214,0,.45))" }}/>
         {pending && (
           <span aria-hidden="true" style={{
-            position: "absolute", top: 3, right: 3,
+            position: "absolute", top: 3, right: -2,
             width: 9, height: 9, borderRadius: "50%",
             background: "#FF2D78", border: "1.5px solid #0D0700",
             boxShadow: "0 0 6px rgba(255,45,120,.9)",
