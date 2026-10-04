@@ -38,6 +38,7 @@ export const SIDEBAR_MENU = [
   { type: "item",   id: "playlists",     sec: "playlists",     bloque: "contenido" },
   { type: "item",   id: "dashboard",     sec: "dashboard",     bloque: "general" },
   { type: "item",   id: "designer",      sec: "designer",      bloque: "general" },
+  { type: "item",   id: "designerClient", sec: "designerClient", bloque: "general" },
   { type: "item",   id: "designerTv",    sec: "designerTv",    bloque: "general" },
   { type: "item",   id: "designerGuest", sec: "designerGuest", bloque: "general" },
   { type: "flyout", id: "usuariosMenu",  icon: "👥", label: "Usuarios",  bloque: "admin",

@@ -1,14 +1,15 @@
 import { useState, useCallback } from "react";
-import { useAuth } from "../../hooks/useAuth";
 
 // ─── Sección "Contraseña" del perfil ──────────────────────────────────────────
 //
 // Cambio de contraseña con la sesión ya iniciada. Pide la actual porque el
 // celular puede quedar abierto sobre la mesa del bar: sin ese paso, cualquiera
 // que lo agarre se queda con la cuenta.
+//
+// `changePassword` es el de la instancia de `useAuth()` de App (llega vía el
+// controlador del Perfil): la tarjeta no monta otra instancia de auth.
 
-export default function ChangePasswordCard() {
-  const { changePassword } = useAuth();
+export default function ChangePasswordCard({ changePassword }) {
 
   const [open,     setOpen]     = useState(false);
   const [current,  setCurrent]  = useState("");

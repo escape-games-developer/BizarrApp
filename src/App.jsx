@@ -8,6 +8,8 @@ import { usePresence }          from "./hooks/realtime/usePresence";
 import { PushPermissionBanner } from "./components/PushPermissionBanner";
 import { NotificationBell }     from "./components/NotificationBell";
 import { DueloTeaserBanner }    from "./components/DueloTeaserBanner";
+import ClientShell              from "./client/shell/ClientShell";
+import { clientNavItems, CLIENT_LOGO_URL } from "./client/shell/clientShellData";
 
 import { useYouTubePlaylistAdmin } from "./hooks/useYouTubePlaylists";
 import MenuFrame     from "./views/Carta/MenuFrame";
@@ -18,13 +20,12 @@ import PantallaView  from "./views/Pantalla/PantallaView";
 import ProfileView, { LoginView } from "./views/Perfil/ProfileView";
 import ForgotPasswordView from "./views/Auth/ForgotPasswordView";
 
-const LOGO_URL         = "/logo.png";
-const RESTRICTED_VIEWS = ["games", "escenario", "pantalla"];
 const VIEWS            = ["novedades", "menu", "pantalla", "games", "escenario", "profile"];
 
 export default function BizarrApp() {
   const { user, regStep, setRegStep, register, login, loginAsGuest,
-          updateUser, isLoggedIn, isGuest } = useAuth();
+          updateUser, logout, resendConfirmation, changePassword,
+          isLoggedIn, isGuest } = useAuth();
 
   const [view,     setView]     = useState(() => {
     const params    = new URLSearchParams(window.location.search);
@@ -102,14 +103,17 @@ export default function BizarrApp() {
     setView("profile");
   }, [user, setRegStep]);
 
-  const NAV = useMemo(() => [
-    { id: "novedades", icon: "📣", label: "Bienvenidos", image: "/botones/Noti.png"     },
-    { id: "menu",      icon: "🍹", label: "Menú",        image: "/botones/Menu.png"     },
-    { id: "pantalla",  icon: "📺", label: "Pantalla",    image: "/botones/Pantalla.png" },
-    { id: "games",     icon: "🎮", label: "Juegos",      image: "/botones/juegos.png"   },
-    { id: "escenario", icon: "🎤", label: "Escenario",   image: "/botones/Escenario.png" },
-    { id: "profile",   icon: "👤", label: isLoggedIn ? "Perfil" : "Registro", image: "/botones/Perfil.png" },
-  ], [isLoggedIn]);
+  // Lo que dibuja la navegación del shell: el candado depende del gate de geo.
+  const navItems = useMemo(() => clientNavItems({ isLoggedIn, isRestricted }), [isLoggedIn, isRestricted]);
+  const navigate = (id) => id==="profile" ? goProfile() : setView(id);
+
+  // Perfil recibe las acciones de esta instancia de useAuth(): no monta otra
+  // (cada instancia corre su propio restoreSession y su listener de Auth).
+  const profileProps = {
+    user, onSave: updateUser, onRegister: register, regStep, setRegStep,
+    onLogout: logout, onResendConfirmation: resendConfirmation,
+    onChangePassword: changePassword, isGuest,
+  };
 
   const renderContent = () => {
     switch (view) {
@@ -136,12 +140,10 @@ export default function BizarrApp() {
             ? <LoginView onLogin={login} onGoRegister={() => setAuthMode("register")}
                 onGuestLogin={loginAsGuest}
                 onGoForgot={(email) => { setForgotEmail(email || ""); setAuthMode("forgot"); }}/>
-            : <ProfileView user={user} onSave={updateUser} onRegister={register}
-                regStep={regStep} setRegStep={setRegStep}/>;
+            : <ProfileView {...profileProps}/>;
         }
-        return <ProfileView user={user} onSave={updateUser} onRegister={register}
-                 regStep={regStep} setRegStep={setRegStep}/>;
-      default: return null; // `view` siempre sale de VIEWS / NAV
+        return <ProfileView {...profileProps}/>;
+      default: return null; // `view` siempre sale de VIEWS / clientNavItems
     }
   };
 
@@ -164,16 +166,8 @@ export default function BizarrApp() {
     <>
       <style>{globalCss}</style>
       <div className="app-root">
-        <div className="phone-shell">
-          <header className="app-header">
-            <div className="app-header-brand">
-              <img src={LOGO_URL} alt="Bizarren" className="app-header-logo"
-                onError={e => { e.target.style.display="none"; }}/>
-            </div>
-            {/* Campana pegada al borde derecho, a 5 px. */}
-            <NotificationBell user={user}/>
-          </header>
-          <main className="app-content">
+        <ClientShell logoSrc={CLIENT_LOGO_URL}notificationSlot={<NotificationBell user={user}/>}
+          navItems={navItems} activeNavId={view} onNavigate={navigate}>
             {authNotice && (
               <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
                 marginBottom:14,background:"rgba(34,197,94,.1)",
@@ -198,35 +192,7 @@ export default function BizarrApp() {
             )}
             {renderContent()}
             {menuMontado && <MenuFrame visible={view === "menu"}/>}
-          </main>
-          <nav className="app-nav">
-            {NAV.map(n => {
-              const isActive = view === n.id;
-              const gated    = isRestricted && RESTRICTED_VIEWS.includes(n.id);
-              return (
-                <button key={n.id}
-                  className={`nav-btn${isActive ? " active" : ""}`}
-                  aria-label={n.label}
-                  aria-current={isActive ? "page" : undefined}
-                  onClick={() => n.id==="profile" ? goProfile() : setView(n.id)}
-                  style={{
-                    position: "relative",
-                    opacity: gated ? 0.45 : 1,
-                  }}>
-                  {n.image
-                    ? <img className="nav-image" src={n.image} alt="" aria-hidden="true"/>
-                    : <span className="nav-icon" aria-hidden="true">{n.icon}</span>}
-                  {gated && (
-                    <span aria-hidden="true" style={{
-                      position:"absolute", top:1, right:5, fontSize:11,
-                      pointerEvents:"none", filter:"drop-shadow(0 0 2px #000)",
-                    }}>🔒</span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+        </ClientShell>
         <PushPermissionBanner user={user} />
         <DueloTeaserBanner
           activeEscenario={gameState?.active_escenario ?? null}

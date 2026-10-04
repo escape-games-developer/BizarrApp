@@ -16,6 +16,7 @@ import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
 import DesignerView from "../views/Designer/DesignerView";
 import TvDesigner from "../designers/tv/TvDesigner";
+import ClientDesignerPanel from "./designer-client/ClientDesignerPanel";
 import UsuariosPanel from "./UsuariosPanel";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
 import { useRaffle, raffleCountdown } from "../hooks/useRaffle";
@@ -450,6 +451,7 @@ const SECS = [
   {id:"playlists",icon:"▶️", label:"Playlists YouTube",  grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
   {id:"dashboard",icon:"📊",label:"Dashboard",    grad:"linear-gradient(135deg,#FFD600,#00E5FF)",glow:"rgba(255,214,0,.3)"},
   {id:"designer", icon:"✦", label:"Diseñador",    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
+  {id:"designerClient",icon:"🎨",label:"Diseñador Cliente",grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
   {id:"designerTv",icon:"📺",label:"Pantalla TV",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
   {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
   {id:"clientes", icon:"🧑‍🤝‍🧑", label:"Clientes", adminOnly:true,
@@ -6315,6 +6317,7 @@ export default function AdminPanel(){
       case "dashboard": return <DashboardPanel sec={curSec} connectedCount={connectedCount}/>;
       case "playlists": return <PlaylistsPanel/>;
       case "designer":  return <DesignerView/>;
+      case "designerClient": return <ClientDesignerPanel/>;
       case "designerTv": return <TvDesigner sessionId="default"/>;
       case "designerGuest": return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Diseñador de Pantalla Invitado — próxima etapa</div>;
       case "clientes": return canManageUsers ? <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Gestión de clientes — próxima etapa</div> : null;

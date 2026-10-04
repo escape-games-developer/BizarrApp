@@ -1,12 +1,10 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { AvatarDisplay }   from "../../components/AvatarDisplay";
 import { StepBar }         from "../../components/UI";
 import { PRESET_AVATARS, TEAMS, GEO_RADIUS } from "../../constants/theme";
-import { useGeoGate }      from "../../hooks/useGeoGate";
 import { useAuth }         from "../../hooks/useAuth";
-import ChangePasswordCard  from "../Auth/ChangePasswordCard";
-
-const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!"];
+import { useProfileController, STEP_LABELS } from "./useProfileController";
+import { resolveProfileDesign, DEFAULT_PROFILE_DESIGN } from "./designs/registry";
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
@@ -126,96 +124,30 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
 }
 
 // ─── Registro en 5 pasos ──────────────────────────────────────────────────────
-export default function ProfileView({ user, onSave, onRegister, regStep, setRegStep }) {
-  const step    = regStep;
-  const setStep = setRegStep;
-
-  // Form state
-  const [name,      setName]      = useState(user?.name||"");
-  const [avatarSrc, setAvatarSrc] = useState("preset");
-  const [selAv,     setSelAv]     = useState(user?.avatarId||null);
-  const [photoUrl,  setPhotoUrl]  = useState(user?.photoUrl||null);
-  const [team,      setTeam]      = useState(user?.team||null);
-  const [email,     setEmail]     = useState(user?.email||"");
-  const [phone,     setPhone]     = useState(user?.phone||"");
-  const [pass,      setPass]      = useState("");
-  const [passConf,  setPassConf]  = useState("");
-  const [emailSent, setEmailSent] = useState(false);
-  const [editing,   setEditing]   = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [saveError, setSaveError] = useState("");
-  // Cuenta creada pero esperando que el cliente toque el link del mail.
-  const [pendingEmail, setPendingEmail] = useState(null);
-  const [resent,       setResent]       = useState(false);
-  const fileRef = useRef();
-
-  const { logout, resendConfirmation, isGuest } = useAuth();
-
-  // Geo — el invitado abre el gate sin pedir ubicación.
-  const { geoState, distMeters, loading: geoLoading, retry: requestGeo } = useGeoGate(isGuest);
-  const geoOk = geoState === "ok";
-
-  useEffect(() => {
-    // Para el invitado el "ok" es de mentira: no persistimos `geo_ok` o quedaría
-    // un permiso falso guardado que sobrevive a apagar VITE_GUEST_LOGIN. Al
-    // invitado lo destraba `isGuest` en App.jsx, no este campo.
-    if (isGuest) return;
-    if (geoState === "ok" && !user?.geoOk) onSave({ geoOk: true });
-  }, [geoState, isGuest]);
-
-  const selAvData   = PRESET_AVATARS.find((a) => a.id === selAv);
-  const previewUser = avatarSrc==="photo"&&photoUrl
-    ? { photoUrl, name }
-    : selAv ? { avatarId:selAv, avatarEmoji:selAvData?.emoji, name } : { name };
-
-  const handleFile = useCallback((e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = (ev) => setPhotoUrl(ev.target.result);
-    r.readAsDataURL(f);
-  }, []);
-
-  const canStep1 = name.trim().length > 0 && (selAv || (avatarSrc==="photo"&&photoUrl));
-  const canStep4 = email.includes("@") && pass.length >= 6 && pass === passConf && phone.replace(/\D/g,"").length >= 8;
-
-  // onRegister es async. Antes se leía `result.ok` directo de la promesa
-  // (siempre undefined), así que ni se confirmaba el alta ni se mostraba el
-  // error: el cliente tocaba "Crear mi cuenta" y no pasaba nada.
-  const handleSave = useCallback(async () => {
-    if (saving) return;               // evita doble alta por doble tap
-    setSaveError(""); setSaving(true);
-    try {
-      const profile = {
-        name: name.trim(),
-        ...(avatarSrc==="photo"&&photoUrl
-          ? { photoUrl, avatarId:null, avatarEmoji:null }
-          : { avatarId:selAv, avatarEmoji:selAvData?.emoji||null, photoUrl:null }),
-        team, email:email.toLowerCase().trim(),
-        phone:phone.replace(/\D/g,""), geoOk, registered:true,
-      };
-      const result = await onRegister(profile, pass);
-      // El proyecto exige confirmar el email: la cuenta ya existe, pero recién
-      // queda activa cuando toca el link. No lo mandamos al paso 5 fingiendo
-      // que terminó — lo dejamos en la pantalla de "revisá tu mail".
-      if (result?.pendingConfirmation) {
-        setPendingEmail(result.email || profile.email);
-        setEditing(false);
-      }
-      else if (result?.ok) { setEmailSent(true); setEditing(false); setStep(5); }
-      else                 { setSaveError(result?.error || "No se pudo crear la cuenta. Probá de nuevo."); }
-    } catch (e) {
-      setSaveError(e?.message || "No se pudo crear la cuenta. Probá de nuevo.");
-    } finally {
-      setSaving(false);
-    }
-  }, [saving,name,avatarSrc,photoUrl,selAv,selAvData,team,email,phone,geoOk,pass,onRegister,setStep]);
-
-  // Ya registrado → saltar a paso 5. En efecto, no durante el render:
-  // llamar a setStep mientras se renderiza dispara un warning de React y,
-  // con el return null, deja la vista en blanco por un frame.
-  useEffect(() => {
-    if (user?.registered && !editing && step === 1) setStep(5);
-  }, [user?.registered, editing, step, setStep]);
+//
+// Orquesta la sección: el wizard 1–4 y "Confirmá tu cuenta" se dibujan acá; el
+// paso 5 ("Mi Perfil") lo dibuja el diseño que resuelve el registro. La lógica
+// (estado, alta, GPS, acciones de cuenta) vive en useProfileController.
+//
+// Las acciones de Auth llegan de la instancia de `useAuth()` de App: esta vista
+// no crea otra.
+export default function ProfileView({ user, onSave, onRegister, regStep, setRegStep,
+                                      onLogout, onResendConfirmation, onChangePassword, isGuest }) {
+  const {
+    step, setStep,
+    name, setName, avatarSrc, setAvatarSrc, selAv, setSelAv, photoUrl,
+    team, setTeam, email, setEmail, phone, setPhone,
+    pass, setPass, passConf, setPassConf,
+    fileRef, handleFile, previewUser,
+    canStep1, canStep4, saving, saveError, handleSave, skipRegistration,
+    geoState, distMeters, geoLoading, geoOk, requestGeo,
+    pendingEmail, resent, resendPending, backFromPending,
+    profile,
+  } = useProfileController({
+    user, onSave, onRegister, regStep, setRegStep,
+    logout: onLogout, resendConfirmation: onResendConfirmation,
+    changePassword: onChangePassword, isGuest,
+  });
 
   // ── Esperando la confirmación del mail ──────────────────────────────────────
   // La cuenta ya está creada en Supabase Auth y el perfil viajó en la metadata.
@@ -244,20 +176,23 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
             ✅ Mail reenviado.
           </div>
         : <button className="btn-ghost" style={{ width:"100%",marginBottom:10 }}
-            onClick={async () => {
-              const r = await resendConfirmation(pendingEmail);
-              if (r?.ok) setResent(true);
-            }}>
+            onClick={resendPending}>
             📨 Reenviarme el mail
           </button>}
 
-      <button onClick={() => { setPendingEmail(null); setStep(4); }} style={{ background:"none",
+      <button onClick={backFromPending} style={{ background:"none",
         border:"none",color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",
         textDecoration:"underline" }}>
         ← Me equivoqué de email
       </button>
     </div>
   );
+
+  // ── PASO 5: "Mi Perfil" — lo dibuja el diseño registrado ────────────────────
+  if (step===5 && profile) {
+    const ProfileDesign = resolveProfileDesign(DEFAULT_PROFILE_DESIGN);
+    return <ProfileDesign profile={profile}/>;
+  }
 
   return (
     <div>
@@ -428,11 +363,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               ¡Sí, me registro! →
             </button>
           </div>
-          <button onClick={()=>{
-            onSave({ name:name.trim(),avatarId:selAv,avatarEmoji:selAvData?.emoji||null,
-              photoUrl:avatarSrc==="photo"?photoUrl:null,team,geoOk:false,registered:false });
-            setStep(5);
-          }} style={{ width:"100%",background:"none",border:"1px solid rgba(255,255,255,.08)",
+          <button onClick={skipRegistration} style={{ width:"100%",background:"none",border:"1px solid rgba(255,255,255,.08)",
             borderRadius:10,padding:"10px",color:"rgba(245,230,192,.28)",fontSize:11,cursor:"pointer" }}>
             Ahora no, solo quiero ver la carta
           </button>
@@ -546,85 +477,6 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               {saving ? "Creando cuenta..." : "✓ Crear mi cuenta"}
             </button>
           </div>
-        </>
-      )}
-
-      {/* ── PASO 5: ¡Listo! ── */}
-      {step===5 && user && (
-        <>
-          {emailSent && (
-            <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
-              background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.25)",
-              borderRadius:12,marginBottom:16 }}>
-              <span style={{ fontSize:20,flexShrink:0 }}>🎉</span>
-              <div>
-                <div style={{ fontSize:12,fontWeight:700,color:"#86EFAC",marginBottom:2 }}>¡Cuenta activa!</div>
-                <div style={{ fontSize:11,color:"rgba(245,230,192,.55)",lineHeight:1.4 }}>
-                  ¡Bienvenido/a a BizarrApp, <strong>{user.name}</strong>! Tu cuenta quedó lista. ¡Ya podés jugar!
-                </div>
-              </div>
-            </div>
-          )}
-          <div style={{ textAlign:"center",marginBottom:18 }}>
-            <div style={{ display:"flex",justifyContent:"center",marginBottom:12 }}>
-              <AvatarDisplay user={user} size={80} fontSize={36}/>
-            </div>
-            <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#FFD700" }}>
-              ¡Hola, {user.name}!
-            </div>
-            {user.team && (
-              <div style={{ display:"inline-flex",alignItems:"center",gap:8,marginTop:10,
-                padding:"6px 16px",borderRadius:20,
-                background:TEAMS[user.team].bg,border:`1px solid ${TEAMS[user.team].border}` }}>
-                <span style={{ fontSize:18 }}>{TEAMS[user.team].emoji}</span>
-                <span style={{ fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:13,color:TEAMS[user.team].color }}>
-                  {TEAMS[user.team].name}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="card">
-            <div className="card-title">Tu cuenta BizarrApp</div>
-            {[
-              {icon:"👤",label:"Nombre",   val:user.name,                        ok:!!user.name},
-              {icon:"🎭",label:"Avatar",   val:"Configurado",                    ok:!!(user.avatarId||user.photoUrl)},
-              {icon:user.team?TEAMS[user.team].emoji:"❓",
-                          label:"Equipo", val:user.team?TEAMS[user.team].name:"Sin elegir",ok:!!user.team},
-              {icon:"📧",label:"Email",    val:user.email||"—",                  ok:!!user.email},
-              {icon:"📱",label:"Teléfono", val:user.phone?"Registrado":"—",      ok:!!user.phone},
-              {icon:"📍",label:"Ubicación",val:user.geoOk?"Verificada":"No verificada",ok:!!user.geoOk},
-            ].map((row,i)=>(
-              <div key={i} style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 10px",
-                borderRadius:9,marginBottom:5,
-                background:row.ok?"rgba(34,197,94,.06)":"rgba(255,255,255,.03)",
-                border:`1px solid ${row.ok?"rgba(34,197,94,.18)":"rgba(255,255,255,.06)"}` }}>
-                <span style={{ fontSize:15 }}>{row.icon}</span>
-                <span style={{ flex:1,fontSize:12,fontWeight:600,color:"rgba(245,230,192,.8)" }}>{row.label}</span>
-                <span style={{ fontSize:11,color:row.ok?"#86EFAC":"rgba(245,230,192,.3)" }}>{row.val}</span>
-                <span style={{ fontSize:12,color:row.ok?"#86EFAC":"rgba(245,230,192,.18)" }}>{row.ok?"✓":"○"}</span>
-                {!row.ok && row.label==="Ubicación" && <button onClick={requestGeo} style={{background:"none",border:"none",cursor:"pointer",fontSize:14}}>📍</button>}
-              </div>
-            ))}
-          </div>
-          {!user.geoOk && user.registered && (
-            <div style={{ padding:"10px 14px",background:"rgba(239,68,68,.08)",
-              border:"1px solid rgba(239,68,68,.2)",borderRadius:10,
-              fontSize:11,color:"rgba(245,230,192,.5)",lineHeight:1.5,marginBottom:12 }}>
-              📍 Para activar los juegos verificá tu ubicación. Editá el perfil y habilitá la ubicación cuando estés en el bar.
-            </div>
-          )}
-          {/* Solo tiene sentido con cuenta de Auth detrás: quien eligió
-              "ahora no, solo la carta" no tiene contraseña que cambiar. */}
-          {user.registered && user.email && <ChangePasswordCard/>}
-          <button className="btn-primary" onClick={()=>{ setEditing(true); setStep(1); }}>✏️ Editar perfil</button>
-          <button
-            onClick={logout}
-            style={{ width:"100%", marginTop:10, padding:"12px", borderRadius:12,
-              background:"rgba(255,45,120,.1)", border:"1px solid rgba(255,45,120,.3)",
-              color:"#FF2D78", fontFamily:"Syne,sans-serif", fontWeight:800,
-              fontSize:13, cursor:"pointer" }}>
-            🚪 Cerrar sesión
-          </button>
         </>
       )}
     </div>
