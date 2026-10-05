@@ -35,25 +35,26 @@ const djVotingCss = `
   .djv-reaccion-pop{transform:scale(1.3);background:rgba(255,45,120,.16);border-color:rgba(255,45,120,.45);}
 
   /* ── Sonando ahora ──────────────────────────────────────────────────── */
-  /* Sin portada. Arriba, a todo el ancho, la etiqueta. Debajo: tema y artista a
-     la izquierda, el botón para sacar el tema a la derecha. El progreso es una
-     franja fina sobre el borde inferior, así no suma una fila. */
-  .djv-ahora{position:relative;overflow:hidden;border-radius:18px;padding:8px 14px 13px;margin-bottom:10px;
+  /* Sin portada. A la izquierda etiqueta, tema y artista; a la derecha el botón
+     para sacar el tema, centrado en alto. El progreso es una franja fina sobre
+     el borde inferior, así no suma una fila. */
+  .djv-ahora{position:relative;overflow:hidden;border-radius:18px;padding:11px 14px 13px;margin-bottom:10px;
     background:linear-gradient(135deg,rgba(255,45,120,.16),rgba(155,47,255,.12) 55%,rgba(13,0,16,.4));
     border:1px solid rgba(255,45,120,.32);box-shadow:0 0 30px rgba(255,45,120,.09) inset;}
   .djv-ahora-row{display:flex;gap:12px;align-items:center;}
   .djv-ahora-info{flex:1;min-width:0;}
-  .djv-ahora-lbl{font-family:"Syne",sans-serif;font-weight:900;font-size:12px;letter-spacing:1.4px;
+  .djv-ahora-lbl{font-weight:700;font-size:13px;letter-spacing:1px;
     color:rgba(255,45,120,.85);line-height:1.2;margin-bottom:5px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .djv-ahora-tit{font-family:"Syne",sans-serif;font-weight:900;font-size:11.8px;color:#FFFFFF;
-    line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .djv-ahora-art{font-size:15.4px;line-height:1.25;color:rgba(245,230,192,.5);margin-top:1px;
+  /* Misma tipografía que el tema y artista de las cards (.djv-tema-tit / -art). */
+  .djv-ahora-tit{font-size:15px;font-weight:700;color:#FFFFFF;
+    line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .djv-ahora-art{font-size:13px;line-height:1.25;color:rgba(245,230,192,.5);margin-top:1px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   /* ── Sacar tema ─────────────────────────────────────────────────────── */
   .djv-kick{flex-shrink:0;max-width:52%;min-height:39px;padding:6px 11px;border-radius:14px;cursor:pointer;
-    font-family:"Syne",sans-serif;font-weight:900;font-size:13.3px;line-height:1.25;letter-spacing:.3px;white-space:nowrap;
+    font-family:inherit;font-weight:700;font-size:13px;line-height:1.25;white-space:nowrap;text-align:center;
     background:rgba(245,230,192,.05);border:1.5px solid rgba(245,230,192,.14);
     color:rgba(245,230,192,.65);transition:all .18s;-webkit-tap-highlight-color:transparent;}
   .djv-kick:active{transform:scale(.97);}
@@ -66,7 +67,8 @@ const djVotingCss = `
 
   /* ── Encabezado de candidatos ───────────────────────────────────────── */
   .djv-seccion{margin:10px 0 0;}
-  .djv-seccion-tit{font-family:'Syne',sans-serif;font-weight:900;font-size:13px;color:#FFD700;
+  /* Misma tipografía que el tema de las cards (.djv-tema-tit). */
+  .djv-seccion-tit{font-weight:700;font-size:15px;color:#FFD700;
     display:flex;align-items:center;gap:6px;line-height:1.2;}
   .djv-copa{filter:drop-shadow(0 0 4px rgba(255,215,0,.35));}
 
@@ -164,11 +166,11 @@ const djVotingCss = `
     .djv-tema-grid{grid-template-columns:16px 56px minmax(0,1fr) auto;column-gap:8px;}
     .djv-tema-cover{width:56px;height:56px;}
     .djv-kick{padding:6px 9px;}
-    .djv-seccion-tit{font-size:11px;white-space:nowrap;}
+    .djv-seccion-tit{font-size:14px;white-space:nowrap;}
   }
   /* "Top - Votá lo que suena después" en una línea también a 320 px. */
   @media (max-width:340px){
-    .djv-seccion-tit{font-size:10px;}
+    .djv-seccion-tit{font-size:13px;}
   }
 `;
 

@@ -7,6 +7,9 @@ import { clientDesignRegistry } from "../client/design/clientDesignRegistry";
 import ClientDesignRenderer from "../design-engine/ClientDesignRenderer";
 import { validateDocument } from "../design-engine/validateDocument";
 import { previewProfile, previewShellState } from "./fixtures/profile";
+import DjVotingView from "../views/Pantalla/DjVotingView";
+import { hasPantallaDesign, resolvePantallaTheme } from "../views/Pantalla/themes/registry";
+import { previewPantallaProps, previewPantallaShellState } from "./fixtures/pantalla";
 import { PREVIEW_ACTION_DISABLED, isPreviewMessage, previewMessage } from "./previewContract";
 
 /**
@@ -18,13 +21,17 @@ import { PREVIEW_ACTION_DISABLED, isPreviewMessage, previewMessage } from "./pre
  * main.jsx carga este módulo sin evaluar el resto de las rutas.
  *
  * Dos modos:
- *   native    renderer nativo registrado (hoy ProfileDesignOriginal).
+ *   native    renderer nativo registrado (ProfileDesignOriginal, o la vista
+ *             de DJ Democracy con el tema del diseño de Pantalla).
  *   document  DesignDocument del motor (ClientDesignRenderer). Acá vive también
  *             la parte de edición que necesita el DOM: click → "node-selected"
  *             y el contorno del nodo seleccionado. Va por fuera del renderer.
  */
 const NATIVE = {
   profile: { has: hasProfileDesign, resolve: resolveProfileDesign, props: () => ({ profile: previewProfile }), shell: previewShellState },
+  pantalla: { has: hasPantallaDesign, resolve: () => DjVotingView,
+    props: (rendererKey) => ({ ...previewPantallaProps, theme: resolvePantallaTheme(rendererKey) }),
+    shell: previewPantallaShellState },
 };
 const DEFAULT_SHELL = { isLoggedIn: true, isRestricted: false };
 const ID_RE = /^[A-Za-z][\w-]{0,63}$/;
@@ -79,7 +86,7 @@ export default function ClientPreviewRoute() {
     const entry = NATIVE[request.section];
     const Design = entry.resolve(request.rendererKey);
     section = request.section; shell = entry.shell;
-    content = <Design {...entry.props()}/>;
+    content = <Design {...entry.props(request.rendererKey)}/>;
   } else if (request?.kind === "document") {
     section = request.scene.section; shell = request.fixture.shell ?? DEFAULT_SHELL;
     content = <ClientDesignRenderer document={request.document} registry={clientDesignRegistry}

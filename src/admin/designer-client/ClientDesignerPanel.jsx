@@ -7,7 +7,8 @@ import ClientDesignerEditor    from "./ClientDesignerEditor";
 import {
   CLIENT_DESIGN_SECTIONS, DEFAULT_CLIENT_DESIGN_SECTION, clientDesignSectionById,
 } from "./clientDesignSections";
-import { designsForSection } from "./temporaryDesignCatalog";
+import { designsForSection, ACTIVATABLE_SECTIONS } from "./temporaryDesignCatalog";
+import { useActiveClientDesigns } from "./useActiveClientDesigns";
 
 const WORKSPACE_ID = "cd-workspace";
 
@@ -24,8 +25,9 @@ const designInicial = (sectionId) => {
  * área de diseño al centro. La columna de propiedades (derecha) se suma
  * pasándole `right` al layout cuando exista el editor.
  *
- * Todo el estado es de UI y vive acá (pestaña y diseño seleccionados): no se
- * persiste. Los diseños salen del catálogo temporal, que se reemplazará por el
+ * El estado de UI vive acá (pestaña y diseño seleccionados) y no se persiste.
+ * Lo único que se guarda es el diseño activo de las secciones activables
+ * (client_design_active), con el botón «Activar» del área central. Los diseños salen del catálogo temporal, que se reemplazará por el
  * backend de variantes.
  */
 export default function ClientDesignerPanel() {
@@ -33,7 +35,9 @@ export default function ClientDesignerPanel() {
   const [selectedId, setSelectedId] = useState(() => designInicial(DEFAULT_CLIENT_DESIGN_SECTION));
 
   const section = clientDesignSectionById(sectionId);
-  const designs = useMemo(() => designsForSection(sectionId), [sectionId]);
+  const { active, activar } = useActiveClientDesigns();
+  const activeKey = active[sectionId] ?? null;
+  const designs = useMemo(() => designsForSection(sectionId, activeKey), [sectionId, activeKey]);
   const selected = designs.find((d) => d.id === selectedId) ?? null;
 
   const cambiarSeccion = (id) => {
@@ -60,7 +64,8 @@ export default function ClientDesignerPanel() {
       left={savedDesigns}
       center={
         <div {...tabpanelProps}>
-          <ClientDesignerWorkspace section={section} design={selected}/>
+          <ClientDesignerWorkspace section={section} design={selected}
+            onActivate={ACTIVATABLE_SECTIONS.has(sectionId) ? (designKey) => activar(sectionId, designKey) : null}/>
         </div>
       }
     />
