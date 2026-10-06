@@ -70,8 +70,8 @@ export default function SeccionCodigoCanje({ event, onError, embedded = false })
             placeholder={cargando ? "Cargando…" : "Sin código"}
             onChange={(e) => setCodigo(limpiar(e.target.value))}
             style={{
-              flex: 1, minWidth: 0, fontFamily: "'Syne',sans-serif",
-              fontWeight: 900, letterSpacing: 3, fontSize: 13,
+              flex: 1, minWidth: 0, fontFamily: "'DM Sans',sans-serif",
+              fontWeight: 700, letterSpacing: 3, fontSize: 13,
             }} />
           <button type="button" className="pdj-mini" disabled={cargando}
             title={visible ? "Ocultar el código" : "Mostrar el código"}

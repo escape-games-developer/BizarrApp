@@ -125,7 +125,7 @@ export default function SeccionInvitados({ event, participants, stats, refreshAd
                   flexShrink: 0, padding: "5px 6px", borderRadius: 8, fontSize: 10, cursor: "pointer",
                   fontWeight: 700, background: "rgba(240,232,255,.05)", color: rol.color,
                   border: "1px solid rgba(240,232,255,.1)", outline: "none",
-                  fontFamily: "'Space Grotesk',sans-serif",
+                  fontFamily: "'DM Sans',sans-serif",
                 }}>
                 {ROLES.map((r) => <option key={r.id} value={r.id}>{r.ico} {r.label}</option>)}
               </select>

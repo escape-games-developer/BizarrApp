@@ -61,7 +61,7 @@ export default function ClientDesignerWorkspace({ section, design, onActivate = 
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px" }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, textTransform: "uppercase",
           color: "rgba(240,232,255,.45)" }}>{section.label}</span>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 900, color: "#F0E8FF" }}>
+        <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 18, fontWeight: 700, color: "#F0E8FF" }}>
           {design.name}
         </span>
         <span style={{ fontSize: 10.5, color: "rgba(240,232,255,.4)", fontFamily: "ui-monospace,Consolas,monospace" }}>

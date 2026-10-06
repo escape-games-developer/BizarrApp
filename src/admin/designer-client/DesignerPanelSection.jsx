@@ -16,7 +16,7 @@ export default function DesignerPanelSection({ title, count = null, defaultOpen 
         aria-expanded={open} aria-controls={bodyId}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "11px 14px",
           background: "none", border: "none", cursor: "pointer", color: "#F0E8FF", textAlign: "left",
-          fontFamily: "'Syne',sans-serif", fontSize: 12, fontWeight: 900, letterSpacing: .4,
+          fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: .4,
           textTransform: "uppercase" }}>
         <span aria-hidden="true" style={{ fontSize: 10, color: "rgba(240,232,255,.55)", width: 10,
           display: "inline-block", transition: "transform .15s", transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}>

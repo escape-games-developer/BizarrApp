@@ -198,8 +198,8 @@ export default function FilaCancion({
 
         <div style={{ minWidth: 34, textAlign: "right", flexShrink: 0 }}>
           <b style={{
-            color: colorScore(item.score), fontFamily: "'Syne',sans-serif",
-            fontWeight: 900, fontSize: 14, display: "block", lineHeight: 1,
+            color: colorScore(item.score), fontFamily: "'DM Sans',sans-serif",
+            fontWeight: 700, fontSize: 14, display: "block", lineHeight: 1,
           }}>{conSigno(item.score)}</b>
           <span style={{ fontSize: 7.5, color: P.tenue2, letterSpacing: ".5px" }}>PTS</span>
         </div>

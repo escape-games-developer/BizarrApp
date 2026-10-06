@@ -78,9 +78,9 @@ const C = { bg:"#08040F",bg2:"#110820",yellow:"#FFD600",amber:"#FF9500",
 
 // ── CSS ────────────────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:#08040F;font-family:'Space Grotesk',sans-serif;color:#F0E8FF;overflow:hidden;height:100vh;}
+  body{background:#08040F;font-family:'DM Sans',sans-serif;color:#F0E8FF;overflow:hidden;height:100vh;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
   @keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
@@ -138,7 +138,7 @@ const css = `
   .mhdr{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;
     background:rgba(8,4,15,.96);border-bottom:1px solid rgba(155,47,255,.16);flex-shrink:0;
     position:sticky;top:0;z-index:500;backdrop-filter:blur(16px);}
-  .mhdr-title{font-family:'Syne',sans-serif;font-weight:900;font-size:17px;
+  .mhdr-title{font-family:'DM Sans',sans-serif;font-weight:700;font-size:17px;
     background:var(--sg);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .mbody{flex:1;overflow-y:auto;padding:14px 16px;scrollbar-width:thin;scrollbar-color:rgba(155,47,255,.15) transparent;}
 
@@ -150,8 +150,8 @@ const css = `
     color:rgba(240,232,255,.28);margin-bottom:8px;}
 
   /* Botones */
-  .btn{padding:9px 14px;border:none;border-radius:10px;font-family:'Syne',sans-serif;
-    font-size:11px;font-weight:800;cursor:pointer;transition:all .18s;}
+  .btn{padding:9px 14px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;
+    font-size:11px;font-weight:700;cursor:pointer;transition:all .18s;}
   .btn:active{transform:scale(.97);}
   .btn:disabled{opacity:.3;cursor:not-allowed;}
   .btn-p{background:var(--sg);color:#08040F;box-shadow:0 2px 12px var(--gw);}
@@ -176,7 +176,7 @@ const css = `
   .lg3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
   .lbtn{border:none;border-radius:12px;padding:10px 6px;cursor:pointer;transition:all .2s;
     display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;overflow:hidden;
-    font-family:'Space Grotesk',sans-serif;}
+    font-family:'DM Sans',sans-serif;}
   .lbtn:active{transform:scale(.95);}
   .lbtn .lico{font-size:22px;}
   .lbtn .llbl{font-size:9px;font-weight:700;text-align:center;line-height:1.2;}
@@ -186,7 +186,7 @@ const css = `
 
   /* Input */
   .inp{width:100%;background:rgba(240,232,255,.05);border:1.5px solid rgba(240,232,255,.09);
-    border-radius:9px;padding:8px 11px;color:#F0E8FF;font-family:'Space Grotesk',sans-serif;
+    border-radius:9px;padding:8px 11px;color:#F0E8FF;font-family:'DM Sans',sans-serif;
     font-size:12px;outline:none;transition:border-color .18s;margin-bottom:6px;}
   .inp:focus{border-color:rgba(155,47,255,.45);}
   .inp::placeholder{color:rgba(240,232,255,.18);}
@@ -225,7 +225,7 @@ const css = `
   /* Promo preview */
   .promo-prev{border-radius:12px;padding:14px;text-align:center;margin-bottom:10px;}
   .promo-emoji{font-size:32px;margin-bottom:6px;}
-  .promo-title{font-family:'Syne',sans-serif;font-weight:900;font-size:16px;margin-bottom:3px;}
+  .promo-title{font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;margin-bottom:3px;}
   .promo-sub{font-size:11px;opacity:.45;}
 
   /* Menu item */
@@ -261,7 +261,7 @@ const css = `
     background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
   .pal-row:hover{background:rgba(168,85,247,.08);border-color:rgba(168,85,247,.25);}
   .pal-row.sel{background:rgba(168,85,247,.16);border-color:#A855F7;}
-  .pal-row-w{font-family:'Syne',sans-serif;font-weight:900;font-size:14px;letter-spacing:1.4px;
+  .pal-row-w{font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;letter-spacing:1.4px;
     color:#F0E8FF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .pal-row-n{font-size:9px;color:rgba(240,232,255,.32);margin-top:1px;}
   @media (max-width:1040px){
@@ -306,7 +306,7 @@ const css = `
     padding:16px;background:rgba(4,2,10,.72);backdrop-filter:blur(3px);}
   .dd-modal{width:100%;max-width:560px;max-height:calc(100vh - 32px);overflow-y:auto;padding:18px;border-radius:16px;
     background:#120A20;border:1px solid rgba(168,85,247,.35);box-shadow:0 20px 60px rgba(0,0,0,.6);}
-  .dd-modal-t{font-family:Syne,sans-serif;font-weight:900;font-size:15px;color:#F0E8FF;margin-bottom:12px;}
+  .dd-modal-t{font-family:'DM Sans',sans-serif;font-weight:700;font-size:15px;color:#F0E8FF;margin-bottom:12px;}
   @media (max-width:1040px){ .dd-split{grid-template-columns:1fr;} .dd-lib-list{max-height:340px;} }
   @media (max-width:360px){ .dd-actions{grid-template-columns:1fr;} }
 
@@ -330,14 +330,14 @@ const css = `
     background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
   .sum-obj:hover{background:rgba(255,149,0,.08);border-color:rgba(255,149,0,.3);}
   .sum-obj.sel{background:rgba(255,149,0,.18);border-color:#FF9500;box-shadow:0 0 0 1px #FF9500 inset;}
-  .sum-obj-n{font-family:'Syne',sans-serif;font-weight:900;font-size:18px;color:#F0E8FF;}
+  .sum-obj-n{font-family:'DM Sans',sans-serif;font-weight:700;font-size:18px;color:#F0E8FF;}
   .sum-obj.sel .sum-obj-n{color:#FF9500;}
   .sum-obj-x{position:absolute;top:2px;right:2px;width:16px;height:16px;padding:0;border-radius:5px;
     font-size:8px;line-height:16px;cursor:pointer;color:rgba(255,45,120,.7);
     background:rgba(255,45,120,.06);border:1px solid rgba(255,45,120,.2);}
   .sum-obj-x:disabled{opacity:.4;cursor:default;}
   .sum-auto{display:flex;align-items:center;justify-content:center;height:40px;margin-bottom:8px;
-    border-radius:10px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:900;font-size:13px;
+    border-radius:10px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:700;font-size:13px;
     letter-spacing:.8px;color:rgba(240,232,255,.7);transition:background .15s,border-color .15s;
     background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.1);}
   .sum-auto:hover{background:rgba(255,149,0,.08);border-color:rgba(255,149,0,.3);}
@@ -362,7 +362,7 @@ const css = `
     background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
   .rey-row:hover{background:rgba(255,214,0,.08);border-color:rgba(255,214,0,.25);}
   .rey-row.sel{background:rgba(255,214,0,.16);border-color:#FFD600;}
-  .rey-row-t{font-family:'Syne',sans-serif;font-weight:800;font-size:12.5px;
+  .rey-row-t{font-family:'DM Sans',sans-serif;font-weight:700;font-size:12.5px;
     color:#F0E8FF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rey-row-d{font-size:9.5px;color:rgba(240,232,255,.32);margin-top:1px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -372,7 +372,7 @@ const css = `
   .rey-regla{padding:10px 0;border-top:1px solid rgba(240,232,255,.08);}
   .rey-regla:first-of-type{border-top:none;padding-top:2px;}
   .rey-regla-hdr{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
-  .rey-regla-t{flex:1;min-width:0;font-family:'Syne',sans-serif;font-weight:800;
+  .rey-regla-t{flex:1;min-width:0;font-family:'DM Sans',sans-serif;font-weight:700;
     font-size:12px;color:#F0E8FF;}
   .rey-regla-estado{font-size:8.5px;font-weight:800;letter-spacing:.6px;
     padding:2px 7px;border-radius:9px;white-space:nowrap;}
@@ -600,7 +600,7 @@ function LaunchPanel({sec,gameState,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,
       <div className="card">
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div className="dot-live" style={{background:enVivo?"#EF4444":"rgba(240,232,255,.2)",animation:enVivo?"blink 1.2s infinite":"none"}}/>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:13,
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:13,
             color:enVivo?"#00F5A0":"rgba(240,232,255,.3)",flex:1}}>
             {enVivo?`${LIVE_KIND_PREFIX[enVivo.kind]}: ${enVivo.label}`:"Pantalla en standby"}
           </div>
@@ -636,7 +636,7 @@ function LaunchPanel({sec,gameState,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,
           {msgCount>0&&(
             <button onClick={()=>goTo("mensajes")} style={{background:"rgba(0,229,255,.1)",
               border:"1px solid rgba(0,229,255,.25)",borderRadius:8,padding:"4px 9px",
-              color:"#00E5FF",fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:9.5,cursor:"pointer"}}>
+              color:"#00E5FF",fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:9.5,cursor:"pointer"}}>
               💬 {msgCount} pendientes
             </button>
           )}
@@ -677,7 +677,7 @@ function LaunchPanel({sec,gameState,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
           <div className="ctitle" style={{margin:0}}>Placas rápidas</div>
           <button onClick={()=>goTo("placas")} style={{background:"none",border:"none",
-            color:"rgba(0,229,255,.55)",fontSize:9.5,fontWeight:700,cursor:"pointer",fontFamily:"Syne,sans-serif"}}>
+            color:"rgba(0,229,255,.55)",fontSize:9.5,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             Ver todas →
           </button>
         </div>
@@ -731,7 +731,7 @@ function DueloLado({p, col, pct, votos, ganador}){
         <div style={{fontSize:9,fontWeight:800,letterSpacing:1,color:col}}>PARTICIPANTE {p?.slot}</div>
         <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
         <div style={{fontSize:11.5,fontWeight:700,color:col}}>{p?.name}</div>
-        <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:26,color:col}}>{pct}%</div>
+        <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:26,color:col}}>{pct}%</div>
         <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>{votos} aplauso{votos===1?"":"s"}</div>
       </div>
     </div>
@@ -765,7 +765,7 @@ function DueloReglasCard({col, enJuego}){
   };
 
   const inputStyle = {width:74,padding:"7px 9px",borderRadius:9,fontSize:13,
-    fontFamily:"Syne,sans-serif",fontWeight:800,textAlign:"center",
+    fontFamily:"'DM Sans',sans-serif",fontWeight:700,textAlign:"center",
     background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.12)",color:"#F0E8FF"};
 
   if (loading) return (
@@ -1239,7 +1239,7 @@ function DueloPanel({sec, controls, sessionId, gameState}){
             <div className="card" style={{marginBottom:10,borderColor:"rgba(255,45,120,.25)"}}>
               <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
                 <div className="ctitle" style={{margin:0}}>Votación en curso</div>
-                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:16,
+                <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:16,
                   color: seg!=null && seg<=10 ? "#FF2D78" : "#F0E8FF"}}>
                   {seg==null ? "Sin límite de tiempo" : seg>0 ? `⏱ ${formatoReloj(seg)}` : "Tiempo cumplido…"}
                 </div>
@@ -1260,7 +1260,7 @@ function DueloPanel({sec, controls, sessionId, gameState}){
               <div className="ctitle">Resultado</div>
               <div style={{textAlign:"center",marginBottom:12}}>
                 <div style={{fontSize:34,lineHeight:1}}>{resultado==="tie"?"🤝":"🏆"}</div>
-                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
+                <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:17,
                   color:resultado==="tie"?"#FFD600":"#00F5A0",marginTop:6}}>
                   {resultado==="tie" ? "Empate"
                     : resultado==="p1" ? `Ganó ${d1?.name}`
@@ -1485,7 +1485,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
         <div style={{display:"flex", alignItems:"center", gap:8, marginBottom: enElAire ? 10 : 0}}>
           <div className="dot-live" style={{background: enVivo ? "#EF4444" : enElAire ? COL : "rgba(240,232,255,.2)",
             animation: enVivo ? "blink 1.2s infinite" : "none"}}/>
-          <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:12.5, flex:1,
+          <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:12.5, flex:1,
             color: enElAire ? "#00F5A0" : "rgba(240,232,255,.3)"}}>
             {!enElAire ? "Fuera del aire — la TV está en DJ Democracy"
               : enVivo ? "EN VIVO: " + (proyectado.name || "participante en escenario")
@@ -1607,7 +1607,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
                 background:`${v.col}0F`, border:`1px solid ${v.col}33`,
               }}>
                 <div style={{fontSize:18, marginBottom:2}}>{v.ico}</div>
-                <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:20, color:v.col}}>
+                <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:20, color:v.col}}>
                   {v.pct}%
                 </div>
                 <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)"}}>
@@ -2427,7 +2427,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
       {!premioElegido ? (
         <div style={{textAlign:"center",padding:"20px 12px"}}>
           <div style={{fontSize:26,marginBottom:7,opacity:.45}}>🎟️</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:13.5,
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:13.5,
             color:"rgba(240,232,255,.6)",marginBottom:5}}>
             Elegí un premio de la biblioteca
           </div>
@@ -2438,7 +2438,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
       ) : (
         <div style={{padding:"10px 12px",borderRadius:11,textAlign:"center",
           background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.28)"}}>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,color:"#FFD600",
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:18,color:"#FFD600",
             lineHeight:1.25,wordBreak:"break-word"}}>
             {premioElegido.nombre}
           </div>
@@ -2764,7 +2764,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
                 <div style={{padding:"12px",background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.25)",
                   borderRadius:11,marginBottom:12,textAlign:"center"}}>
                   <div style={{fontSize:28,marginBottom:4}}>🎰</div>
-                  <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
+                  <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:15,
                     background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
                     WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
                     REY DEL ORTO
@@ -2807,7 +2807,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
       {phase==="launched"&&(
         <div className="card" style={{borderColor:"rgba(255,214,0,.3)"}}>
           <div style={{textAlign:"center",padding:"8px 0"}}>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:64,color:"#FFD600"}}>
+            <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:64,color:"#FFD600"}}>
               {cd}
             </div>
             <div style={{fontSize:11,fontWeight:700,color:"rgba(240,232,255,.4)",letterSpacing:2}}>
@@ -2881,7 +2881,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
             <div className="card" style={{borderColor:"rgba(255,214,0,.35)"}}>
               <div style={{textAlign:"center",padding:"4px 0 10px"}}>
                 <div style={{fontSize:34,marginBottom:6}}>👑</div>
-                <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:19,color:"#FFD600",
+                <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:19,color:"#FFD600",
                   textTransform:"uppercase",letterSpacing:.5}}>
                   Sorteo cancelado
                 </div>
@@ -2940,7 +2940,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
       {phase==="winner"&&(
         <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.3)"}}>
           <div style={{fontSize:36,marginBottom:8}}>🏆</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#00F5A0",marginBottom:4}}>
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,color:"#00F5A0",marginBottom:4}}>
             {winnerName || "¡GANADOR!"}
           </div>
           <div style={{fontSize:11,color:"rgba(240,232,255,.4)",marginBottom:4}}>
@@ -3296,7 +3296,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
                   <span style={{fontSize:9, fontWeight:400, color:"rgba(240,232,255,.3)"}}> · inactivo</span>
                 )}
               </div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:19,
+              <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:19,
                 color:"rgba(240,232,255,.45)"}}>{a.assigned_number}</div>
             </div>
           );
@@ -3344,7 +3344,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
           {cancelada && (
             <div style={{padding:"11px 12px", borderRadius:11, marginBottom:12,
               background:"rgba(255,149,0,.08)", border:"1px solid rgba(255,149,0,.28)"}}>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:12.5,
+              <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:12.5,
                 color:COL, marginBottom:3}}>
                 RONDA FINALIZADA
               </div>
@@ -3360,7 +3360,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
             <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
               Participantes conectados
             </div>
-            <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22,
+            <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:22,
               color: activos >= 2 ? COL : "rgba(240,232,255,.25)"}}>{activos}</div>
             <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
               onClick={leerConectados}>↻</button>
@@ -3393,7 +3393,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
             </div>
             <div style={{textAlign:"center", padding:"6px 0 12px"}}>
               <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>OBJETIVO</div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:64, color:COL, lineHeight:1}}>
+              <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:64, color:COL, lineHeight:1}}>
                 {objetivo ?? "—"}
               </div>
             </div>
@@ -3403,7 +3403,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
               <div style={{flex:1, fontSize:11, color:"rgba(240,232,255,.55)"}}>
                 Participantes conectados
               </div>
-              <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:16, color:COL}}>{activos}</div>
+              <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:16, color:COL}}>{activos}</div>
               <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
                 onClick={leerConectados}>↻</button>
             </div>
@@ -3662,7 +3662,7 @@ function SumaReglasCard({col}){
           <input value={minInput} onChange={(e) => setMinInput(e.target.value)}
             inputMode="numeric" placeholder="2"
             style={{width:74, padding:"7px 9px", borderRadius:9, fontSize:13,
-              fontFamily:"Syne,sans-serif", fontWeight:800, textAlign:"center",
+              fontFamily:"'DM Sans',sans-serif", fontWeight:700, textAlign:"center",
               background:"rgba(240,232,255,.05)", border:"1px solid rgba(240,232,255,.12)",
               color:"#F0E8FF"}}/>
           <button className="btn btn-g" style={{padding:"7px 14px", fontSize:11}}
@@ -3999,7 +3999,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                   <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
                     Participantes conectados
                   </div>
-                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22, color:COL}}>{activos}</div>
+                  <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:22, color:COL}}>{activos}</div>
                   <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
                     onClick={leerConectados}>↻</button>
                 </div>
@@ -4038,7 +4038,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                     resolver en el escenario. Al cliente no, sólo a la TV. */}
                 <div style={{textAlign:"center", padding:"4px 0 12px"}}>
                   <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)", letterSpacing:1.4}}>PALABRA EN JUEGO</div>
-                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:38, color:COL,
+                  <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:38, color:COL,
                     letterSpacing:4, lineHeight:1.2}}>
                     {objetivo || "—"}
                   </div>
@@ -4050,7 +4050,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                   <div style={{flex:1, fontSize:11, color:"rgba(240,232,255,.55)"}}>
                     Participantes conectados
                   </div>
-                  <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:16, color:COL}}>{activos}</div>
+                  <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:16, color:COL}}>{activos}</div>
                   <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
                     onClick={leerConectados}>↻</button>
                 </div>
@@ -4068,7 +4068,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                       padding:"5px 10px", borderRadius:9,
                       background: cuantos > 0 ? "rgba(168,85,247,.12)" : "rgba(255,45,120,.1)",
                       border: `1px solid ${cuantos > 0 ? "rgba(168,85,247,.35)" : "rgba(255,45,120,.4)"}`}}>
-                      <span style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:15,
+                      <span style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:15,
                         color: cuantos > 0 ? COL : "#FF2D78"}}>{letra}</span>
                       <span style={{fontSize:11, color:"rgba(240,232,255,.45)"}}>× {cuantos}</span>
                     </div>
@@ -4105,7 +4105,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                             <span style={{fontSize:9, fontWeight:400, color:"rgba(240,232,255,.3)"}}> · inactivo</span>
                           )}
                         </div>
-                        <div style={{fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:19,
+                        <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:19,
                           color:"rgba(240,232,255,.45)"}}>{a.assigned_letter}</div>
                       </div>
                     );
@@ -4375,7 +4375,7 @@ function PalabraReglasCard({col, palabraRef, enJuego}){
             onKeyDown={(e) => { if (e.key === "Enter") guardarMinimo(); }}
             inputMode="numeric" placeholder="—" disabled={guardando}
             style={{width:74, padding:"7px 9px", borderRadius:9, fontSize:13,
-              fontFamily:"Syne,sans-serif", fontWeight:800, textAlign:"center",
+              fontFamily:"'DM Sans',sans-serif", fontWeight:700, textAlign:"center",
               background:"rgba(240,232,255,.05)",
               border:`1px solid ${sucio ? "rgba(255,214,0,.45)" : "rgba(240,232,255,.12)"}`,
               color:"#F0E8FF"}}/>
@@ -4964,7 +4964,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
                   border:"1px solid rgba(240,232,255,.07)",borderRadius:9,marginBottom:5}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
                     <div style={{flex:1,minWidth:0,fontSize:11.5,fontWeight:600,color:"#F0E8FF",lineHeight:1.35}}>
-                      <span style={{fontFamily:"Syne,sans-serif",fontWeight:900,color:"rgba(240,232,255,.35)"}}>
+                      <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,color:"rgba(240,232,255,.35)"}}>
                         {i+1}.
                       </span> {q.text}
                     </div>
@@ -5014,7 +5014,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
                   <div key={i} style={{flex:1,borderRadius:10,padding:"8px",textAlign:"center",
                     background:`${t.col}10`,border:`1px solid ${t.col}33`}}>
                     <div style={{fontSize:10,fontWeight:700,color:t.col,marginBottom:4}}>{t.name}</div>
-                    <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:t.col}}>{t.pct}%</div>
+                    <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,color:t.col}}>{t.pct}%</div>
                     <div style={{height:5,background:"rgba(240,232,255,.06)",borderRadius:3,marginTop:5}}>
                       <div style={{height:"100%",width:t.pct+"%",background:t.col,borderRadius:3,transition:"width .6s"}}/>
                     </div>
@@ -5060,7 +5060,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
           {phase==="finished"&&(
             <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.25)"}}>
               <div style={{fontSize:32,marginBottom:8}}>🏆</div>
-              <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:17,
+              <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:17,
                 color:winnerTeam==="membrillo"?"#FFD600":"#FF9500",marginBottom:4}}>
                  {winnerTeam ? (winnerTeam==="batata"?"🍠 Team Batata ganó!":"🍋 Team Membrillo ganó!") : "🤝 Empate"}
               </div>
@@ -5173,7 +5173,7 @@ function MensajesPanel({sec,zocaloOn,setZocaloOn,pending,approved,approve,reject
       {!pending.length&&!approved.length&&(
         <div style={{textAlign:"center",padding:"28px",color:"rgba(240,232,255,.2)"}}>
           <div style={{fontSize:32,marginBottom:8,opacity:.3}}>💬</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontSize:12,fontWeight:800}}>Sin mensajes todavía</div>
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700}}>Sin mensajes todavía</div>
         </div>
       )}
     </div>
@@ -5921,7 +5921,7 @@ function PlacasPanel({sec, controls}){
           <img src={LOGO} alt="" style={{height:40,objectFit:"contain",marginBottom:6,
             filter:"drop-shadow(0 0 8px rgba(255,214,0,.4))"}}
             onError={e=>{e.target.style.display="none";}}/>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:15,
             background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
             WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
             {customMsg||"Mensaje"}
@@ -5943,7 +5943,7 @@ function PlacasPanel({sec, controls}){
         <div style={{padding:"12px",borderRadius:10,textAlign:"center",marginBottom:8,
           background:"linear-gradient(160deg,#001A1A,#001A2E)",border:"1px solid rgba(0,229,255,.2)"}}>
           <div style={{fontSize:28,marginBottom:4}}>{promoEmoji}</div>
-          <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:15,
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:15,
             background:"linear-gradient(135deg,#00E5FF,#00F5A0)",WebkitBackgroundClip:"text",
             WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
             {promoTitle||"Tu promo"}
@@ -5960,7 +5960,7 @@ function PlacasPanel({sec, controls}){
         <input className="inp" placeholder="Condiciones / subtítulo" value={promoSub}
           onChange={e=>setPromoSub(e.target.value.slice(0,60))}/>
         <button className="btn btn-full" style={{background:"linear-gradient(135deg,#00E5FF,#00F5A0)",
-          color:"#08040F",fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:12}}
+          color:"#08040F",fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:12}}
           onClick={()=>{ controls?.sendPlaca("promo", { emoji: promoEmoji, title: promoTitle, subtitle: promoSub }); notify(`Promo: ${promoTitle}`); }}>
           🖼️ Enviar promo a pantalla
         </button>
@@ -6004,7 +6004,7 @@ function MenuPanel({sec}){
       {Object.entries(menu).map(([cat,items])=>(
         <div className="card" key={cat}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:14,color:"#FFD600"}}>{cat}</div>
+            <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,color:"#FFD600"}}>{cat}</div>
             <div style={{fontSize:10,color:"rgba(240,232,255,.3)"}}>{items.length} items</div>
           </div>
           {items.map(item=>(
@@ -6090,7 +6090,7 @@ function DashboardPanel({sec, connectedCount}){
         {stats.map((s,i)=>(
           <div key={i} style={{background:s.bg,border:`1px solid ${s.c}28`,borderRadius:13,
             padding:"12px 14px",animation:`fadeUp .3s ease ${i*.07}s both`}}>
-            <div style={{fontFamily:"Syne,sans-serif",fontSize:30,fontWeight:900,color:s.c,lineHeight:1}}>{s.v}</div>
+            <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:30,fontWeight:700,color:s.c,lineHeight:1}}>{s.v}</div>
             <div style={{fontSize:9.5,color:"rgba(240,232,255,.38)",marginTop:3}}>{s.l}</div>
           </div>
         ))}
@@ -6133,7 +6133,7 @@ function LoginAdmin(){
   const inputStyle = {
     width:"100%", padding:"11px 13px", marginBottom:10, borderRadius:10,
     background:"rgba(240,232,255,.05)", border:"1px solid rgba(240,232,255,.12)",
-    color:C.white, fontFamily:"'Space Grotesk',sans-serif", fontSize:13, outline:"none",
+    color:C.white, fontFamily:"'DM Sans',sans-serif", fontSize:13, outline:"none",
   };
 
   return(
@@ -6144,7 +6144,7 @@ function LoginAdmin(){
         <form onSubmit={submit} style={{width:320,maxWidth:"90vw",background:C.bg2,
           border:"1px solid rgba(155,47,255,.18)",borderRadius:18,padding:"28px 24px",
           boxShadow:"0 12px 48px rgba(0,0,0,.5)"}}>
-          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:22,
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,
             color:C.yellow,textAlign:"center",marginBottom:4}}>BizarrApp</div>
           <div style={{fontSize:11,color:"rgba(240,232,255,.4)",textAlign:"center",
             marginBottom:22,letterSpacing:1,textTransform:"uppercase"}}>
@@ -6159,7 +6159,7 @@ function LoginAdmin(){
             textAlign:"center"}}>{err}</div>}
           <button type="submit" disabled={loading} style={{width:"100%",padding:12,
             borderRadius:10,border:"none",cursor:loading?"not-allowed":"pointer",
-            opacity:loading?.5:1,fontFamily:"'Syne',sans-serif",fontWeight:800,
+            opacity:loading?.5:1,fontFamily:"'DM Sans',sans-serif",fontWeight:700,
             fontSize:13,color:C.bg,background:C.pink,
             boxShadow:"0 4px 18px rgba(255,45,120,.3)"}}>
             {loading?"Ingresando…":"Iniciar sesión"}
@@ -6333,7 +6333,7 @@ export default function AdminPanel(){
       <style>{css}</style>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
         justifyContent:"center",background:C.bg,color:"rgba(240,232,255,.4)",
-        fontFamily:"'Space Grotesk',sans-serif",fontSize:13}}>
+        fontFamily:"'DM Sans',sans-serif",fontSize:13}}>
         Cargando…
       </div>
     </>
@@ -6344,7 +6344,7 @@ export default function AdminPanel(){
       <style>{css}</style>
       <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
         justifyContent:"center",background:C.bg,color:"rgba(240,232,255,.4)",
-        fontFamily:"'Space Grotesk',sans-serif",fontSize:13}}>
+        fontFamily:"'DM Sans',sans-serif",fontSize:13}}>
         Verificando permisos…
       </div>
     </>
@@ -6356,7 +6356,7 @@ export default function AdminPanel(){
         alignItems:"center",justifyContent:"center",background:C.bg,padding:20,
         textAlign:"center"}}>
         <div style={{fontSize:40,marginBottom:14}}>🚫</div>
-        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:900,fontSize:18,
+        <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:18,
           color:C.white,marginBottom:6}}>Sin permisos de administrador</div>
         <div style={{fontSize:12,color:"rgba(240,232,255,.4)",marginBottom:20,
           maxWidth:280}}>
@@ -6364,7 +6364,7 @@ export default function AdminPanel(){
         </div>
         <button onClick={async()=>{ await supabase.auth.signOut(); }}
           style={{padding:"10px 18px",borderRadius:10,border:"none",cursor:"pointer",
-            fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:12,
+            fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:12,
             color:C.bg,background:C.pink}}>
           Cerrar sesión
         </button>

@@ -42,7 +42,7 @@ export default function AjustesPanel(contexto) {
           ← Ajustes
         </button>
         <div style={{ ...card, borderColor: "rgba(155,47,255,.35)", background: "rgba(155,47,255,.06)", marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 900, marginBottom: 6 }}>
+          <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
             {cat.icon} {cat.label}
           </div>
           <p style={{ color: "rgba(240,232,255,.58)", fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>{cat.descripcion}</p>
@@ -57,7 +57,7 @@ export default function AjustesPanel(contexto) {
   return (
     <div style={{ maxWidth: 920 }}>
       <div style={{ ...card, borderColor: "rgba(155,47,255,.35)", background: "rgba(155,47,255,.06)" }}>
-        <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 900, marginBottom: 8 }}>
+        <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
           Ajustes
         </div>
         <p style={{ color: "rgba(240,232,255,.58)", fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>

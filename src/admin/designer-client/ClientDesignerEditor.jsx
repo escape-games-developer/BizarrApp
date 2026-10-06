@@ -46,7 +46,7 @@ export default function ClientDesignerEditor({ design, section, tabs, savedDesig
     <div {...tabpanelProps} style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 10px" }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, textTransform: "uppercase", color: "rgba(240,232,255,.45)" }}>{section.label}</span>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 17, fontWeight: 900, color: "#F0E8FF" }}>{design.name}</span>
+        <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 17, fontWeight: 700, color: "#F0E8FF" }}>{design.name}</span>
         <span style={{ fontSize: 10.5, color: "rgba(240,232,255,.4)", fontFamily: "ui-monospace,Consolas,monospace" }}>{design.id}</span>
         {design.isActive && <span style={{ fontSize: 11.5, color: "#00F5A0" }}>· Es el diseño que hoy ve la app Cliente.</span>}
         <span style={{ flex: 1 }}/>

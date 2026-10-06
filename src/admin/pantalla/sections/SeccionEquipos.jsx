@@ -127,7 +127,7 @@ export default function SeccionEquipos({ event, refresh, onError }) {
               }}
               style={{ flex: 1, minWidth: 0, padding: "5px 8px", fontSize: 11.5 }} />
             <span style={{
-              fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 12,
+              fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 12,
               color: P.amarillo, flexShrink: 0, minWidth: 30, textAlign: "right",
             }} title="Puntos acumulados — los lleva el motor">{t.points ?? 0}</span>
             <button type="button" className="pdj-ico pdj-ico-peligro" disabled={ocupado || off}

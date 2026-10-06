@@ -62,7 +62,7 @@ export default function SeccionCodigo({ event, refresh, refreshEvents }) {
         hint="Seis caracteres, sin I, O, 0 ni 1 — se confunden de lejos. Al cambiarlo, los links y QR ya repartidos dejan de servir.">
         <input className="pdj-input" value={codigo} maxLength={6}
           onChange={(e) => setCodigo(limpiar(e.target.value))}
-          style={{ fontFamily: "'Syne',sans-serif", fontWeight: 900, letterSpacing: 4, fontSize: 15 }} />
+          style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700, letterSpacing: 4, fontSize: 15 }} />
       </Campo>
 
       {!valido && (

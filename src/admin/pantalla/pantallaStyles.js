@@ -17,7 +17,7 @@ const pantallaCss = `
   .pdj-hdr-live{border-color:rgba(0,245,160,.4);
     background:linear-gradient(135deg,rgba(0,245,160,.13),rgba(155,47,255,.12) 60%,rgba(8,4,15,0));}
   .pdj-hdr-main{flex:1 1 210px;min-width:0;}
-  .pdj-hdr-name{font-family:'Syne',sans-serif;font-weight:900;font-size:19px;color:#F0E8FF;
+  .pdj-hdr-name{font-family:'DM Sans',sans-serif;font-weight:700;font-size:19px;color:#F0E8FF;
     line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .pdj-hdr-meta{font-size:10.5px;color:rgba(240,232,255,.42);margin-top:4px;
     display:flex;gap:9px;flex-wrap:wrap;align-items:center;}
@@ -25,13 +25,13 @@ const pantallaCss = `
   .pdj-hdr-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
 
   .pdj-estado{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:20px;
-    font-family:'Syne',sans-serif;font-weight:900;font-size:11px;letter-spacing:1.2px;flex-shrink:0;}
+    font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.2px;flex-shrink:0;}
   .pdj-estado .pdj-punto{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
   .pdj-estado-live .pdj-punto{animation:pdjLatido 1.6s ease-in-out infinite;}
   @keyframes pdjLatido{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
 
   /* ── Código del evento ──────────────────────────────────────────────── */
-  .pdj-codigo{font-family:'Syne',sans-serif;font-weight:900;letter-spacing:6px;color:#FFD600;
+  .pdj-codigo{font-family:'DM Sans',sans-serif;font-weight:700;letter-spacing:6px;color:#FFD600;
     text-shadow:0 0 22px rgba(255,214,0,.35);line-height:1;}
 
   /* ── Cards del módulo ───────────────────────────────────────────────── */
@@ -40,7 +40,7 @@ const pantallaCss = `
   .pdj-card-acento::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
     background:linear-gradient(90deg,#9B2FFF,#FF2D78);opacity:.7;}
   .pdj-card-titulo{display:flex;align-items:center;gap:7px;margin-bottom:11px;}
-  .pdj-card-titulo h4{font-family:'Syne',sans-serif;font-weight:900;font-size:12.5px;
+  .pdj-card-titulo h4{font-family:'DM Sans',sans-serif;font-weight:700;font-size:12.5px;
     letter-spacing:.4px;color:#F0E8FF;margin:0;flex:1;}
   .pdj-card-titulo .pdj-hint{font-size:9.5px;color:rgba(240,232,255,.3);font-weight:600;}
   .pdj-sub{font-size:10.5px;color:rgba(240,232,255,.35);line-height:1.55;margin-bottom:10px;}
@@ -48,7 +48,7 @@ const pantallaCss = `
   /* ── Métricas ───────────────────────────────────────────────────────── */
   .pdj-metricas{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:7px;}
   .pdj-metrica{border-radius:12px;padding:10px 11px;border:1px solid transparent;}
-  .pdj-metrica-v{font-family:'Syne',sans-serif;font-size:23px;font-weight:900;line-height:1;
+  .pdj-metrica-v{font-family:'DM Sans',sans-serif;font-size:23px;font-weight:700;line-height:1;
     transition:color .25s ease;}
   .pdj-metrica-l{font-size:9px;color:rgba(240,232,255,.4);margin-top:4px;letter-spacing:.3px;}
 
@@ -67,7 +67,7 @@ const pantallaCss = `
   .pdj-ahora-cover-vacia{width:96px;height:96px;border-radius:14px;flex-shrink:0;display:flex;
     align-items:center;justify-content:center;font-size:34px;opacity:.3;
     background:rgba(240,232,255,.05);border:1px dashed rgba(240,232,255,.14);}
-  .pdj-ahora-tit{font-family:'Syne',sans-serif;font-weight:900;font-size:22px;color:#FFD600;
+  .pdj-ahora-tit{font-family:'DM Sans',sans-serif;font-weight:700;font-size:22px;color:#FFD600;
     line-height:1.14;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .pdj-ahora-art{font-size:13px;color:rgba(240,232,255,.55);margin-top:3px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -86,7 +86,7 @@ const pantallaCss = `
   .pdj-controles{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;}
   .pdj-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
     padding:13px 10px;border-radius:13px;cursor:pointer;text-align:center;
-    font-family:'Syne',sans-serif;font-weight:800;font-size:11.5px;letter-spacing:.3px;
+    font-family:'DM Sans',sans-serif;font-weight:700;font-size:11.5px;letter-spacing:.3px;
     border:1.5px solid rgba(240,232,255,.12);background:rgba(240,232,255,.05);color:#F0E8FF;
     transition:transform .12s ease,background .18s,border-color .18s;}
   .pdj-btn .pdj-btn-ico{font-size:19px;line-height:1;}
@@ -107,8 +107,8 @@ const pantallaCss = `
     transition:background .3s ease,border-color .3s ease,transform .3s ease;}
   .pdj-rank-1{background:linear-gradient(90deg,rgba(255,214,0,.13),rgba(240,232,255,.03));
     border-color:rgba(255,214,0,.35);}
-  .pdj-rank-pos{width:26px;flex-shrink:0;text-align:center;font-family:'Syne',sans-serif;
-    font-weight:900;font-size:16px;color:rgba(240,232,255,.25);}
+  .pdj-rank-pos{width:26px;flex-shrink:0;text-align:center;font-family:'DM Sans',sans-serif;
+    font-weight:700;font-size:16px;color:rgba(240,232,255,.25);}
   .pdj-rank-1 .pdj-rank-pos{color:#FFD600;}
   .pdj-rank-cover{width:42px;height:42px;border-radius:9px;object-fit:cover;flex-shrink:0;}
   .pdj-rank-info{flex:1;min-width:0;}
@@ -119,14 +119,14 @@ const pantallaCss = `
   .pdj-rank-votos{display:flex;gap:9px;font-size:11px;margin-top:3px;
     color:rgba(240,232,255,.45);font-variant-numeric:tabular-nums;}
   .pdj-rank-score{flex-shrink:0;text-align:right;min-width:52px;}
-  .pdj-rank-score b{font-family:'Syne',sans-serif;font-weight:900;font-size:19px;line-height:1;
+  .pdj-rank-score b{font-family:'DM Sans',sans-serif;font-weight:700;font-size:19px;line-height:1;
     display:block;transition:color .3s ease;}
   .pdj-rank-score span{font-size:8.5px;color:rgba(240,232,255,.28);letter-spacing:.6px;}
 
   /* ── Sacar tema ─────────────────────────────────────────────────────── */
   .pdj-kick{border-radius:15px;padding:13px 14px;margin-bottom:11px;
     background:rgba(255,45,120,.06);border:1px solid rgba(255,45,120,.22);}
-  .pdj-kick-num{font-family:'Syne',sans-serif;font-weight:900;font-size:26px;color:#FF2D78;line-height:1;
+  .pdj-kick-num{font-family:'DM Sans',sans-serif;font-weight:700;font-size:26px;color:#FF2D78;line-height:1;
     font-variant-numeric:tabular-nums;}
   .pdj-kick-barra{height:8px;border-radius:5px;background:rgba(240,232,255,.08);overflow:hidden;margin-top:10px;}
   .pdj-kick-fill{height:100%;border-radius:5px;transition:width .4s ease;
@@ -171,7 +171,7 @@ const pantallaCss = `
   .pdj-campo-lbl{font-size:11px;font-weight:600;color:rgba(240,232,255,.6);margin-bottom:5px;display:block;}
   .pdj-campo-hint{font-size:9.5px;color:rgba(240,232,255,.28);line-height:1.5;margin-top:4px;}
   .pdj-input{width:100%;background:rgba(240,232,255,.05);border:1.5px solid rgba(240,232,255,.1);
-    border-radius:11px;padding:10px 12px;color:#F0E8FF;font-family:'Space Grotesk',sans-serif;
+    border-radius:11px;padding:10px 12px;color:#F0E8FF;font-family:'DM Sans',sans-serif;
     font-size:12.5px;outline:none;transition:border-color .18s,background .18s;}
   .pdj-input:focus{border-color:rgba(155,47,255,.55);background:rgba(155,47,255,.06);}
   .pdj-input::placeholder{color:rgba(240,232,255,.2);}
@@ -200,7 +200,7 @@ const pantallaCss = `
   .pdj-celda input[type=checkbox]{accent-color:#9B2FFF;cursor:pointer;width:15px;height:15px;}
   .pdj-celda input[type=number]{width:46px;padding:4px 5px;border-radius:8px;font-size:11.5px;
     text-align:center;font-weight:700;color:#FFD600;background:rgba(240,232,255,.06);
-    border:1px solid rgba(240,232,255,.1);outline:none;font-family:'Space Grotesk',sans-serif;}
+    border:1px solid rgba(240,232,255,.1);outline:none;font-family:'DM Sans',sans-serif;}
   .pdj-celda input[type=number]:disabled{opacity:.3;}
 
   /* ── Participantes ──────────────────────────────────────────────────── */
@@ -216,14 +216,14 @@ const pantallaCss = `
   /* ── Historial ──────────────────────────────────────────────────────── */
   .pdj-hist{display:flex;align-items:center;gap:11px;padding:10px 12px;margin-bottom:6px;
     border-radius:13px;background:rgba(240,232,255,.032);border:1px solid rgba(240,232,255,.07);}
-  .pdj-hist-n{width:24px;flex-shrink:0;text-align:center;font-family:'Syne',sans-serif;
-    font-weight:900;font-size:13px;color:rgba(240,232,255,.22);}
+  .pdj-hist-n{width:24px;flex-shrink:0;text-align:center;font-family:'DM Sans',sans-serif;
+    font-weight:700;font-size:13px;color:rgba(240,232,255,.22);}
   .pdj-hist-cover{width:44px;height:44px;border-radius:9px;object-fit:cover;flex-shrink:0;}
 
   /* ── Vacíos y skeletons ─────────────────────────────────────────────── */
   .pdj-vacio{text-align:center;padding:34px 18px;}
   .pdj-vacio-ico{font-size:38px;opacity:.2;margin-bottom:11px;}
-  .pdj-vacio-tit{font-family:'Syne',sans-serif;font-weight:800;font-size:13.5px;
+  .pdj-vacio-tit{font-family:'DM Sans',sans-serif;font-weight:700;font-size:13.5px;
     color:rgba(240,232,255,.45);margin-bottom:6px;}
   .pdj-vacio-txt{font-size:11.5px;color:rgba(240,232,255,.28);line-height:1.6;max-width:340px;
     margin:0 auto;}
@@ -234,7 +234,7 @@ const pantallaCss = `
 
   /* ── Botón compacto reutilizable ────────────────────────────────────── */
   .pdj-mini{padding:7px 12px;border-radius:10px;cursor:pointer;flex-shrink:0;
-    font-family:'Syne',sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.3px;
+    font-family:'DM Sans',sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.3px;
     background:rgba(240,232,255,.06);border:1.5px solid rgba(240,232,255,.12);
     color:rgba(240,232,255,.65);transition:all .16s;}
   .pdj-mini:hover:not(:disabled){background:rgba(155,47,255,.16);border-color:rgba(155,47,255,.42);color:#F0E8FF;}
@@ -281,14 +281,14 @@ const pantallaCss = `
      editor de DJ Democracy, usando los acentos violeta/fucsia de BizarrApp. */
   .pdj-editor-page,.pdj-editor-page button,.pdj-editor-page input,
   .pdj-editor-page textarea,.pdj-editor-page select{
-    font-family:Inter,'Space Grotesk',Arial,sans-serif;
+    font-family:'DM Sans',Arial,sans-serif;
   }
   .pdj-editor-page .pdj-hdr-name,
   .pdj-editor-page .pdj-card-titulo h4,
   .pdj-editor-page .pdj-sec-cab,
   .pdj-editor-page .pdj-mini,
   .pdj-editor-page .pdj-estado{
-    font-family:Inter,'Space Grotesk',Arial,sans-serif;
+    font-family:'DM Sans',Arial,sans-serif;
   }
   .pdj-editor-page .pdj-hdr-name{font-weight:700;letter-spacing:-.7px;}
   .pdj-editor-page .pdj-card-titulo h4{font-size:14px;font-weight:700;letter-spacing:-.15px;}
@@ -336,7 +336,7 @@ const pantallaCss = `
 
   /* Consola En vivo: la misma puesta al día visual que el Editor. */
   .pdj-live-page,.pdj-live-page button,.pdj-live-page input,
-  .pdj-live-page textarea,.pdj-live-page select{font-family:Inter,'Space Grotesk',Arial,sans-serif;}
+  .pdj-live-page textarea,.pdj-live-page select{font-family:'DM Sans',Arial,sans-serif;}
   .pdj-live-page .pdj-shell{display:grid;grid-template-columns:minmax(0,1fr) clamp(360px,24vw,450px);gap:30px;}
   .pdj-live-page .pdj-shell-main{display:flex;flex-direction:column;}
   .pdj-live-page .pdj-shell-side{width:auto;min-width:0;}
@@ -352,7 +352,7 @@ const pantallaCss = `
   .pdj-live-page .pdj-ahora-label{font-size:12px;font-weight:800;letter-spacing:3.4px;
     text-transform:uppercase;color:#FF2D78;margin-bottom:14px;}
   .pdj-live-page .pdj-ahora-label::before{content:'•';margin-right:9px;}
-  .pdj-live-page .pdj-ahora-tit{font-family:Inter,'Space Grotesk',Arial,sans-serif;
+  .pdj-live-page .pdj-ahora-tit{font-family:'DM Sans',Arial,sans-serif;
     font-size:clamp(30px,3vw,56px);font-weight:750;letter-spacing:-1.6px;color:#fff;}
   .pdj-live-page .pdj-ahora-art{font-size:18px;margin-top:9px;}
   .pdj-live-page .pdj-ahora-next{font-size:13px;color:rgba(240,232,255,.58);margin-top:24px;}
@@ -366,7 +366,7 @@ const pantallaCss = `
     background:#0c0c10;border-color:rgba(240,232,255,.11);}
   .pdj-live-page .pdj-live-ranking{order:3;margin-top:10px;padding:0;background:transparent;
     border:0;overflow:visible;}
-  .pdj-live-page .pdj-card-titulo h4{font-family:Inter,'Space Grotesk',Arial,sans-serif;
+  .pdj-live-page .pdj-card-titulo h4{font-family:'DM Sans',Arial,sans-serif;
     font-size:17px;letter-spacing:-.2px;}
   .pdj-live-page .pdj-controles{display:flex;gap:9px;flex-wrap:wrap;}
   .pdj-live-page .pdj-live-player-controls{display:flex;gap:9px;flex-wrap:wrap;margin-top:22px;}
@@ -379,7 +379,7 @@ const pantallaCss = `
   .pdj-live-page .pdj-live-voting-toggle.is-off{border-color:rgba(255,45,120,.45);color:#FF2D78;}
   .pdj-live-page .pdj-btn{min-height:44px;flex:0 1 auto;flex-direction:row;padding:10px 17px;
     border-radius:999px;background:#0b0b0f;border-color:rgba(240,232,255,.14);
-    font-family:Inter,'Space Grotesk',Arial,sans-serif;font-size:11px;letter-spacing:0;}
+    font-family:'DM Sans',Arial,sans-serif;font-size:11px;letter-spacing:0;}
   .pdj-live-page .pdj-btn-ico{font-size:17px;}
   .pdj-live-page .pdj-btn-principal{background:linear-gradient(135deg,#9B2FFF,#FF2D78);
     border-color:transparent;color:#fff;box-shadow:0 8px 24px rgba(155,47,255,.25);}
@@ -395,11 +395,11 @@ const pantallaCss = `
   .pdj-live-page .pdj-rank-cover{width:46px;height:46px;border-radius:12px;}
   .pdj-live-page .pdj-rank-votos{margin-top:4px;}
   .pdj-live-page .pdj-mini{min-height:38px;padding:8px 15px;border-radius:999px;
-    font-family:Inter,'Space Grotesk',Arial,sans-serif;background:#0c0c10;
+    font-family:'DM Sans',Arial,sans-serif;background:#0c0c10;
     border-color:rgba(240,232,255,.14);}
   .pdj-live-page .pdj-sec{border-radius:22px;background:#0c0d11;border-color:rgba(240,232,255,.12);}
   .pdj-live-page .pdj-sec-abierta{background:#0d0e12;border-color:rgba(155,47,255,.35);}
-  .pdj-live-page .pdj-sec-cab{padding:17px 18px;font-family:Inter,'Space Grotesk',Arial,sans-serif;}
+  .pdj-live-page .pdj-sec-cab{padding:17px 18px;font-family:'DM Sans',Arial,sans-serif;}
   .pdj-live-page .pdj-sec-cab:hover{background:rgba(155,47,255,.07);}
   .pdj-live-page .pdj-qr{padding:15px;border-radius:20px;}
   .pdj-live-page .pdj-codigo{color:#FF2D78;text-shadow:0 0 18px rgba(255,45,120,.22);}
@@ -429,7 +429,7 @@ const pantallaCss = `
     background:rgba(240,232,255,.03);overflow:hidden;}
   .pdj-sec-abierta{border-color:rgba(155,47,255,.3);background:rgba(155,47,255,.045);}
   .pdj-sec-cab{display:flex;align-items:center;gap:8px;width:100%;padding:15px 16px;cursor:pointer;
-    background:none;border:none;text-align:left;font-family:'Syne',sans-serif;font-weight:800;
+    background:none;border:none;text-align:left;font-family:'DM Sans',sans-serif;font-weight:700;
     font-size:13px;color:#F0E8FF;transition:background .14s;}
   .pdj-sec-cab:hover{background:rgba(155,47,255,.1);}
   .pdj-sec-cab h5{margin:0;flex:1;min-width:0;font:inherit;overflow:hidden;text-overflow:ellipsis;}
@@ -461,7 +461,7 @@ const pantallaCss = `
   .pdj-plbar .pdj-mini{min-height:42px;border-radius:14px;padding-left:17px;padding-right:17px;}
   .pdj-select-all{display:flex;align-items:center;width:100%;padding:11px 14px;margin:0 0 16px;
     border-radius:14px;background:rgba(240,232,255,.025);border:1px solid rgba(240,232,255,.1);
-    color:rgba(240,232,255,.58);font-family:'Space Grotesk',sans-serif;font-size:11.5px;cursor:pointer;}
+    color:rgba(240,232,255,.58);font-family:'DM Sans',sans-serif;font-size:11.5px;cursor:pointer;}
   .pdj-select-all:hover:not(:disabled){border-color:rgba(155,47,255,.35);color:#F0E8FF;}
   .pdj-select-all:disabled{opacity:.4;cursor:not-allowed;}
   .pdj-plsel{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:8px 11px;
@@ -481,7 +481,7 @@ const pantallaCss = `
     padding:0 1px;user-select:none;}
   .pdj-fila-asa:active{cursor:grabbing;}
   .pdj-fila-pos{width:38px;flex-shrink:0;padding:3px 2px;border-radius:7px;text-align:center;
-    font-family:'Syne',sans-serif;font-weight:800;font-size:11px;color:#FFD600;
+    font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px;color:#FFD600;
     background:rgba(255,214,0,.08);border:1px solid rgba(255,214,0,.16);outline:none;}
   .pdj-fila-pos:focus{border-color:rgba(255,214,0,.5);}
   .pdj-fila-cover{width:34px;height:34px;border-radius:8px;object-fit:cover;flex-shrink:0;}
@@ -503,7 +503,7 @@ const pantallaCss = `
   /* ── Pestañas del módulo ────────────────────────────────────────────── */
   .pdj-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;}
   .pdj-tab{flex:1 1 auto;padding:9px 12px;border-radius:11px;cursor:pointer;white-space:nowrap;
-    font-family:'Space Grotesk',sans-serif;font-size:11.5px;font-weight:700;
+    font-family:'DM Sans',sans-serif;font-size:11.5px;font-weight:700;
     background:rgba(240,232,255,.035);border:1.5px solid rgba(240,232,255,.08);
     color:rgba(240,232,255,.45);transition:all .16s;}
   .pdj-tab:hover{border-color:rgba(155,47,255,.32);color:rgba(240,232,255,.75);}

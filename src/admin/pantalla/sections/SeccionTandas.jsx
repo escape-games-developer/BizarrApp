@@ -140,7 +140,7 @@ export default function SeccionTandas({ event, refresh, onError }) {
             <span className="pdj-fila-asa" title="Arrastrar para reordenar la cola"
               aria-hidden="true">⠿</span>
             <span style={{
-              fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 10,
+              fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 10,
               color: P.amarillo, width: 14, flexShrink: 0,
             }}>{i + 1}</span>
             {c.youtube_id && (

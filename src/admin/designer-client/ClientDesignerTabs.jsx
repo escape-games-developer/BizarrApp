@@ -29,7 +29,7 @@ export default function ClientDesignerTabs({ sections, activeId, onChange, panel
             aria-selected={active} aria-controls={panelId} tabIndex={active ? 0 : -1}
             onClick={() => onChange(s.id)}
             style={{ flex: "0 0 auto", padding: "8px 16px", borderRadius: 10, cursor: "pointer",
-              fontFamily: "'Syne',sans-serif", fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap",
+              fontFamily: "'DM Sans',sans-serif", fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap",
               border: `1px solid ${active ? "rgba(155,47,255,.55)" : "transparent"}`,
               background: active ? "rgba(155,47,255,.18)" : "transparent",
               color: active ? "#F0E8FF" : "rgba(240,232,255,.5)" }}>

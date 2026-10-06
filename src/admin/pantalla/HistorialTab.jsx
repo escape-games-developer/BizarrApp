@@ -94,7 +94,7 @@ export default function HistorialTab({ history }) {
 
               <div style={{ flexShrink: 0, textAlign: "right" }}>
                 <b style={{
-                  fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 18,
+                  fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 18,
                   display: "block", lineHeight: 1, color: colorScore(h.final_score),
                 }}>{conSigno(h.final_score)}</b>
                 <span style={{ fontSize: 8, color: P.tenue2, letterSpacing: ".5px" }}>GANÓ CON</span>

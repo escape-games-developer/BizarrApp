@@ -81,7 +81,7 @@ export default function SeccionLinkCorto({ event, onError }) {
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 12,
+              fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 12,
               color: P.amarillo, letterSpacing: 1.5,
             }}>/t/{l.code}</div>
             <div style={{ fontSize: 9, color: P.tenue2 }}>
@@ -111,8 +111,8 @@ export default function SeccionLinkCorto({ event, onError }) {
             aria-label="Código del link corto"
             onChange={(e) => setCodigo(limpiar(e.target.value))}
             style={{
-              flex: 1, minWidth: 0, fontFamily: "'Syne',sans-serif",
-              fontWeight: 900, letterSpacing: 3, fontSize: 13,
+              flex: 1, minWidth: 0, fontFamily: "'DM Sans',sans-serif",
+              fontWeight: 700, letterSpacing: 3, fontSize: 13,
             }} />
           <button type="button" className="pdj-mini" disabled={ocupado}
             title="Generar otro código" onClick={() => setCodigo(nuevoCodigo())}>🎲</button>

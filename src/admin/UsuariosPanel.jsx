@@ -150,7 +150,7 @@ export default function UsuariosPanel() {
     <div style={{ maxWidth: 1000 }}>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 900 }}>Usuarios del sistema</div>
+          <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 20, fontWeight: 700 }}>Usuarios del sistema</div>
           <div style={{ fontSize: 12, color: "rgba(240,232,255,.5)", marginTop: 4 }}>
             Cuentas con acceso al panel de administración.
             {usuarios && !error ? ` · ${usuarios.length} ${usuarios.length === 1 ? "usuario" : "usuarios"}` : ""}

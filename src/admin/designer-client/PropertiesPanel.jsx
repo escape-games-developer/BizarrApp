@@ -91,7 +91,7 @@ export default function PropertiesPanel({ document, registry, node, onChange }) 
     <div data-properties-for={node.id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={box}>
         <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: .6, color: "#00E5FF", marginBottom: 4 }}>PROPIEDADES · DISEÑO</div>
-        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 900, fontSize: 15, color: "#F0E8FF" }}>{node.name || def.label}</div>
+        <div style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 15, color: "#F0E8FF" }}>{node.name || def.label}</div>
         <div style={{ fontSize: 11, color: "rgba(240,232,255,.45)", marginBottom: 6 }}>
           {def.label} · {def.kind === "system" ? "componente de sistema" : "componente básico"}
         </div>
