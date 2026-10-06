@@ -32,7 +32,7 @@ export default function ForgotPasswordView({ onBack, initialEmail = "" }) {
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
       justifyContent:"center", minHeight:"60vh", padding:"0 4px", textAlign:"center" }}>
       <div style={{ fontSize:44, marginBottom:14 }}>📬</div>
-      <div style={{ fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:21,
+      <div style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:21,
         color:"#FFD700", marginBottom:10 }}>
         Revisá tu mail
       </div>
@@ -58,7 +58,7 @@ export default function ForgotPasswordView({ onBack, initialEmail = "" }) {
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
       justifyContent:"center", minHeight:"60vh", padding:"0 4px" }}>
       <div style={{ fontSize:40, marginBottom:12 }}>🤔</div>
-      <div style={{ fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:21,
+      <div style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:21,
         color:"#FFD700", marginBottom:6, textAlign:"center" }}>
         ¿Te olvidaste la contraseña?
       </div>

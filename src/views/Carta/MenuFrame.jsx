@@ -84,7 +84,7 @@ export default function MenuFrame({ visible = true }) {
   };
 
   const titulo = {
-    fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14,
+    fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 14,
     color: "rgba(255,215,0,.7)", maxWidth: 280, lineHeight: 1.4,
   };
 
@@ -132,7 +132,7 @@ export default function MenuFrame({ visible = true }) {
         <div style={capa}>
           <div style={{ fontSize: 38 }}>📋</div>
           <div style={{
-            fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15,
+            fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 15,
             color: "#F5E6C0",
           }}>
             No pudimos cargar el menú.
@@ -147,7 +147,7 @@ export default function MenuFrame({ visible = true }) {
                 padding: "11px 18px", borderRadius: 11, cursor: "pointer",
                 background: "rgba(255,215,0,.08)", border: "1px solid rgba(255,215,0,.28)",
                 color: "rgba(255,215,0,.85)",
-                fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 12.5,
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 12.5,
                 WebkitTapHighlightColor: "transparent",
               }}
             >
@@ -161,7 +161,7 @@ export default function MenuFrame({ visible = true }) {
               style={{
                 padding: "11px 18px", borderRadius: 11, textDecoration: "none",
                 background: "linear-gradient(135deg,#FFD700,#FF9500)", color: "#0D0700",
-                fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 12.5,
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 12.5,
                 WebkitTapHighlightColor: "transparent",
               }}
             >

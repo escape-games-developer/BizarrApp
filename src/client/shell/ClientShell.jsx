@@ -11,6 +11,8 @@
  *   navItems          [{ id, label, image?, icon?, locked? }] en orden
  *   activeNavId       id del botón activo
  *   onNavigate(id)    click en un botón de la navegación
+ *   onNavIntent(id)   opcional: puntero encima o dedo apoyado sobre un botón,
+ *                     antes del click (para precargar el destino)
  *   children          contenido de `main.app-content` (el único scroll)
  *
  * Las clases y medidas son las de src/constants/styles.js; el CSS global lo
@@ -18,7 +20,7 @@
  * (PushPermissionBanner, DueloTeaserBanner) quedan afuera, en App.
  */
 export default function ClientShell({
-  logoSrc, notificationSlot = null, navItems, activeNavId, onNavigate, children,
+  logoSrc, notificationSlot = null, navItems, activeNavId, onNavigate, onNavIntent, children,
 }) {
   return (
     <div className="phone-shell">
@@ -42,6 +44,8 @@ export default function ClientShell({
               aria-label={n.label}
               aria-current={isActive ? "page" : undefined}
               onClick={() => onNavigate(n.id)}
+              onPointerEnter={onNavIntent ? () => onNavIntent(n.id) : undefined}
+              onPointerDown={onNavIntent ? () => onNavIntent(n.id) : undefined}
               style={{
                 position: "relative",
                 opacity: n.locked ? 0.45 : 1,

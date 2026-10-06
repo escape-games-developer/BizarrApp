@@ -17,6 +17,7 @@ import NovedadesView from "./views/Novedades/NovedadesView";
 import JuegosView    from "./views/Juegos/JuegosView";
 import EscenarioView from "./views/Escenario/EscenarioView";
 import PantallaView  from "./views/Pantalla/PantallaView";
+import { prefetchPantalla } from "./views/Pantalla/pantallaPrefetch";
 import ProfileView, { LoginView } from "./views/Perfil/ProfileView";
 import ForgotPasswordView from "./views/Auth/ForgotPasswordView";
 
@@ -40,6 +41,12 @@ export default function BizarrApp() {
   // hay un solo iframe y volver al menú no lo descarga de nuevo.
   const [menuMontado, setMenuMontado] = useState(view === "menu");
   if (view === "menu" && !menuMontado) setMenuMontado(true);
+
+  // PANTALLA (DJ Democracy) igual: se monta la primera vez y queda montada,
+  // oculta, el resto de la sesión. Volver es instantáneo y no rehace las
+  // consultas ni las suscripciones Realtime de la votación en cada entrada.
+  const [pantallaMontada, setPantallaMontada] = useState(view === "pantalla");
+  if (view === "pantalla" && !pantallaMontada) setPantallaMontada(true);
 
   // Cartel de vuelta del mail: /auth/callback nos manda con ?confirmed=1 o
   // ?passwordChanged=1 después de validar el link.
@@ -91,6 +98,17 @@ export default function BizarrApp() {
     }
   }, []);
 
+  // Precarga de Pantalla en segundo plano, cuando la app ya dibujó y el
+  // navegador está libre: la primera visita arranca con datos, sin esperar.
+  // Sólo lecturas (ver pantallaPrefetch.js).
+  useEffect(() => {
+    if (stateLoading || pantallaMontada) return;
+    const idle = window.requestIdleCallback ?? ((cb) => setTimeout(cb, 1200));
+    const cancel = window.cancelIdleCallback ?? clearTimeout;
+    const id = idle(() => prefetchPantalla(), { timeout: 3000 });
+    return () => cancel(id);
+  }, [stateLoading, pantallaMontada]);
+
   // El cartel de confirmación se va solo: es una felicitación, no una alerta.
   useEffect(() => {
     if (!authNotice) return;
@@ -106,6 +124,8 @@ export default function BizarrApp() {
   // Lo que dibuja la navegación del shell: el candado depende del gate de geo.
   const navItems = useMemo(() => clientNavItems({ isLoggedIn, isRestricted }), [isLoggedIn, isRestricted]);
   const navigate = (id) => id==="profile" ? goProfile() : setView(id);
+  // Intención (puntero encima o dedo apoyado): adelanta la precarga del destino.
+  const navIntent = (id) => { if (id === "pantalla" && !pantallaMontada) prefetchPantalla(); };
 
   // Perfil recibe las acciones de esta instancia de useAuth(): no monta otra
   // (cada instancia corre su propio restoreSession y su listener de Auth).
@@ -128,9 +148,7 @@ export default function BizarrApp() {
         return <EscenarioView user={user} activeEscenario={gameState?.active_escenario ?? null}
                  isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
                  ytConfig={ytConfig} gameState={gameState}/>;
-      case "pantalla":
-        return <PantallaView user={user}
-                 isRestricted={isRestricted} isGuest={isGuest} onGoProfile={goProfile}/>;
+      case "pantalla":   return null; // PantallaView vive fuera del switch, ver abajo
       case "profile":
         if (!user?.registered) {
           if (authMode === "forgot")
@@ -154,7 +172,7 @@ export default function BizarrApp() {
         <div className="phone-shell" style={{alignItems:"center",justifyContent:"center"}}>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:48,marginBottom:16,animation:"goldGlow 2s ease infinite"}}>🎵</div>
-            <div style={{fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,color:"#FFD700"}}>BizarrApp</div>
+            <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:18,color:"#FFD700"}}>BizarrApp</div>
             <div style={{fontSize:12,color:"rgba(255,215,0,.35)",marginTop:8}}>Conectando...</div>
           </div>
         </div>
@@ -167,7 +185,7 @@ export default function BizarrApp() {
       <style>{globalCss}</style>
       <div className="app-root">
         <ClientShell logoSrc={CLIENT_LOGO_URL}notificationSlot={<NotificationBell user={user}/>}
-          navItems={navItems} activeNavId={view} onNavigate={navigate}>
+          navItems={navItems} activeNavId={view} onNavigate={navigate} onNavIntent={navIntent}>
             {authNotice && (
               <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
                 marginBottom:14,background:"rgba(34,197,94,.1)",
@@ -190,7 +208,19 @@ export default function BizarrApp() {
                     fontSize:16,cursor:"pointer",padding:0,lineHeight:1 }}>×</button>
               </div>
             )}
-            {renderContent()}
+            {/* Tipografía de Pantalla en todas las secciones menos Juegos (ver .tipo-pantalla en styles.js). */}
+            <div className={view === "games" ? undefined : "tipo-pantalla"} style={{ display: "contents" }}>
+              {renderContent()}
+            </div>
+            {/* display:contents no agrega caja: la vista ocupa .app-content igual que antes. */}
+            {pantallaMontada && (
+              <div style={{ display: view === "pantalla" ? "contents" : "none" }}>
+                {/* key por usuario: al cambiar de sesión se monta de cero, sin
+                    votos, poderes ni rol de la sesión anterior. */}
+                <PantallaView key={user?.id ?? "sin-sesion"} user={user}
+                  isRestricted={isRestricted} isGuest={isGuest} onGoProfile={goProfile}/>
+              </div>
+            )}
             {menuMontado && <MenuFrame visible={view === "menu"}/>}
         </ClientShell>
         <PushPermissionBanner user={user} />

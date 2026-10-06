@@ -7,7 +7,7 @@ export function BlockedView({ icon, label, reason, onCTA, ctaLabel }) {
     <div className="blocked-view">
       <div style={{ fontSize: 44, marginBottom: 14, opacity: .22 }}>{icon}</div>
       <div style={{
-        fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 800,
+        fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 700,
         color: "rgba(255,215,0,.28)", marginBottom: 10,
       }}>
         {label}
@@ -25,7 +25,7 @@ export function BlockedView({ icon, label, reason, onCTA, ctaLabel }) {
             padding: "10px 22px",
             background: "linear-gradient(135deg, #FFD700, #F59E0B)",
             border: "none", borderRadius: 20, color: "#1A0A00",
-            fontFamily: "Syne, sans-serif", fontWeight: 800,
+            fontFamily: "'DM Sans', sans-serif", fontWeight: 700,
             fontSize: 13, cursor: "pointer",
           }}
         >

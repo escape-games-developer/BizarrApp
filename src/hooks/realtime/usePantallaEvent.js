@@ -13,11 +13,14 @@ import { fetchEvent, fetchItems, fetchLiveEvent } from "../../services/pantallaD
  * @param {string}  eventId       evento fijo (admin, DJ, TV)
  * @param {boolean} discoverLive  buscar solo el evento en vivo (cliente)
  * @param {object}  client        supabase (con sesión) o supabaseAnon (TV)
+ * @param {object}  initial       { event, items } ya leídos (precarga del
+ *                                cliente): se muestran de entrada y la carga
+ *                                normal los refresca. Sin él, igual que siempre.
  */
-export function usePantallaEvent({ eventId = null, discoverLive = false, client = supabase } = {}) {
-  const [event,   setEvent]   = useState(null);
-  const [items,   setItems]   = useState([]);
-  const [loading, setLoading] = useState(true);
+export function usePantallaEvent({ eventId = null, discoverLive = false, client = supabase, initial = null } = {}) {
+  const [event,   setEvent]   = useState(() => initial?.event ?? null);
+  const [items,   setItems]   = useState(() => initial?.items ?? []);
+  const [loading, setLoading] = useState(!initial);
   const [error,   setError]   = useState(null);
   const mounted = useRef(true);
   // Sufijo propio de esta instancia: dos componentes con el mismo nombre de
@@ -44,7 +47,9 @@ export function usePantallaEvent({ eventId = null, discoverLive = false, client 
     }
   }, [eventId, discoverLive, client]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
+  // Con datos iniciales no se vuelve a tapar la vista: se refresca por detrás.
+  const conInicial = useRef(!!initial);
+  useEffect(() => { if (!conInicial.current) setLoading(true); conInicial.current = false; load(); }, [load]);
 
   // Suscripción al evento y a su playlist.
   const activeId = event?.id ?? null;

@@ -110,7 +110,7 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
-                fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15,
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 15,
                 color: banner.color || "#FFD700", marginBottom: 4, lineHeight: 1.2,
                 display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                 overflow: "hidden",
@@ -169,7 +169,7 @@ function EmptyCard() {
     }}>
       <div style={{ fontSize: 44, marginBottom: 14, opacity: .2 }}>📣</div>
       <div style={{
-        fontFamily: "Syne, sans-serif", fontSize: 15, fontWeight: 800,
+        fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700,
         color: "rgba(255,215,0,.25)", marginBottom: 8,
       }}>
         Sin novedades por ahora

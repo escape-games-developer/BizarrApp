@@ -39,7 +39,7 @@ export default function ProfileDesignOriginal({ profile }) {
           <div style={{ display:"flex",justifyContent:"center",marginBottom:12 }}>
             <AvatarDisplay user={user} size={80} fontSize={36}/>
           </div>
-          <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#FFD700" }}>
+          <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,color:"#FFD700" }}>
             ¡Hola, {user.name}!
           </div>
           {user.team && (
@@ -47,7 +47,7 @@ export default function ProfileDesignOriginal({ profile }) {
               padding:"6px 16px",borderRadius:20,
               background:team.bg,border:`1px solid ${team.border}` }}>
               <span style={{ fontSize:18 }}>{team.emoji}</span>
-              <span style={{ fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:13,color:team.color }}>
+              <span style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:13,color:team.color }}>
                 {team.name}
               </span>
             </div>
@@ -81,7 +81,7 @@ export default function ProfileDesignOriginal({ profile }) {
           onClick={logout}
           style={{ width:"100%", marginTop:10, padding:"12px", borderRadius:12,
             background:"rgba(255,45,120,.1)", border:"1px solid rgba(255,45,120,.3)",
-            color:"#FF2D78", fontFamily:"Syne,sans-serif", fontWeight:800,
+            color:"#FF2D78", fontFamily:"'DM Sans',sans-serif", fontWeight:700,
             fontSize:13, cursor:"pointer" }}>
           🚪 Cerrar sesión
         </button>

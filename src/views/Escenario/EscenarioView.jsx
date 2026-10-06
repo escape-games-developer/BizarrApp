@@ -13,7 +13,7 @@ function EscenarioStandby() {
       justifyContent: "center", padding: "40px 16px", textAlign: "center", minHeight: 260,
     }}>
       <div style={{ fontSize: 48, marginBottom: 14, opacity: .22 }}>🎤</div>
-      <div style={{ fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 800, color: "rgba(255,215,0,.28)", marginBottom: 8 }}>
+      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 700, color: "rgba(255,215,0,.28)", marginBottom: 8 }}>
         Escenario Bizarren
       </div>
       <div style={{ fontSize: 12, color: "rgba(245,230,192,.22)", lineHeight: 1.6, maxWidth: 200 }}>
@@ -51,7 +51,7 @@ function EnrolledCard({ color, border, bg, icon, title, subtitle, video, onLeave
       animation: "fadeUp .4s ease",
     }}>
       <div style={{ fontSize: 36, marginBottom: 8 }}>{icon}</div>
-      <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 16, color, marginBottom: 4 }}>
+      <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 16, color, marginBottom: 4 }}>
         {title}
       </div>
       {video && (
@@ -66,7 +66,7 @@ function EnrolledCard({ color, border, bg, icon, title, subtitle, video, onLeave
           padding: "6px 16px", background: "rgba(239,68,68,.1)",
           border: "1px solid rgba(239,68,68,.22)", borderRadius: 8,
           color: "#FCA5A5", fontSize: 10, cursor: "pointer",
-          fontFamily: "Syne, sans-serif", fontWeight: 700,
+          fontFamily: "'DM Sans', sans-serif", fontWeight: 700,
         }}
       >
         Salir de la cola
@@ -106,7 +106,7 @@ function DueloView() {
       }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🎤</div>
         <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15,
+          fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 15,
           color: "#FF2D95", marginBottom: 6,
         }}>
           El Duelo está en la pestaña Juegos
@@ -144,7 +144,7 @@ function VotacionFtl({ turnId, userId }) {
   return (
     <div style={{ marginTop: 18 }}>
       <div style={{
-        fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 13,
+        fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 13,
         color: "rgba(255,215,0,.75)", marginBottom: 10, letterSpacing: ".04em",
       }}>¿CÓMO LO ESTÁ HACIENDO?</div>
 
@@ -163,7 +163,7 @@ function VotacionFtl({ turnId, userId }) {
                 {o.icono}
               </div>
               <div style={{
-                fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 19,
+                fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 19,
                 color: elegido ? o.color : "rgba(245,230,192,.45)",
               }}>{o.pct}%</div>
               {elegido && (
@@ -242,7 +242,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
             EN EL ESCENARIO
           </div>
           <div style={{
-            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 17, color: juego.textoCliente,
+            fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 17, color: juego.textoCliente,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>{participante.name || "Participante"}</div>
         </div>
@@ -287,7 +287,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
       }}>
         <div style={{ fontSize: 38, marginBottom: 10 }}>{juego.icon}</div>
         <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 16,
+          fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 16,
           color: juego.textoCliente, marginBottom: 6,
         }}>
           {juego.titulo}

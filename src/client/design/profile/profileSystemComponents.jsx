@@ -32,7 +32,7 @@ export function ProfileTeamBadgeView({ designProps, className, style, inputs }) 
     <div {...designProps} className={className} style={{ display: "inline-flex", alignItems: "center", gap: 8,
       padding: "6px 16px", borderRadius: 20, background: team.bg, border: `1px solid ${team.border}`, ...style }}>
       <span style={{ fontSize: 18 }}>{team.emoji}</span>
-      <span style={{ fontFamily: "Syne,sans-serif", fontWeight: 800, fontSize: 13, color: team.color }}>{team.name}</span>
+      <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 13, color: team.color }}>{team.name}</span>
     </div>
   );
 }

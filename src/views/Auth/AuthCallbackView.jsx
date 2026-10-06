@@ -46,7 +46,7 @@ const Centered = ({ children }) => (
 );
 
 const Title = ({ children }) => (
-  <div style={{ fontFamily:"Syne,sans-serif", fontWeight:900, fontSize:22,
+  <div style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:22,
     color:"#FFD700", marginBottom:8 }}>{children}</div>
 );
 

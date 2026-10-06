@@ -266,6 +266,16 @@ const globalCss = `
   }
   .step-line { flex: 1; height: 2px; margin: 0 4px 14px; transition: background .4s; }
 
+  /* ── Tipografía de Pantalla en el resto del Cliente ──
+     Títulos y botones en DM Sans 700, como Pantalla (Vista Original), en vez de
+     Syne. Sólo dentro de .tipo-pantalla (App: todas las secciones menos
+     Juegos): los juegos usan estas mismas clases y quedan como están. */
+  .tipo-pantalla .sec-hdr h3,
+  .tipo-pantalla .card-title,
+  .tipo-pantalla .btn-primary,
+  .tipo-pantalla .btn-ghost,
+  .tipo-pantalla .step-circle { font-family: 'DM Sans', sans-serif; font-weight: 700; }
+
   /* ── Fade animation helper ── */
   .fade-up { animation: fadeUp .4s ease both; }
 

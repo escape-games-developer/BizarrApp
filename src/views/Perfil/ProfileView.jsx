@@ -63,7 +63,7 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",
       justifyContent:"center",minHeight:"60vh",padding:"0 4px" }}>
       <div style={{ fontSize:40,marginBottom:12 }}>🔑</div>
-      <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,
+      <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,
         color:"#FFD700",marginBottom:4,textAlign:"center" }}>
         ¡Bienvenido de nuevo!
       </div>
@@ -157,7 +157,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
     <div style={{ display:"flex",flexDirection:"column",alignItems:"center",
       justifyContent:"center",minHeight:"62vh",padding:"0 4px",textAlign:"center" }}>
       <div style={{ fontSize:48,marginBottom:14 }}>📬</div>
-      <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:21,
+      <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:21,
         color:"#FFD700",marginBottom:10 }}>
         Confirmá tu cuenta
       </div>
@@ -206,7 +206,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
             <div style={{ display:"flex",justifyContent:"center",marginBottom:10 }}>
               <AvatarDisplay user={previewUser} size={72} fontSize={32}/>
             </div>
-            <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:20,color:"#FFD700" }}>
+            <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:20,color:"#FFD700" }}>
               {name||"Tu nombre"}
             </div>
             <div style={{ fontSize:11,color:"rgba(245,230,192,.35)",marginTop:4 }}>
@@ -227,7 +227,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               {[{id:"preset",label:"😀 Elegir"},{id:"photo",label:"📷 Foto propia"}].map((t)=>(
                 <button key={t.id} onClick={()=>setAvatarSrc(t.id)} style={{
                   flex:1,padding:"8px",borderRadius:9,border:"1px solid",cursor:"pointer",
-                  fontFamily:"Syne,sans-serif",fontSize:12,fontWeight:700,
+                  fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700,
                   background: avatarSrc===t.id?"rgba(255,215,0,.12)":"rgba(255,255,255,.03)",
                   borderColor:avatarSrc===t.id?"rgba(255,215,0,.35)":"rgba(255,255,255,.08)",
                   color:      avatarSrc===t.id?"#FFD700":"rgba(245,230,192,.4)",
@@ -281,7 +281,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
         <>
           <div style={{ textAlign:"center",marginBottom:18 }}>
             <div style={{ fontSize:36,marginBottom:8 }}>⚔️</div>
-            <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:22,color:"#FFD700",marginBottom:6 }}>
+            <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,color:"#FFD700",marginBottom:6 }}>
               Elegí tu equipo
             </div>
             <div style={{ fontSize:12,color:"rgba(245,230,192,.45)",lineHeight:1.6,maxWidth:260,margin:"0 auto" }}>
@@ -298,7 +298,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
                 transform:team===t.id?"scale(1.05)":"scale(1)",
               }}>
                 <div style={{ fontSize:48,marginBottom:8 }}>{t.emoji}</div>
-                <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:16,color:t.color }}>
+                <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:16,color:t.color }}>
                   {t.name}
                 </div>
                 {team===t.id && (
@@ -325,13 +325,13 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
                 borderRadius:20,marginBottom:16,
                 background:TEAMS[team].bg,border:`1px solid ${TEAMS[team].border}` }}>
                 <span style={{ fontSize:20 }}>{TEAMS[team].emoji}</span>
-                <span style={{ fontFamily:"Syne,sans-serif",fontWeight:800,fontSize:13,color:TEAMS[team].color }}>
+                <span style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:13,color:TEAMS[team].color }}>
                   {TEAMS[team].name}
                 </span>
               </div>
             )}
             <div style={{ fontSize:36,marginBottom:12 }}>🎮🎰🧠</div>
-            <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:20,color:"#FFD700",
+            <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:20,color:"#FFD700",
               marginBottom:10,lineHeight:1.2 }}>
               ¿Querés participar en los juegos, sorteos y el Desafío Demente?
             </div>
@@ -375,7 +375,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
         <>
           <div style={{ textAlign:"center",marginBottom:16 }}>
             <div style={{ fontSize:28,marginBottom:6 }}>🔐</div>
-            <div style={{ fontFamily:"Syne,sans-serif",fontWeight:900,fontSize:18,color:"#FFD700",marginBottom:6 }}>
+            <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:18,color:"#FFD700",marginBottom:6 }}>
               Creá tu cuenta BizarrApp
             </div>
             <div style={{ fontSize:12,color:"rgba(245,230,192,.45)",lineHeight:1.5 }}>
