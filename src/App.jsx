@@ -18,6 +18,8 @@ import JuegosView    from "./views/Juegos/JuegosView";
 import EscenarioView from "./views/Escenario/EscenarioView";
 import PantallaView  from "./views/Pantalla/PantallaView";
 import { prefetchPantalla } from "./views/Pantalla/pantallaPrefetch";
+import { escenarioAnunciado } from "./client/anuncios/anunciosCatalog";
+import AnuncioDestacado from "./client/anuncios/AnuncioDestacado";
 import ProfileView, { LoginView } from "./views/Perfil/ProfileView";
 import ForgotPasswordView from "./views/Auth/ForgotPasswordView";
 
@@ -108,6 +110,24 @@ export default function BizarrApp() {
     const id = idle(() => prefetchPantalla(), { timeout: 3000 });
     return () => cancel(id);
   }, [stateLoading, pantallaMontada]);
+
+  // Tocar una notificación del navegador con la app ya abierta: el service
+  // worker enfoca esta pestaña y manda el destino (mismo deep-link `?view=`,
+  // `&game=duelo`) en vez de abrir otra. Ver public/sw.js.
+  useEffect(() => {
+    const sw = navigator.serviceWorker;
+    if (!sw) return undefined;
+    const onMessage = (event) => {
+      if (event.data?.type !== "bizarren-navigate" || typeof event.data.url !== "string") return;
+      const params = new URL(event.data.url, window.location.origin).searchParams;
+      const destino = params.get("view");
+      if (!VIEWS.includes(destino)) return;
+      setGameOpen(destino === "games" && params.get("game") === "duelo" ? "duelo" : null);
+      setView(destino);
+    };
+    sw.addEventListener("message", onMessage);
+    return () => sw.removeEventListener("message", onMessage);
+  }, []);
 
   // El cartel de confirmación se va solo: es una felicitación, no una alerta.
   useEffect(() => {
@@ -210,6 +230,8 @@ export default function BizarrApp() {
             )}
             {/* Tipografía de Pantalla en todas las secciones menos Juegos (ver .tipo-pantalla en styles.js). */}
             <div className={view === "games" ? undefined : "tipo-pantalla"} style={{ display: "contents" }}>
+              {/* Experiencia de Escenario anunciada, todavía sin convocatoria. */}
+              {view === "escenario" && <AnuncioDestacado placa={escenarioAnunciado(gameState)}/>}
               {renderContent()}
             </div>
             {/* display:contents no agrega caja: la vista ocupa .app-content igual que antes. */}

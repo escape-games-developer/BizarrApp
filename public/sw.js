@@ -26,14 +26,24 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// Al tocar la notificación: enfocar una pestaña existente o abrir una nueva.
+// Rutas que no son la app Cliente: una notificación nunca las reutiliza.
+const NO_CLIENTE = ["/admin", "/tv", "/pantalla", "/designer", "/auth"];
+
+// Al tocar la notificación: si la app Cliente ya está abierta, enfocarla y
+// pedirle que navegue al destino (App escucha "bizarren-navigate"); si no,
+// abrir una pestaña nueva directamente en el destino (deep-link `?view=`).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || "/";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if (c.url.includes(targetUrl) && "focus" in c) return c.focus();
+      const app = list.find((c) => {
+        const path = new URL(c.url).pathname;
+        return !NO_CLIENTE.some((p) => path.startsWith(p));
+      });
+      if (app && "focus" in app) {
+        app.postMessage({ type: "bizarren-navigate", url: targetUrl });
+        return app.focus();
       }
       if (clients.openWindow) return clients.openWindow(targetUrl);
     })

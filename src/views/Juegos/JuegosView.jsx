@@ -623,6 +623,65 @@ function PalabraProximamenteCard() {
   );
 }
 
+/**
+ * Anuncio de Rey del Orto, Sumate o el Duelo: la placa está en la pantalla
+ * gigante (`active_placa`) pero todavía no hay sorteo, ronda ni convocatoria.
+ * Mismo formato que las cards de Desafío y Arma. Sólo informa: no hay CTA,
+ * la postulación del Duelo aparece recién con su convocatoria.
+ */
+const PROXIMAMENTE = {
+  game_rey:  { img: "/placas/Rey_del_orto-removebg-preview.png",       nombre: "Rey del Orto",
+               color: "#FFD700", rgb: "255,215,0",  bajada: "Se viene el sorteo 🎰" },
+  game_suma: { img: "/placas/Sumate_que_sumamos-removebg-preview.png", nombre: "Sumate que sumamos",
+               color: "#FF9500", rgb: "255,149,0",  bajada: "Te va a tocar un número: armá el objetivo en grupo 🔢" },
+  duelo:     { img: "/placas/Duelo_de_talento-removebg-preview.png",   nombre: "Duelo de Talentos",
+               color: "#FF2D95", rgb: "255,45,149", bajada: "Cuando abra la convocatoria vas a poder postularte 🎤" },
+};
+
+function ProximamenteCard({ placa }) {
+  const p = PROXIMAMENTE[placa];
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{
+        borderRadius: 18, padding: "18px 16px", textAlign: "center",
+        background: `linear-gradient(135deg, rgba(${p.rgb},.12), rgba(255,45,120,.08))`,
+        border: `1.5px solid rgba(${p.rgb},.4)`,
+      }}>
+        <img
+          src={p.img}
+          alt={p.nombre}
+          style={{
+            width: 120, height: 120, objectFit: "contain", margin: "0 auto 8px",
+            filter: "grayscale(.35) opacity(.85)",
+          }}
+          onError={(e) => { e.target.style.display = "none"; }}
+        />
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 18,
+          color: p.color, marginBottom: 4,
+        }}>
+          {p.nombre}
+        </div>
+        <div style={{ fontSize: 12, color: "rgba(245,230,192,.45)", marginBottom: 12 }}>
+          {p.bajada}
+        </div>
+        <button disabled style={{
+          width: "100%", padding: "13px 16px", borderRadius: 12,
+          background: "rgba(255,255,255,.04)", color: "rgba(245,230,192,.35)",
+          border: "1px solid rgba(255,255,255,.08)",
+          fontFamily: "Syne, sans-serif", fontWeight: 700, fontSize: 13,
+          cursor: "not-allowed",
+        }}>
+          Próximamente
+        </button>
+        <div style={{ fontSize: 11, color: "rgba(255,215,0,.45)", marginTop: 10 }}>
+          ⏳ Preparate — arranca en breve
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── JuegosView (router) ──────────────────────────────────────────────────
 export default function JuegosView({ user, activeGame, activeEscenario, isRestricted, onGoProfile, sessionId, gameState, gameOpen, setGameOpen }) {
   if (isRestricted) {
@@ -657,7 +716,14 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
   // Mismo criterio para Arma la Palabra. Son excluyentes en la práctica:
   // `active_placa` guarda una sola placa a la vez.
   const palabraAnunciada = gameState?.active_placa === "game_palabra" && activeGame !== "palabra";
-  const hayAnuncio = triviaAnunciada || palabraAnunciada;
+  // Rey del Orto, Sumate y el Duelo: misma idea. El Duelo se considera en vivo
+  // con su convocatoria (`active_escenario='duelo'`), que ya dibuja su card.
+  const otroAnunciado =
+    (gameState?.active_placa === "game_rey"  && activeGame !== "rey del orto") ? "game_rey"
+    : (gameState?.active_placa === "game_suma" && activeGame !== "suma")         ? "game_suma"
+    : (gameState?.active_placa === "duelo"     && activeEscenario !== "duelo")   ? "duelo"
+    : null;
+  const hayAnuncio = triviaAnunciada || palabraAnunciada || !!otroAnunciado;
 
   // Contenido del juego activo (o standby si no hay ninguno).
   let gameContent;
@@ -676,6 +742,7 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
       {dueloCard}
       {triviaAnunciada  && <TriviaProximamenteCard />}
       {palabraAnunciada && <PalabraProximamenteCard />}
+      {otroAnunciado    && <ProximamenteCard placa={otroAnunciado} />}
       {gameContent}
     </div>
   );

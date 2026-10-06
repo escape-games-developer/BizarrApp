@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, supabaseAnon } from "../../lib/supabase";
+import { pushAnuncio } from "../../services/anunciosPush";
 
 /**
  * Normaliza lo que el operador escribió (o subió) en el campo de video del
@@ -171,10 +172,15 @@ export function useAdminControls(sessionId) {
   }, [sessionId]);
 
   // ── Juegos ────────────────────────────────────────────────────────────────
+  // Anunciar = poner la placa. El trigger de la base registra el anuncio en
+  // client_announcements y acá se avisa a los clientes con una notificación
+  // del navegador (sin esperarla: no demora al operador).
   const announceGame = useCallback(async (game) => {
     await dismissActiveVideo();
-    return update({ active_placa: `game_${game}`, active_game: null });
-  }, [update, dismissActiveVideo]);
+    const r = await update({ active_placa: `game_${game}`, active_game: null });
+    if (!r?.error) pushAnuncio(sessionId, `game_${game}`);
+    return r;
+  }, [update, dismissActiveVideo, sessionId]);
 
   const activateGame = useCallback(async (game) => {
     await dismissActiveVideo();
@@ -195,11 +201,15 @@ export function useAdminControls(sessionId) {
     update({ screen_audio_enabled: on }),
   [update]);
 
+  // Las placas que son anuncios (Duelo, experiencias de Escenario, juegos desde
+  // la sección Placas) también avisan; pushAnuncio ignora el resto.
   const sendPlaca = useCallback(async (placaId, customData = null) => {
     await dismissActiveVideo();
-    return update({ active_placa: placaId, active_game: null,
-                    active_escenario: null, placa_custom: customData });
-  }, [update, dismissActiveVideo]);
+    const r = await update({ active_placa: placaId, active_game: null,
+                             active_escenario: null, placa_custom: customData });
+    if (!r?.error) pushAnuncio(sessionId, placaId);
+    return r;
+  }, [update, dismissActiveVideo, sessionId]);
 
   const clearPlaca = useCallback(async () => {
     await dismissActiveVideo();
@@ -526,9 +536,11 @@ export function useAdminControls(sessionId) {
   // ya destraba la vista de inscripción del cliente.
   const openEscenarioInvitation = useCallback(async (type) => {
     await dismissActiveVideo();
-    return update({ active_placa: `escenario_${type}`, active_escenario: null,
-                    escenario_invite_type: type });
-  }, [update, dismissActiveVideo]);
+    const r = await update({ active_placa: `escenario_${type}`, active_escenario: null,
+                             escenario_invite_type: type });
+    if (!r?.error) pushAnuncio(sessionId, `escenario_${type}`);
+    return r;
+  }, [update, dismissActiveVideo, sessionId]);
 
   // Abre la convocatoria: escenario en el aire, todavía sin líder. Limpia al
   // participante y al video anteriores — si no, la ronda nueva arrancaba
