@@ -9,7 +9,13 @@
  *     kind "native"    { section, rendererKey }           renderer nativo registrado
  *     kind "document"  { document, fixtureId?, selectedId? }  DesignDocument por el motor
  *   iframe → Admin
+ *     kind "ready"         {}                              el iframe ya escucha mensajes
  *     kind "node-selected" { nodeId }                      click sobre un nodo del documento
+ *
+ * "ready" existe porque la ruta del preview carga su código con un import()
+ * dinámico (main.jsx): el `load` del iframe puede llegar antes de que haya
+ * listener, y un mensaje enviado ahí se pierde. Al recibir "ready" el Admin
+ * reenvía el pedido actual.
  *
  * La carga inicial usa la query (`buildClientPreviewUrl`); todo cambio
  * posterior viaja por mensaje, sin recargar. Ambos lados validan forma,

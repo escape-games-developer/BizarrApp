@@ -78,6 +78,8 @@ export default function ClientPreviewRoute() {
       if (next) setRequest(next);
     };
     window.addEventListener("message", onMessage);
+    // Recién ahora hay listener: el Admin reenvía lo que haya mandado antes.
+    if (window.parent !== window) window.parent.postMessage(previewMessage("ready", {}), window.location.origin);
     return () => window.removeEventListener("message", onMessage);
   }, []);
 

@@ -58,6 +58,16 @@ export default function ClientPreviewFrame({ request, onNodeSelected }) {
   }, [request]);
   useEffect(() => { send(); }, [send]);
 
+  // "ready": el iframe terminó de cargar su código y ya escucha. Los envíos
+  // anteriores (efecto y onLoad) pueden haberse perdido: se reenvía.
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (isPreviewMessage(event, frameRef.current?.contentWindow) && event.data.kind === "ready") send();
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [send]);
+
   // Selección desde el preview: sólo mensajes del protocolo, mismo origen y de este iframe.
   useEffect(() => {
     if (!onNodeSelected) return undefined;
