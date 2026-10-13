@@ -21,6 +21,9 @@ export const MENUS = {
   pedidos: {
     titulo: "Pedidos Bizarren",
     url: "https://pedidos-bizarren.lovable.app/",
+    // Recibe el nombre del cliente logueado en el fragmento (#nombre=…) para
+    // completar el pedido. El fragmento no viaja al servidor de Lovable.
+    recibeNombre: true,
   },
 };
 

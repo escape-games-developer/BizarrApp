@@ -259,7 +259,8 @@ export default function BizarrApp() {
                   isRestricted={isRestricted} isGuest={isGuest} onGoProfile={goProfile}/>
               </div>
             )}
-            {menuMontado && <MenuFrame visible={view === "menu"}/>}
+            {menuMontado && <MenuFrame visible={view === "menu"}
+              nombreCliente={user?.registered ? user.name : null}/>}
         </ClientShell>
         <PushPermissionBanner user={user} />
         <DueloTeaserBanner

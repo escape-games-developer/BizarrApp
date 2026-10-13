@@ -41,11 +41,29 @@ const PAD_BOT = 16;
 // WordPress actual puede tardar 25–40 s en una red móvil.
 const LENTO_MS = 12000;
 
-export default function MenuFrame({ visible = true }) {
+/**
+ * Ancho de la barra de scroll de este navegador (0 en celulares, donde se
+ * superpone al contenido). La carta es de otro sitio: no se le puede ocultar
+ * la barra con CSS, así que el iframe se ensancha ese ancho y la barra queda
+ * fuera de la vista (el contenedor recorta). El scroll con el dedo no cambia.
+ */
+function anchoBarraScroll() {
+  const d = document.createElement("div");
+  d.style.cssText = "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll";
+  document.body.appendChild(d);
+  const ancho = d.offsetWidth - d.clientWidth;
+  d.remove();
+  return ancho;
+}
+
+export default function MenuFrame({ visible = true, nombreCliente = null }) {
   // null mientras se lee la configuración: el iframe espera para no descargar
   // una carta y tirarla.
   const fuente = useMenuConfig();
-  const menuUrl = fuente ? MENUS[fuente].url : null;
+  const menu = fuente ? MENUS[fuente] : null;
+  const nombre = menu?.recibeNombre && nombreCliente ? nombreCliente : null;
+  const menuUrl = menu ? menu.url + (nombre ? `#nombre=${encodeURIComponent(nombre)}` : "") : null;
+  const [barra] = useState(anchoBarraScroll);
   const [estado, setEstado]   = useState("cargando"); // cargando | lento | listo | error
   // Cambiarla remonta el iframe. Sólo lo hace el botón de reintentar, que
   // aparece únicamente ante un error real.
@@ -96,7 +114,9 @@ export default function MenuFrame({ visible = true }) {
   return (
     <div style={contenedor}>
       {menuUrl && <iframe
-        key={`${fuente}-${intento}`}
+        // El nombre va en la key: cambiar sólo el fragmento no recarga la
+        // página, y la carta lo lee al arrancar.
+        key={`${fuente}-${nombre ?? ""}-${intento}`}
         src={menuUrl}
         title="Menú Bizarren"
         onLoad={() => setEstado("listo")}
@@ -108,7 +128,7 @@ export default function MenuFrame({ visible = true }) {
         loading="eager"
         style={{
           display: "block",
-          width: "100%",
+          width: `calc(100% + ${barra}px)`,   // la barra de scroll queda recortada
           height: "100%",
           border: "none",
           background: "#000000",
