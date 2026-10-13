@@ -19,7 +19,7 @@ const FRAME = {
   width:        "100%",
   borderRadius: 14,
   overflow:     "hidden",
-  background:   "rgba(255,215,0,.04)",
+  background:   "#000000",
   border:       "1px solid rgba(255,215,0,.14)",
 };
 
@@ -130,7 +130,7 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
               <span style={{
                 display: "inline-flex", alignItems: "center", gap: 4,
                 padding: "2px 9px", borderRadius: 10,
-                background: "rgba(255,215,0,.08)", border: "1px solid rgba(255,215,0,.15)",
+                background: "#000000", border: "1px solid rgba(255,215,0,.15)",
                 fontSize: 9, fontWeight: 700, color: "rgba(255,215,0,.5)", letterSpacing: ".5px",
               }}>
                 {banner.tag || "NOVEDAD"}

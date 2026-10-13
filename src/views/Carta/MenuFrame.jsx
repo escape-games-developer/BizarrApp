@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { MENUS, useMenuConfig } from "../../hooks/useMenuConfig";
 
 /**
- * MENÚ — la carta del bar embebida desde WordPress.
+ * MENÚ — la carta del bar embebida.
  *
- * El contenido NO se replica acá: viene siempre de MENU_URL, así que lo que el
- * staff publica en WordPress es lo que ve el cliente, sin tocar la app.
+ * Qué carta se embebe lo elige el Admin en Ajustes → Carta (menú): la de
+ * WordPress o la de Pedidos Bizarren (ver hooks/useMenuConfig.js, MENUS). El
+ * contenido NO se replica acá: lo que se publica allá es lo que ve el cliente.
  *
  * Vive DENTRO de la app: se monta dentro de `<main class="app-content">`, con
  * el header y la nav de siempre alrededor.
@@ -22,13 +24,12 @@ import { useEffect, useState } from "react";
  * PAD_* acá.
  */
 
-// Cuando WordPress implemente el modo app, pasa a
+// Cuando WordPress implemente el modo app, su URL en MENUS pasa a
 // "https://bizarrenbar.com.ar/chupi-morfi/?bizarrapp=1".
 // NO usar `?embed=1`: `embed` es un query var de WordPress y devuelve la
 // tarjeta oEmbed en vez de la página.
 // Ese modo además podría avisar "menú listo" por postMessage; hasta que exista
 // el contrato, el único indicador de listo es `onLoad`.
-const MENU_URL ="https://bizarrenbar.com.ar/chupi-morfi/";
 
 // Padding de `.app-content` en src/constants/styles.js: 14px 16px 16px.
 const PAD_TOP = 14;
@@ -41,6 +42,10 @@ const PAD_BOT = 16;
 const LENTO_MS = 12000;
 
 export default function MenuFrame({ visible = true }) {
+  // null mientras se lee la configuración: el iframe espera para no descargar
+  // una carta y tirarla.
+  const fuente = useMenuConfig();
+  const menuUrl = fuente ? MENUS[fuente].url : null;
   const [estado, setEstado]   = useState("cargando"); // cargando | lento | listo | error
   // Cambiarla remonta el iframe. Sólo lo hace el botón de reintentar, que
   // aparece únicamente ante un error real.
@@ -68,7 +73,7 @@ export default function MenuFrame({ visible = true }) {
     width: `calc(100% + ${PAD_X * 2}px)`,
     maxWidth: `calc(100% + ${PAD_X * 2}px)`,
     overflow: "hidden",          // nunca scroll horizontal: el vertical lo hace el iframe
-    background: "#0D0700",
+    background: "#000000",
     // Respeta el notch/barra inferior de los celulares. La nav de la app ya
     // está debajo, así que sólo hace falta cuando el navegador no la reserva.
     paddingBottom: "env(safe-area-inset-bottom, 0px)",
@@ -80,7 +85,7 @@ export default function MenuFrame({ visible = true }) {
     display: "flex", flexDirection: "column",
     alignItems: "center", justifyContent: "center",
     gap: 12, padding: "24px 20px", textAlign: "center",
-    background: "#0D0700",
+    background: "#000000",
   };
 
   const titulo = {
@@ -90,9 +95,9 @@ export default function MenuFrame({ visible = true }) {
 
   return (
     <div style={contenedor}>
-      <iframe
-        key={intento}
-        src={MENU_URL}
+      {menuUrl && <iframe
+        key={`${fuente}-${intento}`}
+        src={menuUrl}
         title="Menú Bizarren"
         onLoad={() => setEstado("listo")}
         onError={alFallar}
@@ -106,11 +111,11 @@ export default function MenuFrame({ visible = true }) {
           width: "100%",
           height: "100%",
           border: "none",
-          background: "#0D0700",
+          background: "#000000",
           // Sin esto, iOS no deja scrollear dentro del iframe.
           WebkitOverflowScrolling: "touch",
         }}
-      />
+      />}
 
       {(estado === "cargando" || estado === "lento") && (
         <div style={capa} role="status" aria-live="polite">
@@ -145,7 +150,7 @@ export default function MenuFrame({ visible = true }) {
               onClick={reintentar}
               style={{
                 padding: "11px 18px", borderRadius: 11, cursor: "pointer",
-                background: "rgba(255,215,0,.08)", border: "1px solid rgba(255,215,0,.28)",
+                background: "#000000", border: "1px solid rgba(255,215,0,.28)",
                 color: "rgba(255,215,0,.85)",
                 fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 12.5,
                 WebkitTapHighlightColor: "transparent",
@@ -155,7 +160,7 @@ export default function MenuFrame({ visible = true }) {
             </button>
             {/* Única salida de la app, y sólo como último recurso. */}
             <a
-              href={MENU_URL}
+              href={menuUrl ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               style={{

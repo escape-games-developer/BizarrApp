@@ -26,7 +26,7 @@ export function readAuthParams() {
     accessToken:  get("access_token"),
     refreshToken: get("refresh_token"),
     type:         get("type"),                      // signup | recovery | invite | magiclink | email_change
-    next:         search.get("next") || HOME_VIEW,  // novedades | reset
+    next:         search.get("next") || HOME_VIEW,  // novedades | reset | invite | registro
     errorCode:    get("error_code") || get("error"),
     errorDesc:    get("error_description"),
   };
@@ -40,6 +40,16 @@ export function hasAuthPayload(p) {
 /** ¿El link es de recuperación de contraseña? */
 export function isRecovery(p) {
   return p.type === "recovery" || p.next === "reset";
+}
+
+/** ¿El link es la invitación de un alta hecha desde el Admin? */
+export function isInvite(p) {
+  return p.type === "invite" || p.next === "invite";
+}
+
+/** ¿El link es el del registro «con mail primero»? */
+export function isRegistroMail(p) {
+  return p.next === "registro";
 }
 
 /** Borra tokens y códigos de la barra de direcciones sin recargar. */
@@ -90,7 +100,7 @@ export async function consumeAuthCallback(params) {
     if (params.tokenHash) {
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash: params.tokenHash,
-        type:       params.type || (params.next === "reset" ? "recovery" : "signup"),
+        type:       params.type || (params.next === "reset" ? "recovery" : params.next === "invite" ? "invite" : "signup"),
       });
       if (error) return { ok: false, error: callbackErrorMessage(error.code, error.message) };
       return { ok: true, session: data.session, user: data.user ?? data.session?.user };

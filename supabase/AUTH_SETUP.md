@@ -121,6 +121,26 @@ Asunto: `Recuperá tu contraseña de BizarrApp 🔑`
 <p>Si no lo pediste vos, ignorá este mail: tu contraseña no cambia.</p>
 ```
 
+### Invite user (altas desde el Admin)
+
+Lo manda la Edge Function `admin-create-user` cuando un administrador (o un
+operador con la sección Clientes) da de alta un usuario. El link vuelve a
+`/auth/callback?next=invite`: la persona elige su contraseña y entra al panel
+(operador/administrador) o a la app (cliente). Hace falta que
+`…/auth/callback?next=invite` esté en **Redirect URLs** (o el comodín
+`/auth/**`).
+
+Asunto: `Te invitaron a BizarrApp 🎉`
+
+```html
+<h2>¡Te sumaron a BizarrApp!</h2>
+<p>Tocá el botón para validar tu mail y elegir tu contraseña:</p>
+<p><a href="{{ .ConfirmationURL }}">Activar mi cuenta</a></p>
+<p>Si no esperabas este mail, ignoralo.</p>
+```
+
+Deploy de la función: `supabase functions deploy admin-create-user`.
+
 ### Variante opcional, más robusta
 
 Algunos clientes de correo (Outlook, antivirus corporativos) **abren los links

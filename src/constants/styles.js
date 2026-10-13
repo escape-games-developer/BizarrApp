@@ -13,7 +13,7 @@ const globalCss = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    background: #0A0500;
+    background: #000000;
     font-family: 'DM Sans', sans-serif;
     color: #F5E6C0;
     -webkit-font-smoothing: antialiased;
@@ -53,7 +53,7 @@ const globalCss = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #0A0500;
+    background: #000000;
   }
 
   /* ── Phone shell ── */
@@ -61,7 +61,7 @@ const globalCss = `
     width: 100%;
     max-width: 430px;
     height: 100dvh;
-    background: #0D0700;
+    background: #000000;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -73,7 +73,7 @@ const globalCss = `
   /* ── Header ── */
   .app-header {
     position: relative;
-    background: rgba(13,7,0,.98);
+    background: rgba(0,0,0,.98);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255,215,0,.1);
     padding: 7px 16px;
@@ -97,7 +97,7 @@ const globalCss = `
 
   /* ── Bottom nav ── */
   .app-nav {
-    background: rgba(10,5,0,.98);
+    background: rgba(0,0,0,.98);
     backdrop-filter: blur(16px);
     border-top: 1px solid rgba(255,215,0,.1);
     display: flex;
@@ -150,7 +150,7 @@ const globalCss = `
 
   /* ── Card ── */
   .card {
-    background: rgba(255,215,0,.04);
+    background: #000000;
     border: 1px solid rgba(255,215,0,.1);
     border-radius: 13px;
     padding: 14px;
@@ -203,7 +203,7 @@ const globalCss = `
   /* ── Inputs ── */
   .input-field {
     width: 100%;
-    background: rgba(255,215,0,.05);
+    background: #000000;
     border: 1px solid rgba(255,215,0,.12);
     border-radius: 10px;
     padding: 11px 14px;

@@ -60,7 +60,7 @@ export function NotificationBell({ user, offset = 5 }) {
           <span aria-hidden="true" style={{
             position: "absolute", top: 3, right: -2,
             width: 9, height: 9, borderRadius: "50%",
-            background: "#FF2D78", border: "1.5px solid #0D0700",
+            background: "#FF2D78", border: "1.5px solid #000000",
             boxShadow: "0 0 6px rgba(255,45,120,.9)",
           }}/>
         )}

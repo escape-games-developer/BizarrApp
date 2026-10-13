@@ -40,7 +40,7 @@ function AccountMenu({ items, onClose }) {
     <>
       <div onClick={onClose} style={{ position:"fixed",inset:0,zIndex:40 }}/>
       <div role="menu" style={{ position:"absolute",top:"100%",right:0,marginTop:4,zIndex:41,
-        minWidth:210,padding:6,borderRadius:12,background:"#1d1609",
+        minWidth:210,padding:6,borderRadius:12,background:"#000000",
         border:"1px solid rgba(255,215,0,.18)",boxShadow:"0 10px 28px rgba(0,0,0,.55)" }}>
         {items.map((it)=>(
           <button key={it.id} role="menuitem" onClick={()=>{ onClose(); it.onSelect(); }} style={{
@@ -178,7 +178,7 @@ export default function ProfileDesignOriginal({ profile }) {
 
           {/* Datos de la cuenta, en listado */}
           <div style={{ padding:s.card,borderRadius:13,
-            background:"rgba(255,215,0,.04)",border:"1px solid rgba(255,215,0,.1)" }}>
+            background:"#000000",border:"1px solid rgba(255,215,0,.1)" }}>
             <div className="card-title" style={{ fontSize:11,marginBottom:s.rowGap + 4 }}>Tu cuenta BizarrApp</div>
             {completion.map((row)=>{
               const locate = !row.ok && row.id === "location";

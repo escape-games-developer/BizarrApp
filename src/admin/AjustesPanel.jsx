@@ -1,5 +1,7 @@
 import { useState } from "react";
 import VistaPanelOpciones from "./ajustes/VistaPanelOpciones";
+import RegistroClientes from "./ajustes/RegistroClientes";
+import CartaMenu from "./ajustes/CartaMenu";
 
 const card = {
   background: "rgba(240,232,255,.035)",
@@ -25,6 +27,16 @@ const CATEGORIAS = [
     id: "vistaPanel", icon: "🧭", label: "Vista del panel de opciones",
     descripcion: "Configurá qué opciones aparecen en el panel de administración y en qué orden.",
     Componente: VistaPanelOpciones,
+  },
+  {
+    id: "registro", icon: "📝", label: "Registro de clientes",
+    descripcion: "Activá o desactivá las formas en que los clientes pueden crear su cuenta.",
+    Componente: RegistroClientes,
+  },
+  {
+    id: "carta", icon: "🍹", label: "Carta (menú)",
+    descripcion: "Elegí qué carta ven los clientes en MENÚ: la actual o la de Pedidos Bizarren.",
+    Componente: CartaMenu,
   },
 ];
 

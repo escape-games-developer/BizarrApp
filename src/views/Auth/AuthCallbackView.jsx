@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { hydrateProfile } from "../../hooks/useAuth";
 import { appViewUrl, HOME_VIEW } from "../../lib/authRedirect";
 import {
-  readAuthParams, hasAuthPayload, isRecovery,
+  readAuthParams, hasAuthPayload, isRecovery, isInvite, isRegistroMail,
   consumeAuthCallback, clearAuthParamsFromUrl,
 } from "../../lib/authCallback";
 
@@ -16,6 +16,11 @@ import {
 //                       cliente al menú Noti de la WebApp.
 //   Recuperar contraseña → canjea la sesión y muestra el formulario de
 //                       contraseña nueva (contraseña + repetir contraseña).
+//   Registro con mail primero → valida el mail y abre el formulario de
+//                       registro de la app con el mail ya fijo.
+//   Invitación        → alta hecha desde el Admin: mismo formulario para elegir
+//                       la contraseña; después el staff va a /admin y el
+//                       cliente a la app.
 //
 // Es una ruta propia y no un estado de la WebApp porque Supabase necesita una
 // URL fija y absoluta para el `redirectTo` del mail.
@@ -60,6 +65,7 @@ export default function AuthCallbackView() {
   const [phase,   setPhase]   = useState("validating");
   const [error,   setError]   = useState("");
   const [params]              = useState(() => readAuthParams());
+  const invitacion            = isInvite(params);
   const ranRef                = useRef(false);
 
   // Contraseña nueva
@@ -96,7 +102,19 @@ export default function AuthCallbackView() {
 
       // Recuperación: NO mandamos al cliente a la app todavía. La sesión que
       // trae el link sirve justo para una cosa — fijar la contraseña nueva.
-      if (isRecovery(params)) { setPhase("recovery"); return; }
+      if (isRecovery(params) || invitacion) { setPhase("recovery"); return; }
+
+      // Registro con mail primero: el mail ya quedó validado y hay sesión. Si
+      // la cuenta es nueva, sigue el formulario; si ya existía, el link sólo
+      // la inició y entra a la app como cualquier confirmación.
+      if (isRegistroMail(params)) {
+        const perfil = result.user ? await hydrateProfile(result.user) : null;
+        setPhase("done");
+        setTimeout(() => window.location.replace(perfil?.registroPendiente
+          ? appViewUrl("profile", { registro: "mail" })
+          : appViewUrl(HOME_VIEW, { confirmed: "1" })), 1200);
+        return;
+      }
 
       // Confirmación de cuenta: completamos `profiles` (el trigger ya creó la
       // fila; acá sumamos lo que quedó en este celular, como la foto) y
@@ -105,7 +123,7 @@ export default function AuthCallbackView() {
       setPhase("done");
       setTimeout(() => goToApp({ confirmed: "1" }), 1400);
     })();
-  }, [params, goToApp]);
+  }, [params, invitacion, goToApp]);
 
   // ── Guardar contraseña nueva ────────────────────────────────────────────────
   const canSave = pass.length >= 6 && pass === passConf;
@@ -130,11 +148,18 @@ export default function AuthCallbackView() {
       // perfil para que la app lo reconozca sin pedirle login de nuevo.
       if (session.user) await hydrateProfile(session.user);
       setPhase("done");
+      if (invitacion) {
+        // Staff (operador o administrador) entra al panel; cliente, a la app.
+        const { data: staff } = await supabase
+          .from("admin_users").select("user_id").eq("user_id", session.user.id).maybeSingle();
+        setTimeout(() => (staff ? window.location.replace("/admin") : goToApp({ confirmed: "1" })), 1400);
+        return;
+      }
       setTimeout(() => goToApp({ passwordChanged: "1" }), 1400);
     } finally {
       setSaving(false);
     }
-  }, [canSave, saving, pass, goToApp]);
+  }, [canSave, saving, pass, invitacion, goToApp]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -175,11 +200,13 @@ export default function AuthCallbackView() {
   return (
     <AuthShell>
       <div style={{ paddingTop:8 }}>
-        <div className="sec-hdr"><span style={{ fontSize:20 }}>🔑</span><h3>Nueva contraseña</h3></div>
+        <div className="sec-hdr"><span style={{ fontSize:20 }}>🔑</span><h3>{invitacion ? "Activá tu cuenta" : "Nueva contraseña"}</h3></div>
 
         <div style={{ textAlign:"center", marginBottom:16 }}>
           <div style={{ fontSize:12.5, color:"rgba(245,230,192,.5)", lineHeight:1.6 }}>
-            Elegí una contraseña nueva para tu cuenta BizarrApp.
+            {invitacion
+              ? "Tu mail quedó validado. Elegí una contraseña para entrar a BizarrApp."
+              : "Elegí una contraseña nueva para tu cuenta BizarrApp."}
           </div>
         </div>
 

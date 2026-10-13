@@ -47,7 +47,7 @@ function ReyDelOrto({ user, gameState }) {
       {state === "idle" && (
         <div style={{
           padding: "12px 14px", borderRadius: 12,
-          background: "rgba(255,215,0,.06)", border: "1px solid rgba(255,215,0,.14)",
+          background: "#000000", border: "1px solid rgba(255,215,0,.14)",
           fontSize: 12, color: "rgba(255,215,0,.5)", textAlign: "center",
         }}>
           ⏳ Esperá que el staff lance el sorteo...
@@ -67,7 +67,7 @@ function ReyDelOrto({ user, gameState }) {
       {isCancelled && (
         <div style={{
           padding: "16px 14px", borderRadius: 12, textAlign: "center",
-          background: "rgba(255,215,0,.06)", border: "1px solid rgba(255,215,0,.16)",
+          background: "#000000", border: "1px solid rgba(255,215,0,.16)",
         }}>
           <div style={{ fontSize: 30, marginBottom: 8 }}>👑</div>
           <div style={{
@@ -160,7 +160,7 @@ function DesafioDemente({ user, sessionId, gameState }) {
       ) : (
         <div style={{
           padding: "10px 14px", marginBottom: 14,
-          background: "rgba(255,215,0,.07)", border: "1px solid rgba(255,215,0,.15)",
+          background: "#000000", border: "1px solid rgba(255,215,0,.15)",
           borderRadius: 10, fontSize: 12, color: "rgba(255,215,0,.6)", textAlign: "center",
         }}>
           ⚠️ No elegiste equipo. Andá a tu perfil y elegí Team Batata o Team Membrillo.

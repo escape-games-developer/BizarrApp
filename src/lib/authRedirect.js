@@ -6,6 +6,10 @@
 //
 //   next=novedades → confirma la cuenta y entra al menú Noti (vista Novedades)
 //   next=reset     → muestra el formulario de contraseña nueva
+//   next=registro  → registro «con mail primero»: valida el mail y abre el
+//                    formulario de registro con el mail fijo
+//   next=invite    → alta hecha desde el Admin: la persona elige su contraseña
+//                    y entra al panel (staff) o a la app (cliente)
 //
 // Estas URLs tienen que estar cargadas en Supabase → Authentication → URL
 // Configuration → Redirect URLs. Ver supabase/AUTH_SETUP.md.
@@ -22,7 +26,7 @@ export function appOrigin() {
 
 /**
  * URL absoluta que se manda como `emailRedirectTo` / `redirectTo`.
- * @param {"novedades"|"reset"} next  qué hace la app al volver del mail
+ * @param {"novedades"|"reset"|"invite"|"registro"} next  qué hace la app al volver del mail
  */
 export function authCallbackUrl(next = HOME_VIEW) {
   return `${appOrigin()}${AUTH_CALLBACK_PATH}?next=${encodeURIComponent(next)}`;

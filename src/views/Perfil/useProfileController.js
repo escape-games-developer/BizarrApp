@@ -18,14 +18,18 @@ export const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!
  * Escenario y Pantalla. Un diseño nuevo no puede olvidarse de montarlo.
  */
 export function useProfileController({
-  user, onSave, onRegister, regStep, setRegStep,
+  user, onSave, onRegister, onCompleteRegistration, regStep, setRegStep,
   logout, resendConfirmation, changePassword, deleteAccount, isGuest,
 }) {
+  // Registro con mail primero: el mail viene validado y no se puede cambiar.
+  const emailFijo = !!user?.registroPendiente;
   const step    = regStep;
   const setStep = setRegStep;
 
   // Form state
-  const [name,      setName]      = useState(user?.name||"");
+  // Con mail primero, `name` todavía es el que puso el trigger (la parte del mail
+  // antes de la @): el cliente arranca con el campo vacío.
+  const [name,      setName]      = useState(user?.registroPendiente ? "" : user?.name||"");
   const [avatarSrc, setAvatarSrc] = useState("preset");
   const [selAv,     setSelAv]     = useState(user?.avatarId||null);
   const [photoUrl,  setPhotoUrl]  = useState(user?.photoUrl||null);
@@ -77,7 +81,9 @@ export function useProfileController({
         team, email:email.toLowerCase().trim(),
         phone:phone.replace(/\D/g,""), geoOk, registered:true,
       };
-      const result = await onRegister(profile, pass);
+      const result = emailFijo
+        ? await onCompleteRegistration(profile, pass)
+        : await onRegister(profile, pass);
       // El proyecto exige confirmar el email: la cuenta ya existe, pero recién
       // queda activa cuando toca el link. No lo mandamos al paso 5 fingiendo
       // que terminó — lo dejamos en la pantalla de "revisá tu mail".
@@ -92,7 +98,7 @@ export function useProfileController({
     } finally {
       setSaving(false);
     }
-  }, [saving,name,avatarSrc,photoUrl,selAv,selAvData,team,email,phone,geoOk,pass,onRegister,setStep]);
+  }, [saving,name,avatarSrc,photoUrl,selAv,selAvData,team,email,phone,geoOk,pass,emailFijo,onRegister,onCompleteRegistration,setStep]);
 
   // "Ahora no, solo quiero ver la carta" (paso 3): perfil local sin cuenta.
   const skipRegistration = useCallback(() => {
@@ -159,7 +165,7 @@ export function useProfileController({
     team, setTeam, email, setEmail, phone, setPhone,
     pass, setPass, passConf, setPassConf,
     setPhotoUrl, previewUser,
-    canStep1, canStep4, saving, saveError, handleSave, skipRegistration,
+    canStep1, canStep4, saving, saveError, handleSave, skipRegistration, emailFijo,
     geoState, distMeters, geoLoading, geoOk, requestGeo,
     // Confirmá tu cuenta
     pendingEmail, resent, resendPending, backFromPending,

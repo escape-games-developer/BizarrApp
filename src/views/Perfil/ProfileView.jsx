@@ -100,10 +100,13 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
         color:"rgba(255,215,0,.55)",fontSize:12,cursor:"pointer",marginTop:16,textDecoration:"underline" }}>
         Olvidé mi contraseña
       </button>
-      <button onClick={onGoRegister} style={{ background:"none",border:"none",
-        color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",marginTop:10,textDecoration:"underline" }}>
-        ¿Primera vez? Registrate acá
-      </button>
+      {/* Sin onGoRegister el registro está cerrado (Admin → Ajustes → Registro de clientes). */}
+      {onGoRegister && (
+        <button onClick={onGoRegister} style={{ background:"none",border:"none",
+          color:"rgba(255,215,0,.45)",fontSize:12,cursor:"pointer",marginTop:10,textDecoration:"underline" }}>
+          ¿Primera vez? Registrate acá
+        </button>
+      )}
       {guestEnabled && (
         <>
           {/* Separado del alta a propósito: que no se lea como un paso del registro. */}
@@ -132,7 +135,7 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
 //
 // Las acciones de Auth llegan de la instancia de `useAuth()` de App: esta vista
 // no crea otra.
-export default function ProfileView({ user, onSave, onRegister, regStep, setRegStep,
+export default function ProfileView({ user, onSave, onRegister, onCompleteRegistration, regStep, setRegStep,
                                       onLogout, onResendConfirmation, onChangePassword, onDeleteAccount, isGuest }) {
   const {
     step, setStep,
@@ -140,12 +143,12 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
     team, setTeam, email, setEmail, phone, setPhone,
     pass, setPass, passConf, setPassConf,
     setPhotoUrl, previewUser,
-    canStep1, canStep4, saving, saveError, handleSave, skipRegistration,
+    canStep1, canStep4, saving, saveError, handleSave, skipRegistration, emailFijo,
     geoState, distMeters, geoLoading, geoOk, requestGeo,
     pendingEmail, resent, resendPending, backFromPending,
     profile,
   } = useProfileController({
-    user, onSave, onRegister, regStep, setRegStep,
+    user, onSave, onRegister, onCompleteRegistration, regStep, setRegStep,
     logout: onLogout, resendConfirmation: onResendConfirmation,
     changePassword: onChangePassword, deleteAccount: onDeleteAccount, isGuest,
   });
@@ -306,7 +309,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               {icon:"🍺",text:"Ganá cupones de descuento en consumición"},
             ].map((item,i)=>(
               <div key={i} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-                marginBottom:6,background:"rgba(255,215,0,.05)",border:"1px solid rgba(255,215,0,.1)",
+                marginBottom:6,background:"#000000",border:"1px solid rgba(255,215,0,.1)",
                 borderRadius:10 }}>
                 <span style={{ fontSize:18,flexShrink:0 }}>{item.icon}</span>
                 <span style={{ fontSize:12,color:"rgba(245,230,192,.75)" }}>{item.text}</span>
@@ -320,10 +323,13 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
               ¡Sí, me registro! →
             </button>
           </div>
-          <button onClick={skipRegistration} style={{ width:"100%",background:"none",border:"1px solid rgba(255,255,255,.08)",
-            borderRadius:10,padding:"10px",color:"rgba(245,230,192,.28)",fontSize:11,cursor:"pointer" }}>
-            Ahora no, solo quiero ver la carta
-          </button>
+          {/* Con el mail ya validado (registro con mail primero) no hay "ahora no": la cuenta existe. */}
+          {!emailFijo && (
+            <button onClick={skipRegistration} style={{ width:"100%",background:"none",border:"1px solid rgba(255,255,255,.08)",
+              borderRadius:10,padding:"10px",color:"rgba(245,230,192,.28)",fontSize:11,cursor:"pointer" }}>
+              Ahora no, solo quiero ver la carta
+            </button>
+          )}
         </>
       )}
 
@@ -342,7 +348,14 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
           <div className="card">
             <div className="card-title">📧 Email</div>
             <input className="input-field" type="email" placeholder="tu@email.com"
-              value={email} onChange={(e)=>setEmail(e.target.value)} inputMode="email" autoCapitalize="none"/>
+              value={email} onChange={(e)=>setEmail(e.target.value)} inputMode="email" autoCapitalize="none"
+              readOnly={emailFijo} aria-readonly={emailFijo}
+              style={emailFijo ? { opacity:.65, cursor:"not-allowed" } : undefined}/>
+            {emailFijo && (
+              <div style={{ fontSize:10.5,color:"rgba(134,239,172,.8)",marginTop:-4 }}>
+                🔒 Mail validado. No se puede cambiar durante el registro.
+              </div>
+            )}
           </div>
           <div className="card">
             <div className="card-title">📱 Teléfono</div>
@@ -410,7 +423,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
           </div>
           {!canStep4 && (
             <div style={{ padding:"9px 12px",marginBottom:10,borderRadius:10,
-              background:"rgba(255,215,0,.05)",border:"1px solid rgba(255,215,0,.12)",
+              background:"#000000",border:"1px solid rgba(255,215,0,.12)",
               fontSize:11,color:"rgba(245,230,192,.5)",lineHeight:1.6 }}>
               Falta completar: {[
                 !email.includes("@")                    && "un email válido",

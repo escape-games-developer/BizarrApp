@@ -28,7 +28,7 @@ const djVotingCss = `
   /* ── Reacciones ─────────────────────────────────────────────────────── */
   .djv-reacciones{display:flex;gap:6px;margin-bottom:10px;}
   .djv-reaccion{flex:1;min-width:0;padding:10px 0;font-size:29px;line-height:1;cursor:pointer;
-    background:rgba(245,230,192,.04);border:1px solid rgba(245,230,192,.1);border-radius:13px;
+    background:#000000;border:1px solid rgba(245,230,192,.1);border-radius:13px;
     transition:transform .16s ease,background .16s,border-color .16s;
     -webkit-tap-highlight-color:transparent;}
   .djv-reaccion:active{background:rgba(155,47,255,.16);border-color:rgba(155,47,255,.4);}
@@ -55,7 +55,7 @@ const djVotingCss = `
   /* ── Sacar tema ─────────────────────────────────────────────────────── */
   .djv-kick{flex-shrink:0;max-width:52%;min-height:39px;padding:6px 11px;border-radius:14px;cursor:pointer;
     font-family:inherit;font-weight:700;font-size:13px;line-height:1.25;white-space:nowrap;text-align:center;
-    background:rgba(245,230,192,.05);border:1.5px solid rgba(245,230,192,.14);
+    background:#000000;border:1.5px solid rgba(245,230,192,.14);
     color:rgba(245,230,192,.65);transition:all .18s;-webkit-tap-highlight-color:transparent;}
   .djv-kick:active{transform:scale(.97);}
   .djv-kick-on{background:rgba(255,45,120,.18);border-color:rgba(255,45,120,.55);color:#FF2D78;
@@ -89,7 +89,7 @@ const djVotingCss = `
     font-weight:900;font-size:15px;color:rgba(245,230,192,.25);}
   .djv-tema-1 .djv-tema-pos{color:#FFD700;}
   .djv-tema-cover{grid-area:cover;width:64px;height:64px;border-radius:11px;object-fit:cover;
-    background:rgba(245,230,192,.05);}
+    background:#000000;}
   .djv-tema-info{grid-area:info;min-width:0;}
   .djv-tema-tit{font-size:15px;font-weight:700;color:#F5E6C0;line-height:1.25;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -110,7 +110,7 @@ const djVotingCss = `
   .djv-voto{position:relative;flex:1;min-width:0;height:46px;padding:0 6px;border-radius:12px;cursor:pointer;
     display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;
     font-family:'Syne',sans-serif;font-weight:800;font-size:22px;
-    background:rgba(245,230,192,.05);border:1px solid rgba(245,230,192,.12);
+    background:#000000;border:1px solid rgba(245,230,192,.12);
     color:rgba(245,230,192,.5);transition:all .18s;-webkit-tap-highlight-color:transparent;}
   .djv-voto:active:not(:disabled){transform:scale(.96);}
   .djv-voto:disabled{opacity:.4;cursor:not-allowed;}
@@ -125,11 +125,11 @@ const djVotingCss = `
   .djv-super{font-size:29px;background:linear-gradient(135deg,rgba(255,214,0,.16),rgba(255,45,120,.14));
     border-color:rgba(255,214,0,.42);color:#FFD700;}
   .djv-super:active:not(:disabled){transform:scale(.96);}
-  .djv-super-usado{background:rgba(245,230,192,.04);border-color:rgba(245,230,192,.1);
+  .djv-super-usado{background:#000000;border-color:rgba(245,230,192,.1);
     color:rgba(245,230,192,.3);}
   /* +1 / -1: valor del voto, apoyado sobre el borde superior del botón. */
   .djv-valor{position:absolute;top:-8px;left:50%;transform:translateX(-50%);
-    padding:0 4px;border-radius:5px;background:#120B04;pointer-events:none;
+    padding:0 4px;border-radius:5px;background:#000000;pointer-events:none;
     font-family:"Space Grotesk",sans-serif;font-size:10.5px;font-weight:800;line-height:14px;}
   .djv-valor-up{color:#00F5A0;}
   .djv-valor-down{color:#FF3B30;}
@@ -139,7 +139,7 @@ const djVotingCss = `
 
   /* ── Avisos, vacíos y skeletons ─────────────────────────────────────── */
   .djv-aviso{padding:11px 13px;margin-bottom:11px;border-radius:13px;font-size:11.5px;line-height:1.5;}
-  .djv-aviso-info{background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.22);
+  .djv-aviso-info{background:#000000;border:1px solid rgba(255,215,0,.22);
     color:rgba(245,230,192,.65);}
   .djv-aviso-error{background:rgba(255,45,120,.09);border:1px solid rgba(255,45,120,.28);color:#FCA5A5;}
   .djv-aviso-ok{background:rgba(0,245,160,.09);border:1px solid rgba(0,245,160,.28);color:#00F5A0;}

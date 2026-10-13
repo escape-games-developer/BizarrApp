@@ -73,8 +73,20 @@ export function profileToMetadata(profile) {
   };
 }
 
+/**
+ * Registro «con mail primero»: la cuenta nace al validar el mail, antes del
+ * formulario. Hasta que lo completa, la metadata dice `registro_pendiente` y la
+ * app lo trata como sin registrar (aunque `profiles.registered` ya sea true
+ * por la confirmación del mail), para mandarlo al formulario.
+ */
+export function registroPendiente(authUser) {
+  return authUser?.user_metadata?.registro_pendiente === true;
+}
+
 export function rowToProfile(row, authUser) {
+  const pendiente = registroPendiente(authUser);
   return {
+    registroPendiente: pendiente,
     id:          authUser?.id ?? row.id,
     email:       authUser?.email ?? null,
     name:        row.name,
@@ -84,7 +96,7 @@ export function rowToProfile(row, authUser) {
     avatarEmoji: row.avatar_emoji,
     photoUrl:    row.photo_url,
     geoOk:       row.geo_ok,
-    registered:  row.registered,
+    registered:  row.registered && !pendiente,
   };
 }
 
@@ -331,6 +343,68 @@ export function useAuth() {
       setUser(fullProfile);
       setRegStep(5);
 
+      return { ok: true, pendingConfirmation: false, user: fullProfile, error: null };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Registro con mail primero: paso 1, sólo el mail ─────────────────────────
+  // signInWithOtp crea la cuenta (sin contraseña) y manda el mail de
+  // validación. El link vuelve a /auth/callback?next=registro, que abre el
+  // formulario con el mail fijo. Si el mail ya tenía cuenta, el link sólo la
+  // inicia (la metadata `registro_pendiente` se aplica únicamente al crearla).
+  const requestEmailSignup = useCallback(async (email) => {
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.toLowerCase().trim(),
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo:  authCallbackUrl("registro"),
+          data:             { registro_pendiente: true },
+        },
+      });
+      if (error) return { ok: false, error: authErrorMessage(error) };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }, []);
+
+  // ── Registro con mail primero: paso 2, el formulario ────────────────────────
+  // Ya hay sesión (la del link). Primero el perfil y después la contraseña con
+  // la marca de pendiente apagada: si falla la contraseña, el cliente sigue en
+  // el formulario y puede reintentar sin perder nada.
+  const completeEmailSignup = useCallback(async (profile, password) => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user)
+        return { ok: false, error: "Tu sesión venció. Volvé a pedir el mail de registro." };
+      const authUser = session.user;
+
+      const { error: profileError } = await supabase
+        .from("profiles").upsert(profileToRow(profile, authUser.id));
+      if (profileError) {
+        console.error("[useAuth] Error guardando perfil:", profileError);
+        return { ok: false, error: `No pudimos guardar tu perfil (${profileError.message}). Probá de nuevo.` };
+      }
+
+      const { error: authError } = await supabase.auth.updateUser({
+        password,
+        data: { ...profileToMetadata(profile), registro_pendiente: false },
+      });
+      if (authError) return { ok: false, error: authErrorMessage(authError) };
+
+      const fullProfile = {
+        ...profile, id: authUser.id, email: authUser.email, registered: true, registroPendiente: false,
+      };
+      clearPendingProfile();
+      persistSession(fullProfile);
+      setUser(fullProfile);
+      setRegStep(5);
       return { ok: true, pendingConfirmation: false, user: fullProfile, error: null };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -590,6 +664,8 @@ export function useAuth() {
     regStep,
     setRegStep,
     register,
+    requestEmailSignup,
+    completeEmailSignup,
     login,
     loginAsGuest,
     updateUser,

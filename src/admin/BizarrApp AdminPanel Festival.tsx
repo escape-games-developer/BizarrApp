@@ -18,6 +18,9 @@ import DesignerView from "../views/Designer/DesignerView";
 import TvDesigner from "../designers/tv/TvDesigner";
 import ClientDesignerPanel from "./designer-client/ClientDesignerPanel";
 import UsuariosPanel from "./UsuariosPanel";
+import ClientesPanel from "./ClientesPanel";
+import { SIDEBAR_MENU, describirEntrada } from "./sidebarMenu";
+import { SECCIONES_SOLO_ADMIN, leerMiAcceso } from "../services/usuariosSistema";
 import { useYouTubePlaylists, searchYouTube, ytThumb } from "../hooks/useYouTubePlaylists";
 import { useRaffle, raffleCountdown } from "../hooks/useRaffle";
 import PantallaDjPanel from "./pantalla/PantallaDjPanel";
@@ -454,7 +457,7 @@ const SECS = [
   {id:"designerClient",icon:"🎨",label:"Diseñador Cliente",grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
   {id:"designerTv",icon:"📺",label:"Pantalla TV",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
   {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
-  {id:"clientes", icon:"🧑‍🤝‍🧑", label:"Clientes", adminOnly:true,
+  {id:"clientes", icon:"🧑‍🤝‍🧑", label:"Clientes",
     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
   {id:"usuarios", icon:"🛡️", label:"Usuarios del sistema", adminOnly:true,
     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
@@ -465,6 +468,24 @@ const SECS = [
 // Módulos congelados por producto. Conservamos sus entradas y paneles para
 // poder reactivarlos, pero no los exponemos en los accesos operativos.
 const FROZEN_MODULE_IDS = new Set(["karaoke"]);
+
+// Pantallas internas que no están en SECS: se abren desde Lanzar (y la campana)
+// y las ve quien puede ver Lanzar.
+const SUBSECCIONES = { mensajes: "launch", videos: "launch" };
+
+// Secciones que se le pueden asignar a un operador, agrupadas como en el
+// sidebar (los flyouts son grupos con título). Las usa «Editar usuario».
+const SECS_POR_ID = new Map(SECS.map(s=>[s.id,s]));
+const asignable = id => SECS_POR_ID.has(id) && !FROZEN_MODULE_IDS.has(id) && !SECCIONES_SOLO_ADMIN.has(id);
+const GRUPOS_SECCIONES = SIDEBAR_MENU.flatMap(e=>{
+  const ids = e.type==="flyout" ? e.children : [e.sec];
+  const items = ids.filter(asignable).map(id=>{
+    const s = SECS_POR_ID.get(id);
+    return { id, icon:s.icon, label:e.type==="flyout" ? (s.labelMenu||s.label) : s.label };
+  });
+  if(!items.length) return [];
+  return [{ id:e.id, titulo:e.type==="flyout" ? describirEntrada(e,SECS_POR_ID).label : null, items }];
+});
 
 // ── ESTADO REAL DE LA PANTALLA ─────────────────────────────────────────────
 // Etiquetas legibles para el cartel de Lanzar. No son una fuente de datos:
@@ -6181,7 +6202,7 @@ export default function AdminPanel(){
   const [toasts, setToasts] = useState([]);
   const [authSession, setAuthSession] = useState(undefined); // undefined = verificando sesión
   const [isAdmin,     setIsAdmin]     = useState(undefined); // undefined = verificando admin_users
-  const [adminRole,   setAdminRole]   = useState(undefined);
+  const [acceso,      setAcceso]      = useState(undefined); // { rol, secciones } del usuario logueado
   const [user, setUser] = useState(null);
   useEffect(() => {
     supabase.auth.getUser().then(({data:{user}}) => setUser(user));
@@ -6193,22 +6214,19 @@ export default function AdminPanel(){
   }, []);
   useEffect(() => {
     const uid = authSession?.user?.id;
-    if (!uid) { setIsAdmin(undefined); setAdminRole(undefined); return; }
+    if (!uid) { setIsAdmin(undefined); setAcceso(undefined); return; }
     let cancelled = false;
     // Primero comprobamos acceso usando únicamente la columna histórica. Así
-    // el panel sigue abriendo aunque la migración de roles aún no esté aplicada.
+    // el panel sigue abriendo aunque la migración de roles aún no esté aplicada
+    // (en ese caso leerMiAcceso devuelve acceso completo).
     supabase.from("admin_users").select("user_id").eq("user_id", uid).maybeSingle()
       .then(async ({ data, error }) => {
         if (cancelled) return;
         const autorizado = !error && !!data;
+        const miAcceso = autorizado ? await leerMiAcceso(uid) : null;
+        if (cancelled) return;
+        setAcceso(miAcceso);
         setIsAdmin(autorizado);
-        if (!autorizado) { setAdminRole(null); return; }
-
-        // Con bases anteriores, `role` todavía no existe. En ese caso los
-        // administradores ya registrados conservan acceso completo.
-        const { data: rolData, error: rolError } = await supabase
-          .from("admin_users").select("role").eq("user_id", uid).maybeSingle();
-        if (!cancelled) setAdminRole(rolError ? "general_admin" : (rolData?.role || "general_admin"));
       });
     return () => { cancelled = true; };
   }, [authSession?.user?.id]);
@@ -6267,14 +6285,17 @@ export default function AdminPanel(){
     prevMsgCount.current = pending.length;
   },[pending]);
   useEffect(()=>{ window.__bizarrToast = showToast; },[]);
-  const canManageUsers = adminRole === "general_admin";
-  const visibleSecs = SECS.filter(s=>(!s.adminOnly || canManageUsers) && !FROZEN_MODULE_IDS.has(s.id));
+  // Administrador: todo. Operador: sólo las secciones que le asignaron.
+  const esAdminTotal = acceso?.rol === "admin";
+  const visibleSecs = SECS.filter(s=>!FROZEN_MODULE_IDS.has(s.id) && (esAdminTotal
+    || (!s.adminOnly && !SECCIONES_SOLO_ADMIN.has(s.id) && !!acceso?.secciones.includes(s.id))));
+  const puedeVer = id => visibleSecs.some(s=>s.id===(SUBSECCIONES[id]||id));
   // Orden y visibilidad del sidebar guardados en Ajustes (null = orden base).
   const sidebarConfig = useSidebarConfig(isAdmin === true);
   const curSec = visibleSecs.find(s=>s.id===sec)||visibleSecs[0]||SECS[0];
   useEffect(()=>{
-    if(adminRole && (sec==="usuarios"||sec==="clientes") && !canManageUsers) setSec("launch");
-  },[adminRole,sec,canManageUsers]);
+    if(acceso && sec && !puedeVer(sec)) setSec(visibleSecs[0]?.id ?? null);
+  },[acceso,sec,visibleSecs]);
   const goTo   = useCallback(id=>setSec(id),[]);
   useEffect(()=>{
     if(new URLSearchParams(window.location.search).get("designerPreview")==="1") return;
@@ -6283,6 +6304,9 @@ export default function AdminPanel(){
   },[sec]);
 
   const renderPanel = () => {
+    if(!visibleSecs.length) return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>
+      Todavía no tenés secciones asignadas. Pedile a un administrador que te las habilite.</div>;
+    if(!puedeVer(sec)) return null;
     switch(sec){
       case "launch":    return <LaunchPanel sec={curSec} gameState={gameState}
                                  zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
@@ -6320,8 +6344,8 @@ export default function AdminPanel(){
       case "designerClient": return <ClientDesignerPanel/>;
       case "designerTv": return <TvDesigner sessionId="default"/>;
       case "designerGuest": return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Diseñador de Pantalla Invitado — próxima etapa</div>;
-      case "clientes": return canManageUsers ? <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Gestión de clientes — próxima etapa</div> : null;
-      case "usuarios": return canManageUsers ? <UsuariosPanel/> : null;
+      case "clientes": return <ClientesPanel/>;
+      case "usuarios": return <UsuariosPanel grupos={GRUPOS_SECCIONES}/>;
       case "ajustes":  return <AjustesPanel config={sidebarConfig} secs={SECS} visibleSecs={visibleSecs}
                                  puedeEditar={isAdmin === true}/>;
       default: return <div style={{padding:20,color:"rgba(240,232,255,.25)",fontSize:12}}>Sección en construcción</div>;

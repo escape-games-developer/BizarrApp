@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 
 import globalCss                from "./constants/styles";
 import { useAuth }              from "./hooks/useAuth";
+import { useRegistroConfig }    from "./hooks/useRegistroConfig";
 import { useGameState }         from "./hooks/realtime/useGameState";
 import { useBanners }           from "./hooks/realtime/useBanners";
 import { usePresence }          from "./hooks/realtime/usePresence";
@@ -22,11 +23,12 @@ import { escenarioAnunciado } from "./client/anuncios/anunciosCatalog";
 import AnuncioDestacado from "./client/anuncios/AnuncioDestacado";
 import ProfileView, { LoginView } from "./views/Perfil/ProfileView";
 import ForgotPasswordView from "./views/Auth/ForgotPasswordView";
+import { RegistroMailView, ElegirRegistroView } from "./views/Auth/RegistroMailView";
 
 const VIEWS            = ["novedades", "menu", "pantalla", "games", "escenario", "profile"];
 
 export default function BizarrApp() {
-  const { user, regStep, setRegStep, register, login, loginAsGuest,
+  const { user, regStep, setRegStep, register, requestEmailSignup, completeEmailSignup, login, loginAsGuest,
           updateUser, logout, resendConfirmation, changePassword, deleteAccount,
           isLoggedIn, isGuest } = useAuth();
 
@@ -62,8 +64,14 @@ export default function BizarrApp() {
   const [gameOpen, setGameOpen] = useState(null);
   // Configuración de playlists de YouTube (persiste en localStorage)
   const { config: ytConfig } = useYouTubePlaylistAdmin();
-  // "login" | "register" | "forgot"
+  // "login" | "elegirRegistro" | "register" | "registroMail" | "forgot"
   const [authMode,    setAuthMode]    = useState("login");
+  // Modalidades de registro activas (Admin → Ajustes → Registro de clientes).
+  const { config: registro } = useRegistroConfig();
+  const modoRegistro = registro.completo && registro.mailPrimero ? "elegirRegistro"
+    : registro.mailPrimero ? "registroMail"
+    : registro.completo ? "register"
+    : null;   // registro cerrado
   const [forgotEmail, setForgotEmail] = useState("");
 
   // Estado global del juego — sincronizado via Supabase Realtime
@@ -150,7 +158,8 @@ export default function BizarrApp() {
   // Perfil recibe las acciones de esta instancia de useAuth(): no monta otra
   // (cada instancia corre su propio restoreSession y su listener de Auth).
   const profileProps = {
-    user, onSave: updateUser, onRegister: register, regStep, setRegStep,
+    user, onSave: updateUser, onRegister: register, onCompleteRegistration: completeEmailSignup,
+    regStep, setRegStep,
     onLogout: logout, onResendConfirmation: resendConfirmation,
     onChangePassword: changePassword, onDeleteAccount: deleteAccount, isGuest,
   };
@@ -170,12 +179,19 @@ export default function BizarrApp() {
                  ytConfig={ytConfig} gameState={gameState}/>;
       case "pantalla":   return null; // PantallaView vive fuera del switch, ver abajo
       case "profile":
+        // Registro con mail primero: el mail ya está validado, falta el formulario.
+        if (user?.registroPendiente) return <ProfileView {...profileProps}/>;
         if (!user?.registered) {
+          if (authMode === "elegirRegistro")
+            return <ElegirRegistroView onMail={() => setAuthMode("registroMail")}
+                     onCompleto={() => setAuthMode("register")} onVolver={() => setAuthMode("login")}/>;
+          if (authMode === "registroMail")
+            return <RegistroMailView onSolicitar={requestEmailSignup} onVolver={() => setAuthMode("login")}/>;
           if (authMode === "forgot")
             return <ForgotPasswordView initialEmail={forgotEmail}
                      onBack={() => setAuthMode("login")}/>;
           return authMode === "login"
-            ? <LoginView onLogin={login} onGoRegister={() => setAuthMode("register")}
+            ? <LoginView onLogin={login} onGoRegister={modoRegistro ? () => setAuthMode(modoRegistro) : null}
                 onGuestLogin={loginAsGuest}
                 onGoForgot={(email) => { setForgotEmail(email || ""); setAuthMode("forgot"); }}/>
             : <ProfileView {...profileProps}/>;
