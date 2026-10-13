@@ -27,7 +27,7 @@ const VIEWS            = ["novedades", "menu", "pantalla", "games", "escenario",
 
 export default function BizarrApp() {
   const { user, regStep, setRegStep, register, login, loginAsGuest,
-          updateUser, logout, resendConfirmation, changePassword,
+          updateUser, logout, resendConfirmation, changePassword, deleteAccount,
           isLoggedIn, isGuest } = useAuth();
 
   const [view,     setView]     = useState(() => {
@@ -152,7 +152,7 @@ export default function BizarrApp() {
   const profileProps = {
     user, onSave: updateUser, onRegister: register, regStep, setRegStep,
     onLogout: logout, onResendConfirmation: resendConfirmation,
-    onChangePassword: changePassword, isGuest,
+    onChangePassword: changePassword, onDeleteAccount: deleteAccount, isGuest,
   };
 
   const renderContent = () => {

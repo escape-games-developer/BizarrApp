@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { AvatarDisplay }   from "../../components/AvatarDisplay";
 import { StepBar }         from "../../components/UI";
-import { PRESET_AVATARS, TEAMS, GEO_RADIUS } from "../../constants/theme";
+import { TEAMS, GEO_RADIUS } from "../../constants/theme";
 import { useAuth }         from "../../hooks/useAuth";
 import { useProfileController, STEP_LABELS } from "./useProfileController";
+import AvatarPicker        from "./AvatarPicker";
 import { resolveProfileDesign, DEFAULT_PROFILE_DESIGN } from "./designs/registry";
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -132,13 +133,13 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
 // Las acciones de Auth llegan de la instancia de `useAuth()` de App: esta vista
 // no crea otra.
 export default function ProfileView({ user, onSave, onRegister, regStep, setRegStep,
-                                      onLogout, onResendConfirmation, onChangePassword, isGuest }) {
+                                      onLogout, onResendConfirmation, onChangePassword, onDeleteAccount, isGuest }) {
   const {
     step, setStep,
     name, setName, avatarSrc, setAvatarSrc, selAv, setSelAv, photoUrl,
     team, setTeam, email, setEmail, phone, setPhone,
     pass, setPass, passConf, setPassConf,
-    fileRef, handleFile, previewUser,
+    setPhotoUrl, previewUser,
     canStep1, canStep4, saving, saveError, handleSave, skipRegistration,
     geoState, distMeters, geoLoading, geoOk, requestGeo,
     pendingEmail, resent, resendPending, backFromPending,
@@ -146,7 +147,7 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
   } = useProfileController({
     user, onSave, onRegister, regStep, setRegStep,
     logout: onLogout, resendConfirmation: onResendConfirmation,
-    changePassword: onChangePassword, isGuest,
+    changePassword: onChangePassword, deleteAccount: onDeleteAccount, isGuest,
   });
 
   // ── Esperando la confirmación del mail ──────────────────────────────────────
@@ -223,52 +224,8 @@ export default function ProfileView({ user, onSave, onRegister, regStep, setRegS
           </div>
           <div className="card">
             <div className="card-title">Tu avatar</div>
-            <div style={{ display:"flex",gap:6,marginBottom:12 }}>
-              {[{id:"preset",label:"😀 Elegir"},{id:"photo",label:"📷 Foto propia"}].map((t)=>(
-                <button key={t.id} onClick={()=>setAvatarSrc(t.id)} style={{
-                  flex:1,padding:"8px",borderRadius:9,border:"1px solid",cursor:"pointer",
-                  fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700,
-                  background: avatarSrc===t.id?"rgba(255,215,0,.12)":"rgba(255,255,255,.03)",
-                  borderColor:avatarSrc===t.id?"rgba(255,215,0,.35)":"rgba(255,255,255,.08)",
-                  color:      avatarSrc===t.id?"#FFD700":"rgba(245,230,192,.4)",
-                }}>{t.label}</button>
-              ))}
-            </div>
-            {avatarSrc==="preset" && (
-              <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8 }}>
-                {PRESET_AVATARS.map((av)=>(
-                  <div key={av.id}
-                    onClick={()=>setSelAv(av.id)}
-                    style={{
-                      aspectRatio:"1",borderRadius:12,display:"flex",alignItems:"center",
-                      justifyContent:"center",fontSize:22,cursor:"pointer",transition:"all .18s",
-                      background:`linear-gradient(135deg,${av.bg[0]},${av.bg[1]})`,
-                      border:`2px solid ${selAv===av.id?"#FFD700":"transparent"}`,
-                      transform:selAv===av.id?"scale(1.08)":"scale(1)",
-                    }}>
-                    {av.emoji}
-                  </div>
-                ))}
-              </div>
-            )}
-            {avatarSrc==="photo" && (
-              <>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFile}/>
-                <div onClick={()=>fileRef.current.click()} style={{
-                  height:100,borderRadius:12,border:"2px dashed rgba(255,215,0,.2)",
-                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-                  cursor:"pointer",overflow:"hidden",
-                }}>
-                  {photoUrl
-                    ? <img src={photoUrl} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
-                    : <>
-                        <div style={{ fontSize:28,marginBottom:6 }}>📷</div>
-                        <div style={{ fontSize:11,color:"rgba(255,215,0,.4)" }}>Seleccionar foto</div>
-                      </>
-                  }
-                </div>
-              </>
-            )}
+            <AvatarPicker avatarSrc={avatarSrc} setAvatarSrc={setAvatarSrc}
+              selAv={selAv} setSelAv={setSelAv} photoUrl={photoUrl} onPhoto={setPhotoUrl}/>
           </div>
           <button className="btn-primary" disabled={!canStep1} onClick={()=>setStep(2)}>
             Siguiente →

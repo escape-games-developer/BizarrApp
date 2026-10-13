@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { PRESET_AVATARS, TEAMS } from "../../constants/theme";
 import { useGeoGate }            from "../../hooks/useGeoGate";
 
@@ -19,7 +19,7 @@ export const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!
  */
 export function useProfileController({
   user, onSave, onRegister, regStep, setRegStep,
-  logout, resendConfirmation, changePassword, isGuest,
+  logout, resendConfirmation, changePassword, deleteAccount, isGuest,
 }) {
   const step    = regStep;
   const setStep = setRegStep;
@@ -41,7 +41,6 @@ export function useProfileController({
   // Cuenta creada pero esperando que el cliente toque el link del mail.
   const [pendingEmail, setPendingEmail] = useState(null);
   const [resent,       setResent]       = useState(false);
-  const fileRef = useRef();
 
   // Geo — el invitado abre el gate sin pedir ubicación.
   const { geoState, distMeters, loading: geoLoading, retry: requestGeo } = useGeoGate(isGuest);
@@ -59,13 +58,6 @@ export function useProfileController({
   const previewUser = avatarSrc==="photo"&&photoUrl
     ? { photoUrl, name }
     : selAv ? { avatarId:selAv, avatarEmoji:selAvData?.emoji, name } : { name };
-
-  const handleFile = useCallback((e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = (ev) => setPhotoUrl(ev.target.result);
-    r.readAsDataURL(f);
-  }, []);
 
   const canStep1 = name.trim().length > 0 && (selAv || (avatarSrc==="photo"&&photoUrl));
   const canStep4 = email.includes("@") && pass.length >= 6 && pass === passConf && phone.replace(/\D/g,"").length >= 8;
@@ -110,8 +102,13 @@ export function useProfileController({
   }, [onSave,name,selAv,selAvData,avatarSrc,photoUrl,team,setStep]);
 
   // "Editar perfil" vuelve al wizard desde el paso 1 (termina otra vez en
-  // onRegister: deuda conocida, se trata aparte).
+  // onRegister: deuda conocida, se trata aparte). Sólo lo usa quien todavía no
+  // tiene cuenta — para completar el registro — y el Diseñador Cliente.
   const startEdit = useCallback(() => { setEditing(true); setStep(1); }, [setStep]);
+
+  // Edición en el lugar, para quien ya tiene cuenta: guarda sólo lo que cambió
+  // en el formulario del perfil, sin pasar por el wizard ni por Auth.
+  const saveProfile = useCallback((updates) => onSave(updates), [onSave]);
 
   const resendPending = useCallback(async () => {
     const r = await resendConfirmation(pendingEmail);
@@ -128,7 +125,8 @@ export function useProfileController({
   }, [user?.registered, editing, step, setStep]);
 
   // ── Datos de "Mi Perfil" (paso 5) que consumen los diseños ──────────────────
-  const userTeam = user?.team ? TEAMS[user.team] : null;
+  const userTeam   = user?.team ? TEAMS[user.team] : null;
+  const hasAccount = !!(user?.registered && user?.email);
   const profile = user ? {
     user,
     team:       userTeam,
@@ -147,8 +145,11 @@ export function useProfileController({
     needsLocation:     !user.geoOk && user.registered,
     // Solo tiene sentido con cuenta de Auth detrás: quien eligió
     // "ahora no, solo la carta" no tiene contraseña que cambiar.
-    canChangePassword: !!(user.registered && user.email),
-    actions: { requestGeo, startEdit, logout, changePassword },
+    canChangePassword: hasAccount,
+    // Cuenta creada y confirmada: el Perfil deja de ser un registro (sin barra
+    // de pasos) y se edita en el lugar desde el menú ⋮.
+    hasAccount,
+    actions: { requestGeo, startEdit, saveProfile, logout, changePassword, deleteAccount },
   } : null;
 
   return {
@@ -157,7 +158,7 @@ export function useProfileController({
     name, setName, avatarSrc, setAvatarSrc, selAv, setSelAv, photoUrl,
     team, setTeam, email, setEmail, phone, setPhone,
     pass, setPass, passConf, setPassConf,
-    fileRef, handleFile, previewUser,
+    setPhotoUrl, previewUser,
     canStep1, canStep4, saving, saveError, handleSave, skipRegistration,
     geoState, distMeters, geoLoading, geoOk, requestGeo,
     // Confirmá tu cuenta

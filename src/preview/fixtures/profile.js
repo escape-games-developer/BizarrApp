@@ -33,9 +33,11 @@ const STEP_LABELS = ["Identidad","Equipo","¡A jugar!","Cuenta","¡Listo!"];
 const previewActions = Object.freeze({
   requestGeo()     {},
   startEdit()      {},
+  saveProfile:     async () => ({ ok: false, error: PREVIEW_ACTION_DISABLED }),
   logout()         {},
   // ChangePasswordCard muestra el error que recibe: así el botón no parece roto.
   changePassword:  async () => ({ ok: false, error: PREVIEW_ACTION_DISABLED }),
+  deleteAccount:   async () => ({ ok: false, error: PREVIEW_ACTION_DISABLED }),
 });
 
 function buildPreviewProfile(user) {
@@ -57,6 +59,7 @@ function buildPreviewProfile(user) {
     ],
     needsLocation:     !user.geoOk && user.registered,
     canChangePassword: !!(user.registered && user.email),
+    hasAccount:        !!(user.registered && user.email),
     actions:           previewActions,
   };
 }

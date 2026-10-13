@@ -8,10 +8,13 @@ import { useState, useCallback } from "react";
 //
 // `changePassword` es el de la instancia de `useAuth()` de App (llega vía el
 // controlador del Perfil): la tarjeta no monta otra instancia de auth.
+//
+// Desde el menú ⋮ del Perfil se abre ya desplegada (`startOpen`) y, al guardar
+// o cancelar, avisa con `onClose(changed)` para que el Perfil la saque.
 
-export default function ChangePasswordCard({ changePassword }) {
+export default function ChangePasswordCard({ changePassword, startOpen = false, onClose }) {
 
-  const [open,     setOpen]     = useState(false);
+  const [open,     setOpen]     = useState(startOpen);
   const [current,  setCurrent]  = useState("");
   const [pass,     setPass]     = useState("");
   const [passConf, setPassConf] = useState("");
@@ -31,14 +34,14 @@ export default function ChangePasswordCard({ changePassword }) {
     setSaving(true); setError("");
     try {
       const result = await changePassword(current, pass);
-      if (result?.ok) { reset(); setDone(true); setOpen(false); }
+      if (result?.ok) { reset(); setDone(true); setOpen(false); onClose?.(true); }
       else setError(result?.error || "No se pudo cambiar la contraseña.");
     } catch (e) {
       setError(e?.message || "No se pudo cambiar la contraseña.");
     } finally {
       setSaving(false);
     }
-  }, [canSave, saving, changePassword, current, pass, reset]);
+  }, [canSave, saving, changePassword, current, pass, reset, onClose]);
 
   return (
     <div className="card">
@@ -96,7 +99,7 @@ export default function ChangePasswordCard({ changePassword }) {
 
           <div style={{ display:"flex", gap:8 }}>
             <button className="btn-ghost" style={{ flex:"0 0 auto" }} disabled={saving}
-              onClick={() => { reset(); setOpen(false); }}>
+              onClick={() => { reset(); setOpen(false); onClose?.(false); }}>
               Cancelar
             </button>
             <button className="btn-primary" style={{ flex:1, opacity:(!canSave || saving) ? .4 : 1 }}

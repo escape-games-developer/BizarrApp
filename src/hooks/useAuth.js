@@ -414,6 +414,49 @@ export function useAuth() {
     }
   }, []);
 
+  // ── Eliminar la cuenta (verifica la contraseña) ─────────────────────────────
+  // El borrado lo hace la RPC `delete_my_account` (security definer, siempre
+  // sobre auth.uid()): desde el navegador no se puede borrar de auth.users.
+  // Pide la contraseña por lo mismo que el cambio de contraseña: el celular
+  // puede quedar abierto sobre la mesa.
+  const deleteAccount = useCallback(async (password) => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.email)
+        return { ok: false, error: "Tu sesión venció. Volvé a iniciar sesión." };
+
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email:    session.user.email,
+        password,
+      });
+      if (reauthError) return { ok: false, error: "La contraseña no es correcta." };
+
+      const { error } = await supabase.rpc("delete_my_account");
+      if (error) {
+        if (/admin_account/.test(error.message))
+          return { ok: false, error: "Las cuentas del staff no se eliminan desde la app." };
+        if (/could not find the function|PGRST202/i.test(`${error.code} ${error.message}`))
+          return { ok: false, error: "Eliminar la cuenta todavía no está habilitado en el servidor." };
+        return { ok: false, error: authErrorMessage(error) };
+      }
+
+      // El usuario ya no existe: el signOut global fallaría. Alcanza con
+      // tirar la sesión de este dispositivo.
+      await supabase.auth.signOut({ scope: "local" });
+      localStorage.removeItem(SESSION_KEY);
+      clearPendingProfile();
+      setUser(null);
+      setRegStep(1);
+      setIsGuest(false);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // ── Login ───────────────────────────────────────────────────────────────────
   const login = useCallback(async (email, password) => {
     setLoading(true);
@@ -496,8 +539,13 @@ export function useAuth() {
   }, []);
 
   // ── Actualizar perfil ───────────────────────────────────────────────────────
+  // Optimista: la pantalla cambia al instante y, si la base rechaza el cambio,
+  // vuelve a los valores anteriores. Devuelve { ok, error } para que la
+  // edición del perfil pueda avisar; el resto de los llamados lo ignora.
   const updateUser = useCallback(async (updates) => {
+    let previous = null;
     setUser((prev) => {
+      previous = prev;
       const next = { ...prev, ...updates };
       persistSession(next);
       return next;
@@ -516,9 +564,15 @@ export function useAuth() {
 
       if (Object.keys(dbUpdates).length > 0) {
         // Clave es id, no user_id
-        await supabase.from("profiles").update(dbUpdates).eq("id", user.id);
+        const { error } = await supabase.from("profiles").update(dbUpdates).eq("id", user.id);
+        if (error) {
+          console.error("[useAuth] No se pudo actualizar el perfil:", error);
+          if (previous) { persistSession(previous); setUser(previous); }
+          return { ok: false, error: authErrorMessage(error) };
+        }
       }
     }
+    return { ok: true };
   }, [user?.id]);
 
   // ── Logout ──────────────────────────────────────────────────────────────────
@@ -544,6 +598,7 @@ export function useAuth() {
     requestPasswordReset,
     updatePassword,
     changePassword,
+    deleteAccount,
     loading,
     isGuest,
     // El invitado entra sin `registered`: su perfil nunca llega a true porque no
