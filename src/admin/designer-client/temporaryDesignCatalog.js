@@ -1,6 +1,7 @@
 import { DEFAULT_PROFILE_DESIGN } from "../../views/Perfil/designs/registry";
 import { PROFILE_ORIGINAL_DOCUMENT } from "../../client/design/profile/profileOriginalDocument";
 import { DEFAULT_PANTALLA_DESIGN } from "../../views/Pantalla/themes/registry";
+import { DEFAULT_NOVEDADES_DESIGN } from "../../views/Novedades/designs/registry";
 
 /**
  * TEMPORAL — será reemplazado por ui_design_variants / backend real.
@@ -32,8 +33,31 @@ import { DEFAULT_PANTALLA_DESIGN } from "../../views/Pantalla/themes/registry";
  *
  * Pantalla: sus diseños son temas de DJ Democracy (src/views/Pantalla/themes).
  * El activo sí se guarda: tabla client_design_active (ver ACTIVATABLE_SECTIONS).
+ *
+ * Novedades: sus diseños son estilos de la card (src/views/Novedades/designs).
+ * "original" es el Diseño Jorge. También se activa desde acá.
  */
 const TEMPORARY_DESIGN_CATALOG = Object.freeze([
+  Object.freeze({
+    id:           "novedades_jorge",
+    designKey:    DEFAULT_NOVEDADES_DESIGN,
+    section:      "novedades",
+    name:         "Diseño Jorge",
+    rendererKind: "native",
+    rendererKey:  DEFAULT_NOVEDADES_DESIGN,
+    isActive:     true,
+    isSystem:     true,
+  }),
+  Object.freeze({
+    id:           "novedades_cantoni",
+    designKey:    "cantoni",
+    section:      "novedades",
+    name:         "Diseño Cantoni",
+    rendererKind: "native",
+    rendererKey:  "cantoni",
+    isActive:     false,
+    isSystem:     false,
+  }),
   Object.freeze({
     id:           "profile_original",
     section:      "profile",
@@ -71,7 +95,7 @@ const TEMPORARY_DESIGN_CATALOG = Object.freeze([
  * Secciones cuyo diseño activo se guarda en client_design_active (migración
  * 20261005230302) y que la app Cliente lee en vivo. El resto sigue fijo en código.
  */
-export const ACTIVATABLE_SECTIONS = new Set(["pantalla"]);
+export const ACTIVATABLE_SECTIONS = new Set(["pantalla", "novedades"]);
 
 /**
  * Diseños de una sección, en el orden del catálogo. Nunca mezcla secciones.

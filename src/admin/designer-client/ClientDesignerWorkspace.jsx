@@ -16,7 +16,7 @@ const box = {
 };
 
 /** Secciones cuya ruta de preview sabe dibujar diseños nativos. */
-const SECCIONES_CON_PREVIEW = new Set(["profile", "pantalla"]);
+const SECCIONES_CON_PREVIEW = new Set(["profile", "pantalla", "novedades"]);
 
 /**
  * «Activar en la app Cliente»: guarda el diseño como activo de la sección

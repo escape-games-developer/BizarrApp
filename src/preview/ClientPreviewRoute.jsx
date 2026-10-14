@@ -10,6 +10,9 @@ import { previewProfile, previewShellState } from "./fixtures/profile";
 import DjVotingView from "../views/Pantalla/DjVotingView";
 import { hasPantallaDesign, resolvePantallaTheme } from "../views/Pantalla/themes/registry";
 import { previewPantallaProps, previewPantallaShellState } from "./fixtures/pantalla";
+import NovedadesView from "../views/Novedades/NovedadesView";
+import { hasNovedadesDesign, resolveNovedadesDesign } from "../views/Novedades/designs/registry";
+import { previewNovedadesProps, previewNovedadesShellState } from "./fixtures/novedades";
 import { PREVIEW_ACTION_DISABLED, isPreviewMessage, previewMessage } from "./previewContract";
 
 /**
@@ -22,7 +25,8 @@ import { PREVIEW_ACTION_DISABLED, isPreviewMessage, previewMessage } from "./pre
  *
  * Dos modos:
  *   native    renderer nativo registrado (ProfileDesignOriginal, o la vista
- *             de DJ Democracy con el tema del diseño de Pantalla).
+ *             de DJ Democracy con el tema del diseño de Pantalla, o la de
+ *             Novedades con el diseño de la sección).
  *   document  DesignDocument del motor (ClientDesignRenderer). Acá vive también
  *             la parte de edición que necesita el DOM: click → "node-selected"
  *             y el contorno del nodo seleccionado. Va por fuera del renderer.
@@ -32,6 +36,9 @@ const NATIVE = {
   pantalla: { has: hasPantallaDesign, resolve: () => DjVotingView,
     props: (rendererKey) => ({ ...previewPantallaProps, theme: resolvePantallaTheme(rendererKey) }),
     shell: previewPantallaShellState },
+  novedades: { has: hasNovedadesDesign, resolve: () => NovedadesView,
+    props: (rendererKey) => ({ ...previewNovedadesProps, design: resolveNovedadesDesign(rendererKey) }),
+    shell: previewNovedadesShellState },
 };
 const DEFAULT_SHELL = { isLoggedIn: true, isRestricted: false };
 const ID_RE = /^[A-Za-z][\w-]{0,63}$/;

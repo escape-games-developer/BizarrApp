@@ -4,23 +4,22 @@ import {
   TYPE_BADGE, CTA_LABEL, ctaModeFor, newsType, newsDate,
   formatDateDMY, truncateText, isHttpUrl,
 } from "../../constants/novedades";
+import { JORGE_DESIGN } from "./designs/jorgeDesign";
 
 // Formato oficial de la imagen de cada novedad: 1440x600 (2.4:1). Va arriba
 // de la card, a ancho completo, y abajo el cuerpo con título, tipo, extracto,
-// botón y fecha.
+// botón y fecha. La estructura es la misma en todos los diseños; cada diseño
+// (src/views/Novedades/designs) sólo pone los estilos.
 const IMG_W = 1440;
 const IMG_H = 600;
 const IMG_RATIO = `${IMG_W} / ${IMG_H}`;
 
-// Marco sobrio tomado de la estética 4d2c809.
-const FRAME = {
-  position:     "relative",
-  width:        "100%",
-  borderRadius: 16,
-  overflow:     "hidden",
-  background:   "rgba(0,0,0,.42)",
-  border:       "1px solid rgba(255,215,0,.14)",
-};
+const frameStyle = (design) => ({
+  position: "relative",
+  width:    "100%",
+  overflow: "hidden",
+  ...design.frame,
+});
 
 /**
  * Una novedad. La imagen sale, en orden de prioridad, de:
@@ -29,9 +28,10 @@ const FRAME = {
  *   3. ninguna        → el emoji de la novedad
  *
  * `preview` lo usa el admin para mostrar la card dentro del formulario sin la
- * animación de entrada ni el margen de la lista.
+ * animación de entrada ni el margen de la lista. `inert` deja el botón sin
+ * navegar (va implícito en `preview`; el Diseñador lo usa con la lista).
  */
-export function NovedadCard({ banner, index = 0, preview = false }) {
+export function NovedadCard({ banner, index = 0, preview = false, inert = preview, design = JORGE_DESIGN }) {
   const [imgFailed,   setImgFailed]   = useState(false);
   const [assetFailed, setAssetFailed] = useState(false);
 
@@ -55,7 +55,7 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
     <div
       className={preview ? undefined : "fade-up"}
       style={{
-        ...FRAME,
+        ...frameStyle(design),
         marginBottom:      preview ? 0 : 12,
         animationDelay:    preview ? undefined : `${index * .07}s`,
         animationFillMode: preview ? undefined : "both",
@@ -63,7 +63,7 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
     >
       <div style={{
         position: "relative", width: "100%", aspectRatio: IMG_RATIO,
-        overflow: "hidden", background: "rgba(255,255,255,.04)",
+        overflow: "hidden", background: design.imageBg,
       }}>
         {hasImage ? (
           <img
@@ -91,7 +91,7 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
           <div style={{
             width: "100%", height: "100%",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 44, background: "rgba(255,215,0,.05)",
+            fontSize: 44, background: design.fallbackBg,
           }}>
             {banner.emoji || "📢"}
           </div>
@@ -101,19 +101,17 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
       <div style={{ padding: "12px 14px 14px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
           <div style={{
-            flex: 1, minWidth: 0,
-            fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: 15,
-            color: banner.color || "#FFD700", lineHeight: 1.25,
+            flex: 1, minWidth: 0, lineHeight: 1.25,
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            ...design.title(banner),
           }}>
             {banner.title}
           </div>
           <span style={{
             flexShrink: 0, maxWidth: "42%",
             padding: "4px 10px", borderRadius: 999,
-            background: "rgba(255,215,0,.1)", border: "1px solid rgba(255,215,0,.18)",
-            fontSize: 9.5, fontWeight: 700, letterSpacing: ".5px", color: "rgba(255,215,0,.8)",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            ...design.badge(type),
           }}>
             {TYPE_BADGE[type]}
           </span>
@@ -121,10 +119,10 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
 
         {excerpt && (
           <div style={{
-            marginTop: 8, fontSize: 12.5, lineHeight: 1.35,
-            color: "rgba(245,230,192,.72)",
+            marginTop: 8, lineHeight: 1.35,
             display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
             overflow: "hidden",
+            ...design.excerpt,
           }}>
             {excerpt}
           </div>
@@ -140,76 +138,109 @@ export function NovedadCard({ banner, index = 0, preview = false }) {
                 href={ctaLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                // En el preview del admin el botón se ve pero no navega.
-                onClick={preview ? (e) => e.preventDefault() : undefined}
+                // En los previews (Admin y Diseñador) el botón se ve pero no navega.
+                onClick={inert ? (e) => e.preventDefault() : undefined}
                 style={{
                   display: "inline-flex", alignItems: "center", minHeight: 36,
                   padding: "0 16px", borderRadius: 12, maxWidth: "100%",
-                  background: "rgba(255,215,0,.12)", border: "1px solid rgba(255,215,0,.45)",
-                  color: "#FFF6D6", fontSize: 12.5, fontWeight: 800, letterSpacing: ".4px",
-                  textDecoration: "none", whiteSpace: "nowrap",
+                  letterSpacing: ".4px", textDecoration: "none", whiteSpace: "nowrap",
+                  ...design.cta,
                 }}
               >
                 {ctaText}
               </a>
             )}
           </div>
-          {date && (
-            <span style={{ flexShrink: 0, fontSize: 11, color: "rgba(245,230,192,.5)" }}>
-              {date}
-            </span>
-          )}
+          {date && <span style={{ flexShrink: 0, ...design.date }}>{date}</span>}
         </div>
       </div>
     </div>
   );
 }
 
+/**
+ * Fondo, fuentes y franja de TV del diseño. Los diseños sin lienzo propio
+ * (Jorge) dibujan directo sobre el fondo de la app.
+ */
+function Lienzo({ design, children }) {
+  if (!design.className) return children;
+  return (
+    <div className={design.className}>
+      {design.fontsCss && <style>{design.fontsCss}</style>}
+      {design.css && <style>{design.css}</style>}
+      {design.tvStripe && (
+        <div className="nov-tv-franja" aria-hidden="true">
+          {design.tvStripe.map((c, i) => <span key={i} style={{ background: c }}/>)}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function Header({ design }) {
+  if (!design.header) {
+    return (
+      <div className="sec-hdr">
+        <span style={{ fontSize: 20 }}>📣</span>
+        <h3>Novedades y Promos</h3>
+      </div>
+    );
+  }
+  return (
+    <h3 style={{ margin: "0 0 12px", display: "flex", alignItems: "center", gap: 8, ...design.header }}>
+      <span style={{ fontSize: 18 }} aria-hidden="true">📣</span>
+      Novedades y Promos
+    </h3>
+  );
+}
+
 // Estado vacío: el staff todavía no cargó ninguna novedad.
-function EmptyCard() {
+function EmptyCard({ design }) {
   return (
     <div style={{
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       padding: "48px 20px", textAlign: "center",
     }}>
-      <div style={{ fontSize: 44, marginBottom: 14, opacity: .2 }}>📣</div>
-      <div style={{
-        fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700,
-        color: "rgba(255,215,0,.25)", marginBottom: 8,
-      }}>
+      <div style={{ fontSize: 44, marginBottom: 14, ...design.empty.icon }}>📣</div>
+      <div style={{ marginBottom: 8, ...design.empty.title }}>
         Sin novedades por ahora
       </div>
-      <div style={{ fontSize: 12, color: "rgba(245,230,192,.22)", lineHeight: 1.5 }}>
+      <div style={{ lineHeight: 1.5, ...design.empty.text }}>
         El staff publicará las promos y novedades de la noche acá.
       </div>
     </div>
   );
 }
 
-export default function NovedadesView({ banners = [], loading = false }) {
+/**
+ * `design` es el diseño ya resuelto (designs/registry.js). Sin dato se dibuja
+ * el Diseño Jorge. `preview` deja las cards inertes (Diseñador Cliente).
+ */
+export default function NovedadesView({ banners = [], loading = false, design = JORGE_DESIGN, preview = false }) {
   const visible = banners.filter((b) => b.visible !== false);
 
+  let content;
   if (loading) {
-    return (
-      <div style={{ ...FRAME, opacity: .45 }}>
-        <div style={{ aspectRatio: IMG_RATIO, background: "rgba(255,255,255,.04)" }}/>
+    content = (
+      <div style={{ ...frameStyle(design), opacity: .45 }}>
+        <div style={{ aspectRatio: IMG_RATIO, background: design.imageBg }}/>
         <div style={{ height: 92 }}/>
+      </div>
+    );
+  } else if (visible.length === 0) {
+    content = <EmptyCard design={design}/>;
+  } else {
+    content = (
+      <div>
+        <Header design={design}/>
+        {visible.map((b, i) => (
+          <NovedadCard key={b.id || i} banner={b} index={i} design={design} inert={preview}/>
+        ))}
       </div>
     );
   }
 
-  if (visible.length === 0) return <EmptyCard/>;
-
-  return (
-    <div>
-      <div className="sec-hdr">
-        <span style={{ fontSize: 20 }}>📣</span>
-        <h3>Novedades y Promos</h3>
-      </div>
-      {visible.map((b, i) => (
-        <NovedadCard key={b.id || i} banner={b} index={i}/>
-      ))}
-    </div>
-  );
+  return <Lienzo design={design}>{content}</Lienzo>;
 }

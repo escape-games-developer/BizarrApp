@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabase";
 import MediaImageField from "../components/media/MediaImageField";
 import { IMAGE_DEFAULTS, normalizeImageConfig } from "../components/media/imageLayout";
+import { useClientDesign } from "../hooks/realtime/useClientDesign";
+import { resolveNovedadesDesign } from "../views/Novedades/designs/registry";
 import {
   NEWS_TYPES, TYPE_LABEL, TYPE_BADGE, ctaModeFor, newsType, newsDate,
   todayISO, formatDateDMY, isHttpUrl, NEWS_EXCERPT_MAX,
@@ -127,6 +129,9 @@ export default function NovedadesPanel({ sec }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [fromDate,     setFromDate]     = useState("");
   const [toDate,       setToDate]       = useState("");
+
+  // El preview del formulario usa el diseño que hoy ve la app Cliente.
+  const design = resolveNovedadesDesign(useClientDesign("novedades"));
 
   const flash = (msg) => { setOkMsg(msg); setTimeout(() => setOkMsg(null), 2500); };
 
@@ -475,6 +480,7 @@ export default function NovedadesPanel({ sec }) {
                 <MediaImageField
                   value={form.image}
                   onChange={(image) => set({ image })}
+                  design={design}
                   preview={{
                     emoji:        form.emoji,
                     title:        form.title || "Título de la novedad",

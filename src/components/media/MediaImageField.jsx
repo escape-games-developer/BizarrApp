@@ -39,9 +39,10 @@ function Slider({ label, val, min, max, suffix = "", onSet }) {
  *
  * @param {object}   value     { asset, position, scale, x, y }
  * @param {function} onChange  recibe el value completo actualizado
- * @param {object}   preview   { emoji, title, body, tag, color } para el preview
+ * @param {object}   preview   campos del banner (title, body, type, …) para el preview
+ * @param {object}   design    diseño de Novedades a usar en el preview (default: Jorge)
  */
-export default function MediaImageField({ value, onChange, preview = {} }) {
+export default function MediaImageField({ value, onChange, preview = {}, design }) {
   const [libOpen, setLibOpen] = useState(false);
 
   const asset    = value?.asset ?? null;
@@ -68,7 +69,8 @@ export default function MediaImageField({ value, onChange, preview = {} }) {
       <div className="ctitle">Imagen de la novedad</div>
 
       {/* Sin imagen, la franja de la card muestra el emoji de la novedad. */}
-      <NovedadCard banner={previewBanner} preview />
+      {design?.fontsCss && <style>{design.fontsCss}</style>}
+      <NovedadCard banner={previewBanner} design={design} preview />
 
       <div className="mf-row">
         <button type="button" className="ml-btn ml-btn-p" onClick={() => setLibOpen(true)}>

@@ -15,6 +15,8 @@ import { clientNavItems, CLIENT_LOGO_URL } from "./client/shell/clientShellData"
 import { useYouTubePlaylistAdmin } from "./hooks/useYouTubePlaylists";
 import MenuFrame     from "./views/Carta/MenuFrame";
 import NovedadesView from "./views/Novedades/NovedadesView";
+import { resolveNovedadesDesign } from "./views/Novedades/designs/registry";
+import { useClientDesign } from "./hooks/realtime/useClientDesign";
 import JuegosView    from "./views/Juegos/JuegosView";
 import EscenarioView from "./views/Escenario/EscenarioView";
 import PantallaView  from "./views/Pantalla/PantallaView";
@@ -82,6 +84,8 @@ export default function BizarrApp() {
 
   // Novedades publicadas por el staff (cards 1440x600)
   const { banners, loading: bannersLoading } = useBanners(session?.id);
+  // Diseño activo de Novedades (Diseñador Cliente → client_design_active), en vivo.
+  const novedadesDesign = resolveNovedadesDesign(useClientDesign("novedades"));
 
   // El gate real de Juegos/Escenario/Pantalla es el `geo_ok` guardado en el
   // perfil, no `useGeoGate` — ese hook solo corre dentro del wizard de registro.
@@ -167,7 +171,7 @@ export default function BizarrApp() {
   const renderContent = () => {
     switch (view) {
       case "menu":       return null; // MenuFrame vive fuera del switch, ver abajo
-      case "novedades":  return <NovedadesView banners={banners} loading={bannersLoading} />;
+      case "novedades":  return <NovedadesView banners={banners} loading={bannersLoading} design={novedadesDesign} />;
       case "games":
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
                  activeEscenario={gameState?.active_escenario ?? null}
