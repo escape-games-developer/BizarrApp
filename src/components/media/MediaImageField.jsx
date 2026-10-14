@@ -1,7 +1,7 @@
 import { useState } from "react";
 import MediaLibraryModal from "./MediaLibraryModal";
 import {
-  IMAGE_POSITIONS, IMAGE_DEFAULTS,
+  IMAGE_DEFAULTS,
   SCALE_MIN, SCALE_MAX, OFFSET_MIN, OFFSET_MAX,
 } from "./imageLayout";
 import mediaCss from "./mediaStyles";
@@ -33,8 +33,8 @@ function Slider({ label, val, min, max, suffix = "", onSet }) {
 /**
  * Sección "Imagen de la novedad" del formulario del admin.
  *
- * Preview + elegir de biblioteca + quitar imagen + encuadre (posición, escala
- * y desplazamiento X/Y). El preview usa el mismo componente de card que la web
+ * Preview + elegir de biblioteca + quitar imagen + encuadre (escala y
+ * desplazamiento X/Y). El preview usa el mismo componente de card que la web
  * app del cliente, así lo que el staff acomoda es literalmente lo que se ve.
  *
  * @param {object}   value     { asset, position, scale, x, y }
@@ -67,15 +67,8 @@ export default function MediaImageField({ value, onChange, preview = {} }) {
 
       <div className="ctitle">Imagen de la novedad</div>
 
-      {asset ? (
-        <NovedadCard banner={previewBanner} preview />
-      ) : (
-        <div className="mf-prev">
-          <div className="mf-prev-empty" style={{ width: "100%", height: "100%" }}>
-            Sin imagen — la card usa el emoji y el texto,<br />como hasta ahora.
-          </div>
-        </div>
-      )}
+      {/* Sin imagen, la franja de la card muestra el emoji de la novedad. */}
+      <NovedadCard banner={previewBanner} preview />
 
       <div className="mf-row">
         <button type="button" className="ml-btn ml-btn-p" onClick={() => setLibOpen(true)}>
@@ -97,20 +90,8 @@ export default function MediaImageField({ value, onChange, preview = {} }) {
             {asset.name}{asset.category ? ` · ${asset.category}` : ""}
           </div>
 
-          <div className="ctitle" style={{ marginBottom: 6 }}>Posición</div>
-          <div className="mf-seg">
-            {IMAGE_POSITIONS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={position === p.id ? "sel" : ""}
-                onClick={() => patch({ position: p.id })}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
+          {/* La imagen ocupa la franja 2.4:1 de arriba de la card: sólo se
+              ajusta el encuadre (escala y desplazamiento). */}
           <Slider label="Escala"     val={scale} min={SCALE_MIN}  max={SCALE_MAX}  suffix="%"
             onSet={(v) => patch({ scale: v })} />
           <Slider label="Posición X" val={x}     min={OFFSET_MIN} max={OFFSET_MAX}

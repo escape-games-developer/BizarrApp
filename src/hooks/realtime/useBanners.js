@@ -22,21 +22,23 @@ export function useBanners(sessionId) {
       ? `session_id.eq.${sessionId},session_id.is.null`
       : "session_id.is.null";
 
-    const query = (select) => supabase
+    // Más nueva primero (published_at, migración 20261013220000).
+    const query = (select, byDate = true) => supabase
       .from("banners")
       .select(select)
       .eq("visible", true)
       .or(filter)
-      .order("sort_order", { ascending: true })
+      .order(byDate ? "published_at" : "sort_order", { ascending: !byDate })
       .order("created_at", { ascending: false });
 
     let { data, error } = await query(SELECT_WITH_ASSET);
 
-    // Si la base todavía no tiene la biblioteca de imágenes, se cae al select
-    // clásico para no dejar la sección de Novedades vacía.
+    // Si la base todavía no tiene la biblioteca de imágenes o la columna
+    // published_at, se cae al select clásico para no dejar Novedades vacía.
     if (error) {
-      console.warn("[useBanners] join con media_assets no disponible:", error.message);
+      console.warn("[useBanners] select completo no disponible:", error.message);
       ({ data, error } = await query("*"));
+      if (error) ({ data, error } = await query("*", false));
     }
 
     if (error) {
