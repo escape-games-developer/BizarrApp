@@ -5,7 +5,8 @@ import { TEAMS, GEO_RADIUS } from "../../constants/theme";
 import { useAuth }         from "../../hooks/useAuth";
 import { useProfileController, STEP_LABELS } from "./useProfileController";
 import AvatarPicker        from "./AvatarPicker";
-import { resolveProfileDesign, DEFAULT_PROFILE_DESIGN } from "./designs/registry";
+import { resolveProfileDesign, profileRendererForDesign } from "./designs/registry";
+import { useClientDesign } from "../../hooks/realtime/useClientDesign";
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
@@ -153,6 +154,9 @@ export default function ProfileView({ user, onSave, onRegister, onCompleteRegist
     changePassword: onChangePassword, deleteAccount: onDeleteAccount, isGuest,
   });
 
+  // Diseño activo de "Mi Perfil" (Diseñador Cliente → client_design_active), en vivo.
+  const profileDesignKey = useClientDesign("profile");
+
   // ── Esperando la confirmación del mail ──────────────────────────────────────
   // La cuenta ya está creada en Supabase Auth y el perfil viajó en la metadata.
   // Falta que el cliente toque el link: ese link vuelve a /auth/callback y de
@@ -194,7 +198,7 @@ export default function ProfileView({ user, onSave, onRegister, onCompleteRegist
 
   // ── PASO 5: "Mi Perfil" — lo dibuja el diseño registrado ────────────────────
   if (step===5 && profile) {
-    const ProfileDesign = resolveProfileDesign(DEFAULT_PROFILE_DESIGN);
+    const ProfileDesign = resolveProfileDesign(profileRendererForDesign(profileDesignKey));
     return <ProfileDesign profile={profile}/>;
   }
 

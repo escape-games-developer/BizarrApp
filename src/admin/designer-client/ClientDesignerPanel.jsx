@@ -50,12 +50,13 @@ export default function ClientDesignerPanel() {
     onChange={cambiarSeccion} panelId={WORKSPACE_ID}/>;
   const savedDesigns = <SavedDesignsPanel designs={designs} selectedId={selectedId} onSelect={setSelectedId}/>;
   const tabpanelProps = { id: WORKSPACE_ID, role: "tabpanel", "aria-labelledby": `cd-tab-${sectionId}` };
+  const onActivate = ACTIVATABLE_SECTIONS.has(sectionId) ? (designKey) => activar(sectionId, designKey) : null;
 
   // Un diseño con documento del motor se abre en el editor (capas + propiedades).
   // El borrador vive en el editor: cambiar de diseño o de pestaña lo descarta.
   if (selected?.document) {
     return <ClientDesignerEditor key={selected.id} design={selected} section={section}
-      tabs={tabs} savedDesigns={savedDesigns} tabpanelProps={tabpanelProps}/>;
+      tabs={tabs} savedDesigns={savedDesigns} tabpanelProps={tabpanelProps} onActivate={onActivate}/>;
   }
 
   return (
@@ -65,7 +66,7 @@ export default function ClientDesignerPanel() {
       center={
         <div {...tabpanelProps}>
           <ClientDesignerWorkspace section={section} design={selected}
-            onActivate={ACTIVATABLE_SECTIONS.has(sectionId) ? (designKey) => activar(sectionId, designKey) : null}/>
+            onActivate={onActivate}/>
         </div>
       }
     />

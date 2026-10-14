@@ -24,12 +24,14 @@ import { DEFAULT_NOVEDADES_DESIGN } from "../../views/Novedades/designs/registry
  *   document      DesignDocument editable en el Diseñador Cliente
  *   designKey     valor de client_design_active.design_key (secciones activables)
  *
- * Vista Original no es una copia: `rendererKey` apunta al renderer que ya usa
- * la app Cliente (src/views/Perfil/designs/registry.js → ProfileDesignOriginal).
- * Hoy el Perfil siempre dibuja ese renderer, por eso figura como activo.
+ * Perfil: el Diseño Jorge (antes «Vista Original») no es una copia:
+ * `rendererKey` apunta al renderer que ya usa la app Cliente
+ * (src/views/Perfil/designs/registry.js → ProfileDesignOriginal). El Diseño
+ * Cantoni es ese mismo renderer con la piel Talento Bizarren. El activo se
+ * guarda en client_design_active ("original" | "cantoni").
  *
- * `document` es la misma Vista Original expresada para el motor (V1): es lo
- * que se edita en el Diseñador. El Cliente todavía no lo usa.
+ * `document` es el Diseño Jorge expresado para el motor (V1): es lo que se
+ * edita en el Diseñador. El Cliente todavía no lo usa.
  *
  * Pantalla: sus diseños son temas de DJ Democracy (src/views/Pantalla/themes).
  * El activo sí se guarda: tabla client_design_active (ver ACTIVATABLE_SECTIONS).
@@ -60,14 +62,25 @@ const TEMPORARY_DESIGN_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id:           "profile_original",
+    designKey:    "original",
     section:      "profile",
-    name:         "Vista Original",
+    name:         "Diseño Jorge",
     rendererKind: "native",
     rendererKey:  DEFAULT_PROFILE_DESIGN,
     isActive:     true,
     isSystem:     true,
     scene:        "profile.complete",
     document:     PROFILE_ORIGINAL_DOCUMENT,
+  }),
+  Object.freeze({
+    id:           "profile_cantoni",
+    designKey:    "cantoni",
+    section:      "profile",
+    name:         "Diseño Cantoni",
+    rendererKind: "native",
+    rendererKey:  "profile_cantoni",
+    isActive:     false,
+    isSystem:     false,
   }),
   Object.freeze({
     id:           "pantalla_original",
@@ -95,7 +108,7 @@ const TEMPORARY_DESIGN_CATALOG = Object.freeze([
  * Secciones cuyo diseño activo se guarda en client_design_active (migración
  * 20261005230302) y que la app Cliente lee en vivo. El resto sigue fijo en código.
  */
-export const ACTIVATABLE_SECTIONS = new Set(["pantalla", "novedades"]);
+export const ACTIVATABLE_SECTIONS = new Set(["pantalla", "novedades", "profile"]);
 
 /**
  * Diseños de una sección, en el orden del catálogo. Nunca mezcla secciones.

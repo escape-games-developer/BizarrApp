@@ -22,7 +22,7 @@ const SECCIONES_CON_PREVIEW = new Set(["profile", "pantalla", "novedades"]);
  * «Activar en la app Cliente»: guarda el diseño como activo de la sección
  * (client_design_active). Sólo aparece en secciones activables (`onActivate`).
  */
-function ActivarDiseno({ design, onActivate }) {
+export function ActivarDiseno({ design, onActivate }) {
   const [estado, setEstado] = useState({ guardando: false, error: null });
   const activar = async () => {
     setEstado({ guardando: true, error: null });

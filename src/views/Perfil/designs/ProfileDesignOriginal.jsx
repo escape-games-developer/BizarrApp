@@ -5,9 +5,12 @@ import { useMediaQuery }  from "../../../hooks/useMediaQuery";
 import ChangePasswordCard from "../../Auth/ChangePasswordCard";
 import DeleteAccountCard  from "../../Auth/DeleteAccountCard";
 import ProfileEditCard    from "../ProfileEditCard";
+import { JORGE_PROFILE_SKIN } from "./profileSkins";
 
 /**
- * Diseño Original de "Mi Perfil" — el paso 5 del Perfil del cliente.
+ * Diseño de "Mi Perfil" — el paso 5 del Perfil del cliente. Con la piel por
+ * defecto es el Diseño Jorge (la Vista Original); ProfileDesignCantoni lo
+ * dibuja con la piel Cantoni. Ver profileSkins.js.
  *
  * Con cuenta creada y confirmada (`hasAccount`) el Perfil deja de ser un
  * registro: no muestra la barra de pasos y las acciones de la cuenta (editar,
@@ -23,9 +26,6 @@ import ProfileEditCard    from "../ProfileEditCard";
  * useProfileController). No llamar acá a Supabase, Auth ni al GPS.
  */
 
-const OK_GREEN = "#86EFAC";
-const muted    = (a) => `rgba(245,230,192,${a})`;
-
 // Medidas por alto de pantalla: normal (> 720 px), short (≤ 720), tiny (≤ 620).
 const SIZES = {
   normal: { avatar:80, emoji:36, hello:24, badge:14, rowPad:"9px 12px", rowGap:5, label:14,   value:13,   gap:14, card:14 },
@@ -35,19 +35,19 @@ const SIZES = {
 
 // Menú ⋮. El fondo transparente a pantalla completa cierra el menú al tocar
 // afuera.
-function AccountMenu({ items, onClose }) {
+function AccountMenu({ items, onClose, skin }) {
   return (
     <>
       <div onClick={onClose} style={{ position:"fixed",inset:0,zIndex:40 }}/>
       <div role="menu" style={{ position:"absolute",top:"100%",right:0,marginTop:4,zIndex:41,
-        minWidth:210,padding:6,borderRadius:12,background:"#000000",
-        border:"1px solid rgba(255,215,0,.18)",boxShadow:"0 10px 28px rgba(0,0,0,.55)" }}>
+        minWidth:210,padding:6,borderRadius:12,background:skin.surface,
+        border:`1px solid ${skin.menuBorder}`,boxShadow:"0 10px 28px rgba(0,0,0,.55)" }}>
         {items.map((it)=>(
           <button key={it.id} role="menuitem" onClick={()=>{ onClose(); it.onSelect(); }} style={{
             display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 12px",
             background:"none",border:"none",borderRadius:8,cursor:"pointer",textAlign:"left",
-            fontFamily:"'DM Sans',sans-serif",fontSize:14,fontWeight:600,
-            color:it.danger ? "#FCA5A5" : muted(.85) }}>
+            fontFamily:skin.uiFont,fontSize:14,fontWeight:600,
+            color:it.danger ? "#FCA5A5" : skin.muted(.85) }}>
             <span style={{ fontSize:16 }}>{it.icon}</span>{it.label}
           </button>
         ))}
@@ -57,31 +57,32 @@ function AccountMenu({ items, onClose }) {
 }
 
 // Aviso de una línea (cuenta nueva, cambios guardados, contraseña cambiada).
-function Banner({ icon, children, s }) {
+function Banner({ icon, children, s, skin }) {
   return (
     <div style={{ flexShrink:0,display:"flex",gap:8,alignItems:"center",
       padding:"8px 12px",marginBottom:s.gap,
       background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.28)",borderRadius:10 }}>
       <span style={{ fontSize:16,flexShrink:0 }}>{icon}</span>
-      <span style={{ fontSize:13,color:OK_GREEN,lineHeight:1.35 }}>{children}</span>
+      <span style={{ fontSize:13,color:skin.ok,lineHeight:1.35 }}>{children}</span>
     </div>
   );
 }
 
 // Título de los modos editar / contraseña / eliminar.
-function ModeTitle({ children }) {
+function ModeTitle({ children, skin }) {
   return (
-    <div style={{ flexShrink:0,fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:18,
-      color:"#FFD700",marginBottom:12 }}>
+    <div style={{ flexShrink:0,fontFamily:skin.titleFont,fontWeight:skin.titleWeight,fontSize:18,
+      color:skin.accent,marginBottom:12 }}>
       {children}
     </div>
   );
 }
 
-export default function ProfileDesignOriginal({ profile }) {
+export default function ProfileDesignOriginal({ profile, skin = JORGE_PROFILE_SKIN }) {
   const { user, team, emailSent, steps, currentStep, completion,
           canChangePassword, hasAccount, actions } = profile;
   const { requestGeo, startEdit, saveProfile, logout, changePassword, deleteAccount } = actions;
+  const { muted, ok: OK_GREEN } = skin;
 
   const short = useMediaQuery("(max-height: 720px)");
   const tiny  = useMediaQuery("(max-height: 620px)");
@@ -113,23 +114,23 @@ export default function ProfileDesignOriginal({ profile }) {
       {!hasAccount && <div style={{ flexShrink:0 }}><StepBar steps={steps} current={currentStep}/></div>}
 
       {emailSent && mode === "view" && (
-        <Banner icon="🎉" s={s}>
+        <Banner icon="🎉" s={s} skin={skin}>
           ¡Cuenta activa! Bienvenido/a, <strong>{user.name}</strong>. ¡Ya podés jugar!
         </Banner>
       )}
-      {notice && <Banner icon="✅" s={s}>{notice}</Banner>}
+      {notice && <Banner icon="✅" s={s} skin={skin}>{notice}</Banner>}
 
       {/* ── Cuerpo: se reparte el alto disponible ── */}
       {mode === "edit" ? (
         <>
-          <ModeTitle>✏️ Editar perfil</ModeTitle>
+          <ModeTitle skin={skin}>✏️ Editar perfil</ModeTitle>
           <ProfileEditCard user={user} onSave={saveProfile} compact={short}
             onCancel={()=>setMode("view")}
             onSaved={()=>{ setMode("view"); setNotice("Listo, guardamos tus cambios."); }}/>
         </>
       ) : mode === "password" ? (
         <div style={{ flex:1,minHeight:0,overflowY:"auto" }}>
-          <ModeTitle>🔑 Cambiar contraseña</ModeTitle>
+          <ModeTitle skin={skin}>🔑 Cambiar contraseña</ModeTitle>
           <ChangePasswordCard changePassword={changePassword} startOpen
             onClose={(changed)=>{
               setMode("view");
@@ -149,18 +150,18 @@ export default function ProfileDesignOriginal({ profile }) {
                 <button aria-label="Opciones de la cuenta" aria-haspopup="menu" aria-expanded={menuOpen}
                   onClick={()=>setMenuOpen((o)=>!o)} style={{
                     width:38,height:38,borderRadius:10,cursor:"pointer",
-                    background:menuOpen?"rgba(255,215,0,.12)":"rgba(255,255,255,.04)",
-                    border:"1px solid rgba(255,215,0,.15)",color:"#FFD700",
+                    background:menuOpen ? skin.kebab.bgOn : skin.kebab.bg,
+                    border:`1px solid ${skin.kebab.border}`,color:skin.accent,
                     fontSize:22,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center" }}>
                   ⋮
                 </button>
-                {menuOpen && <AccountMenu items={menuItems} onClose={()=>setMenuOpen(false)}/>}
+                {menuOpen && <AccountMenu items={menuItems} onClose={()=>setMenuOpen(false)} skin={skin}/>}
               </div>
             )}
             <div style={{ display:"flex",justifyContent:"center",marginBottom:s.gap }}>
               <AvatarDisplay user={user} size={s.avatar} fontSize={s.emoji}/>
             </div>
-            <div style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:s.hello,color:"#FFD700",
+            <div style={{ fontFamily:skin.titleFont,fontWeight:skin.titleWeight,fontSize:s.hello,color:skin.accent,
               padding:"0 44px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
               ¡Hola, {user.name}!
             </div>
@@ -169,7 +170,7 @@ export default function ProfileDesignOriginal({ profile }) {
                 padding:"5px 16px",borderRadius:20,
                 background:team.bg,border:`1px solid ${team.border}` }}>
                 <span style={{ fontSize:s.badge + 4 }}>{team.emoji}</span>
-                <span style={{ fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:s.badge,color:team.color }}>
+                <span style={{ fontFamily:skin.uiFont,fontWeight:700,fontSize:s.badge,color:team.color }}>
                   {team.name}
                 </span>
               </div>
@@ -178,7 +179,7 @@ export default function ProfileDesignOriginal({ profile }) {
 
           {/* Datos de la cuenta, en listado */}
           <div style={{ padding:s.card,borderRadius:13,
-            background:"#000000",border:"1px solid rgba(255,215,0,.1)" }}>
+            background:skin.surface,border:`1px solid ${skin.border}` }}>
             <div className="card-title" style={{ fontSize:11,marginBottom:s.rowGap + 4 }}>Tu cuenta BizarrApp</div>
             {completion.map((row)=>{
               const locate = !row.ok && row.id === "location";
@@ -218,8 +219,8 @@ export default function ProfileDesignOriginal({ profile }) {
           <button
             onClick={logout}
             style={{ width:"100%", padding:short ? "11px" : "13px", borderRadius:12,
-              background:"rgba(255,45,120,.1)", border:"1px solid rgba(255,45,120,.3)",
-              color:"#FF2D78", fontFamily:"'DM Sans',sans-serif", fontWeight:700,
+              background:skin.logout.bg, border:`1px solid ${skin.logout.border}`,
+              color:skin.logout.color, fontFamily:skin.uiFont, fontWeight:700,
               fontSize:14, cursor:"pointer" }}>
             🚪 Cerrar sesión
           </button>

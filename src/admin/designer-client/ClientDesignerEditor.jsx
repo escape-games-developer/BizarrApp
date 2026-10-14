@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import ClientDesignerLayout from "./ClientDesignerLayout";
 import ClientPreviewFrame from "./ClientPreviewFrame";
+import { ActivarDiseno } from "./ClientDesignerWorkspace";
 import LayersPanel from "./LayersPanel";
 import PropertiesPanel from "./PropertiesPanel";
 import { useDesignDraft } from "./useDesignDraft";
@@ -24,7 +25,7 @@ const pill = (on) => ({
   background: on ? "rgba(155,47,255,.18)" : "transparent", color: on ? "#F0E8FF" : "rgba(240,232,255,.55)",
 });
 
-export default function ClientDesignerEditor({ design, section, tabs, savedDesigns, tabpanelProps }) {
+export default function ClientDesignerEditor({ design, section, tabs, savedDesigns, tabpanelProps, onActivate = null }) {
   const registry = clientDesignRegistry;
   const { draft, isDirty, setField, reset } = useDesignDraft(design.document);
   const [selectedId, setSelectedId] = useState(draft.root.id);
@@ -49,6 +50,7 @@ export default function ClientDesignerEditor({ design, section, tabs, savedDesig
         <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 17, fontWeight: 700, color: "#F0E8FF" }}>{design.name}</span>
         <span style={{ fontSize: 10.5, color: "rgba(240,232,255,.4)", fontFamily: "ui-monospace,Consolas,monospace" }}>{design.id}</span>
         {design.isActive && <span style={{ fontSize: 11.5, color: "#00F5A0" }}>· Es el diseño que hoy ve la app Cliente.</span>}
+        {onActivate && design.designKey && !design.isActive && <ActivarDiseno key={design.id} design={design} onActivate={onActivate}/>}
         <span style={{ flex: 1 }}/>
         <div role="radiogroup" aria-label="Qué se ve en el preview" style={{ display: "flex", gap: 4 }}>
           <button type="button" role="radio" aria-checked={mode === "document"} style={pill(mode === "document")} onClick={() => setMode("document")}>Documento · motor V1</button>
