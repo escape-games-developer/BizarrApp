@@ -49,7 +49,9 @@ const LENTO_MS = 12000;
  */
 function anchoBarraScroll() {
   const d = document.createElement("div");
-  d.style.cssText = "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll";
+  // scrollbar-width:auto: la app pone barras finas a todo (styles.js) y la
+  // carta usa la barra normal del navegador, que es más ancha.
+  d.style.cssText = "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;scrollbar-width:auto";
   document.body.appendChild(d);
   const ancho = d.offsetWidth - d.clientWidth;
   d.remove();
