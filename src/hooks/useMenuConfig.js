@@ -24,11 +24,6 @@ export const MENUS = {
     // Recibe el nombre del cliente logueado en el fragmento (#nombre=…) para
     // completar el pedido. El fragmento no viaja al servidor de Lovable.
     recibeNombre: true,
-    // Su encabezado es sticky: la primera fila ("Bizarren · Miusik Bar · San
-    // Telmo", 44 px desde 360 px de ancho) repite lo que ya dice la app, así que
-    // se tapa corriendo el iframe hacia arriba. Las pestañas quedan visibles.
-    // Si cambian ese encabezado en Lovable, hay que revisar este número.
-    recorteArriba: 44,
   },
 };
 
