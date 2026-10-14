@@ -32,10 +32,54 @@ function GameStandby() {
 }
 
 // ─── Rey del Orto ──────────────────────────────────────────────────────────
+// Bloque a sección completa: anula el padding de `.app-content` (14/16/16) y
+// ocupa todo el alto entre el header (logo) y la navegación, sin taparlos.
+// `minHeight` cubre el caso en que el padre no tiene alto definido (la card
+// del Duelo envuelve el juego en un div).
+const SECCION_COMPLETA = {
+  margin: "-14px -16px -16px", height: "calc(100% + 30px)", minHeight: 320,
+  display: "flex", flexDirection: "column",
+  alignItems: "center", justifyContent: "center", textAlign: "center",
+  padding: "24px 20px", boxSizing: "border-box",
+};
+
 function ReyDelOrto({ user, gameState }) {
-  const { state, cd, color, dark, isStrobe, isWinner, isCancelled } = useRaffle(gameState);
+  const { state, color, dark, isStrobe, isWinner, isCancelled } = useRaffle(gameState);
   const iWon = isWinner && user?.id && gameState?.raffle_winner_id === user.id;
   const prize = gameState?.raffle_prize || null;
+
+  // ── Sorteo en curso: SÓLO los colores, como la pantalla gigante ──────────
+  // Sin número ni texto: la cuenta regresiva vive en la pantalla gigante.
+  if (isStrobe) return (
+    <div aria-label="Sorteando" style={{ ...SECCION_COMPLETA, background: dark ? "#000" : color }} />
+  );
+
+  // ── Resultado: verde el que ganó, rojo los demás ──────────────────────────
+  if (isWinner) return (
+    <div style={{
+      ...SECCION_COMPLETA,
+      background: iWon ? "#16A34A" : "#DC2626",
+      animation: "fadeUp .4s ease",
+    }}>
+      <div style={{ fontSize: 64, marginBottom: 12 }}>{iWon ? "🏆" : "😅"}</div>
+      <div style={{
+        fontFamily: "Syne, sans-serif", fontSize: 30, fontWeight: 900,
+        color: "#FFFFFF", lineHeight: 1.1, marginBottom: 10,
+      }}>
+        {iWon ? "¡GANASTE!" : "Esta vez no fue..."}
+      </div>
+      {iWon && prize && (
+        <div style={{ fontSize: 17, color: "#FFFFFF", fontWeight: 700 }}>
+          Premio: {prize}
+        </div>
+      )}
+      {!iWon && (
+        <div style={{ fontSize: 14, color: "rgba(255,255,255,.85)" }}>
+          La próxima es la tuya.
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -82,52 +126,6 @@ function ReyDelOrto({ user, gameState }) {
         </div>
       )}
 
-      {isStrobe && (
-        <div style={{
-          borderRadius: 16, height: 220,
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", gap: 10,
-          background: dark ? "#000" : color,
-          transition: "background .1s",
-        }}>
-          <div style={{
-            fontFamily: "Syne, sans-serif", fontSize: 72, fontWeight: 900,
-            color: dark ? "rgba(245,230,192,.03)" : "rgba(0,0,0,.18)", lineHeight: 1,
-          }}>
-            {cd}
-          </div>
-          <div style={{ fontSize: 12, color: dark ? "rgba(245,230,192,.04)" : "rgba(0,0,0,.2)" }}>
-            sorteando...
-          </div>
-        </div>
-      )}
-
-      {isWinner && (
-        <div style={{
-          textAlign: "center", padding: "24px 16px",
-          background: iWon ? "rgba(34,197,94,.1)" : "rgba(255,255,255,.04)",
-          border: `1px solid ${iWon ? "rgba(34,197,94,.3)" : "rgba(255,255,255,.08)"}`,
-          borderRadius: 16, animation: "fadeUp .5s ease",
-        }}>
-          <div style={{ fontSize: 44, marginBottom: 10 }}>{iWon ? "🏆" : "😅"}</div>
-          <div style={{
-            fontFamily: "Syne, sans-serif", fontSize: 18, fontWeight: 900,
-            color: iWon ? "#22C55E" : "rgba(245,230,192,.5)", marginBottom: 6,
-          }}>
-            {iWon ? "¡GANASTE!" : "Esta vez no fue..."}
-          </div>
-          {iWon && prize && (
-            <div style={{ fontSize: 14, color: "#FCD34D", fontWeight: 600, marginBottom: 14 }}>
-              Premio: {prize}
-            </div>
-          )}
-          {!iWon && (
-            <div style={{ fontSize: 12, color: "rgba(245,230,192,.3)" }}>
-              La próxima es la tuya.
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

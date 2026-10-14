@@ -382,6 +382,13 @@ const css = `
   .rey-regla-on{background:rgba(0,245,160,.12);border:1px solid rgba(0,245,160,.28);color:#00F5A0;}
   .rey-regla-off{background:rgba(240,232,255,.05);border:1px solid rgba(240,232,255,.1);color:rgba(240,232,255,.4);}
   .rey-regla-d{font-size:10px;color:rgba(240,232,255,.35);line-height:1.5;}
+  /* Barra operativa de Rey: tres botones lado a lado, mismo criterio que
+     .sum-actions / .pal-actions. */
+  .rey-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+  .rey-actions .btn{padding:9px 4px;font-size:10.5px;line-height:1.25;white-space:normal;
+    text-align:center;min-height:40px;}
+  .rey-actions .btn:disabled{opacity:.35;cursor:not-allowed;}
+  @media (max-width:360px){ .rey-actions{grid-template-columns:1fr;} }
 
   @media (max-width:1040px){
     .rey-split{grid-template-columns:1fr;}
@@ -2297,8 +2304,13 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     setBusy(false);
   };
 
+  // Premio que se va a sortear: el elegido en la biblioteca y, con el Rey al
+  // aire (después de un sorteo), el de la ronda anterior como respaldo. El
+  // dry-run y la largada usan este mismo texto.
+  const premioALanzar = premioElegido?.nombre || (isRey ? livePrize : "") || "";
+
   const launch = async () => {
-    if (busy || !sessionId) return;
+    if (busy || !sessionId || !premioALanzar) return;
     // Con un resultado sin confirmar NO se relanza: si el backend había elegido
     // ganador y no nos enteramos, una ronda nueva sortearía dos veces el mismo
     // premio. Primero VERIFICAR.
@@ -2320,7 +2332,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     // con el botón gris y el cartel de validación puestos para siempre, y el
     // operador tenía que recargar para volver a intentar.
     try {
-      const chequeo = await controls?.validateRaffle({ prize: premioElegido?.nombre });
+      const chequeo = await controls?.validateRaffle({ prize: premioALanzar });
       if (!chequeo?.ok) {
         setActionError(mensajeErrorSorteo(chequeo, { previo: true }));
         // Refresca la lista para que el número de conectados acompañe al error.
@@ -2341,7 +2353,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
       // El segundo argumento es la compatibilidad muerta de `exclude_previous`
       // (ver useGameState): se manda `false` fijo y nadie lo lee.
       const r = await controls?.launchRaffle(
-        premioElegido?.nombre || livePrize, false, gameState?.minijuego_payload,
+        premioALanzar, false, gameState?.minijuego_payload,
       );
       if (r?.error) setActionError("No se pudo lanzar el sorteo.");
     } finally {
@@ -2360,22 +2372,14 @@ function ReyPanel({sec, controls, sessionId, gameState}){
   // (`already_cancelled`), y si seguía lanzada la resuelve ahora.
   const verificar = () => resolverSorteo({ forzar: true });
 
-  // ── Las DOS salidas del juego, que no son la misma cosa ────────────────────
-  // · nuevaRonda    → sigue en Rey del Orto, listo para sortear de nuevo.
-  // · finalizarJuego→ abandona el juego; la TV vuelve a DJ Democracy.
+  // ── Las DOS salidas después de un sorteo, que no son la misma cosa ────────
+  // · 🔄 Nueva ronda → `launch()` otra vez: sigue en Rey del Orto y sortea
+  //   directo (launchRaffle limpia al ganador anterior en el mismo UPDATE).
+  // · finalizarJuego → abandona el juego; la TV vuelve a DJ Democracy.
   //
-  // Las dos reutilizan los controles de useAdminControls: acá no se arma ni un
-  // UPDATE a mano. La fuente de verdad sigue siendo game_state, así que no hay
-  // reload, ni navegación, ni estado local fingiendo que cerró: la pantalla del
-  // panel y la de /tv cambian cuando cambia la fila.
-  const nuevaRonda = async () => {
-    if (busy) return; setBusy(true); setActionError(null); drawnRef.current = null;
-    setResultadoIncierto(false); setResultadoRecuperado(null);
-    const r = await controls?.nuevaRondaRaffle();
-    if (r?.error) setActionError("No se pudo preparar la ronda nueva.");
-    setBusy(false);
-  };
-
+  // La fuente de verdad sigue siendo game_state, así que no hay reload, ni
+  // navegación, ni estado local fingiendo que cerró: la pantalla del panel y
+  // la de /tv cambian cuando cambia la fila.
   const finalizarJuego = async () => {
     if (busy) return; setBusy(true); setActionError(null); drawnRef.current = null;
     setResultadoIncierto(false); setResultadoRecuperado(null);
@@ -2387,6 +2391,51 @@ function ReyPanel({sec, controls, sessionId, gameState}){
     if (r?.error) setActionError("No se pudo cerrar Rey del Orto."); else setPremioId(null);
     setBusy(false);
   };
+
+  // ── Habilitación de la barra operativa ───────────────────────────────────
+  // Todo sale de `game_state` y de la selección local de la biblioteca.
+  //   · Anunciar: sólo con el Rey fuera del aire y sin su placa puesta —
+  //     announceGame pone active_game=null y sacaría el juego de pantalla.
+  //   · Lanzar / Nueva ronda: el MISMO `launch()` (dry-run + largada) con el
+  //     premio elegido. Se rotula «Lanzar» con el Rey fuera del aire y «Nueva
+  //     ronda» cuando ya hubo un sorteo (ganador, cancelado o reposo). Con el
+  //     Rey al aire vale también el premio de la ronda anterior. Bloqueado
+  //     durante el estroboscópico y con un resultado incierto (primero
+  //     VERIFICAR: relanzar podría sortear dos veces el mismo premio).
+  //   · Finalizar: sólo si hay algo que cerrar (juego al aire o placa puesta).
+  //     Durante el estroboscópico es la salida de emergencia.
+  const puedeAnunciar  = !busy && !!sessionId && !isRey && !announcing;
+  const puedeLanzar    = !busy && !validando && !!sessionId && !resultadoIncierto &&
+    phase !== "launched" && !!premioALanzar;
+  const puedeFinalizar = !busy && (isRey || announcing);
+  const rotuloLanzar   = validando ? "⏳ Validando…"
+    : phase === "launched" ? "🎰 Sorteando…"
+    : isRey ? "🔄 Nueva ronda" : "🎰 Lanzar";
+
+  // ── Barra operativa ──────────────────────────────────────────────────────
+  // ÚNICA ubicación de Anunciar / Lanzar (Nueva ronda) / Finalizar, en todas
+  // las fases. Columna derecha, arriba de la biblioteca: la fila resaltada es
+  // el premio que se va a sortear.
+  const barraOperativa = (
+    <div className="card" style={{marginBottom:10, borderColor:"rgba(255,214,0,.3)"}}>
+      <div className="rey-actions">
+        {/* ANUNCIAR — sólo la placa `game_rey` (announceGame). Sin sorteo. */}
+        <button className="btn btn-g" disabled={!puedeAnunciar} onClick={announce}
+          title={isRey ? "Rey del Orto ya está al aire" : announcing ? "La placa ya está en pantalla" : "Mostrar la placa de Rey del Orto"}>
+          📢 Anunciar
+        </button>
+        {/* LANZAR → NUEVA RONDA — sortea el premio elegido en la biblioteca. */}
+        <button className="btn btn-p" disabled={!puedeLanzar} onClick={launch}
+          title={premioALanzar ? `Sortear ${premioALanzar}` : "Elegí un premio en la biblioteca"}>
+          {rotuloLanzar}
+        </button>
+        {/* FINALIZAR — saca el Rey (o su placa) y la TV vuelve a DJ Democracy. */}
+        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}>
+          ⏹ Finalizar
+        </button>
+      </div>
+    </div>
+  );
 
   const listaElegibles = (
     <div className="card">
@@ -2744,85 +2793,44 @@ function ReyPanel({sec, controls, sessionId, gameState}){
 
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {/* Preparación — dos columnas: a la izquierda el operador trabaja, a la
-          derecha la biblioteca es un SELECTOR. Abajo de 1040px se apilan. */}
+      {/* Dos columnas en TODAS las fases: a la izquierda el estado del sorteo,
+          a la derecha la barra operativa, la biblioteca (un SELECTOR) y la
+          configuración. Abajo de 1040px se apilan. */}
+      <div className="rey-split">
+      <div>
+      {/* ── Preparación ── */}
       {phase==="idle"&&(
-        <div className="rey-split">
-          <div>
+          <>
             {premioCard}
 
-            {!announcing&&(
-              <div className="card">
-                <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:10,lineHeight:1.5}}>
-                  El ganador ve el premio en su celular y en la pantalla gigante.
-                  El servidor selecciona al ganador — no manipulable desde el cliente.
-                </div>
-                <button className="btn btn-p btn-full" onClick={announce} disabled={busy}>
-                  📢 Anunciar → mostrar placa en pantalla
-                </button>
-                {/* Reposo CON el juego en el aire — es donde deja "🔁 Nueva ronda".
-                    Sin esta salida, la única forma de bajar el Rey de la TV era
-                    pasar otra vez por Anunciar. Con el juego fuera del aire este
-                    bloque es el de configuración de siempre y no hace falta. */}
-                {isRey && (
-                  <>
-                    <div style={{fontSize:10,color:"rgba(240,232,255,.3)",margin:"9px 0 6px",textAlign:"center"}}>
-                      Rey del Orto sigue en el aire, en reposo.
-                    </div>
-                    <button className="btn btn-r btn-full" onClick={finalizarJuego} disabled={busy}>
-                      🎵 Finalizar juego y volver a DJ Democracy
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
-            {announcing&&(
-              <div className="card">
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            {/* Anunciar / Lanzar / Finalizar viven SÓLO en la barra operativa
+                de la columna derecha. Acá queda el estado. */}
+            <div className="card">
+              {announcing && (
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <div className="chip chip-wait">⏳ Placa en pantalla</div>
                 </div>
-                <div style={{padding:"12px",background:"rgba(255,214,0,.08)",border:"1px solid rgba(255,214,0,.25)",
-                  borderRadius:11,marginBottom:12,textAlign:"center"}}>
-                  <div style={{fontSize:28,marginBottom:4}}>🎰</div>
-                  <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:15,
-                    background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
-                    WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-                    REY DEL ORTO
-                  </div>
-                  <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>
-                    Premio: {premioElegido?.nombre || livePrize || "—"}
-                  </div>
+              )}
+              {isRey && (
+                <div style={{fontSize:10,color:"rgba(240,232,255,.3)",marginBottom:8}}>
+                  Rey del Orto sigue en el aire, en reposo.
                 </div>
-                {/* El botón sólo se bloquea por lo que el panel SABE con
-                    certeza: que no hay premio elegido. Si falta gente o las
-                    reglas lo impiden, lo dice el dry-run del servidor al
-                    tocarlo — no un conteo local que podría contradecirlo. */}
-                <button className="btn btn-p btn-full" onClick={launch}
-                  disabled={busy||validando||!premioElegido}>
-                  {validando ? "⏳ VALIDANDO…" : "🎰 LANZAR SORTEO AHORA"}
-                </button>
-                {/* Un botón gris sin motivo deja al operador mirando la pantalla. */}
-                {!premioElegido&&(
-                  <div style={{fontSize:10,color:"#FCA5A5",marginTop:7,textAlign:"center"}}>
-                    Elegí un premio de la biblioteca para poder lanzar.
-                  </div>
-                )}
-                <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={finalizarJuego} disabled={busy}>
-                  ⏹ Cancelar juego y volver a DJ Democracy
-                </button>
+              )}
+              <div style={{fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.5}}>
+                Elegí el premio en la biblioteca y usá la barra de acciones:
+                📢 Anunciar · 🎰 Lanzar · ⏹ Finalizar. El ganador lo elige el
+                servidor y lo ve en su celular y en la pantalla gigante.
               </div>
-            )}
+              {/* Un botón gris sin motivo deja al operador mirando la pantalla. */}
+              {!premioElegido && (
+                <div style={{fontSize:10,color:"#FCA5A5",marginTop:7}}>
+                  Elegí un premio de la biblioteca para poder lanzar.
+                </div>
+              )}
+            </div>
 
             {listaElegibles}
-          </div>
-
-          {/* Columna derecha: biblioteca arriba, configuración debajo. */}
-          <div>
-            {bibliotecaPremios}
-            {configReglas}
-          </div>
-        </div>
+          </>
       )}
 
       {phase==="launched"&&(
@@ -2877,12 +2885,9 @@ function ReyPanel({sec, controls, sessionId, gameState}){
               {resolviendo ? "⏳ PIDIENDO GANADOR…" : "🏆 Elegir ganador ahora"}
             </button>
           )}
-          {/* Salida de emergencia con el sorteo lanzado y todavía sin ganador
-              (estroboscópico o esperando al servidor). Misma limpieza segura
-              que el cierre normal. */}
-          <button className="btn btn-r btn-full" style={{marginTop:7}} onClick={finalizarJuego} disabled={busy}>
-            ⏹ Cancelar juego y volver a DJ Democracy
-          </button>
+          {/* La salida de emergencia (estroboscópico o esperando al servidor)
+              es ⏹ Finalizar de la barra: misma limpieza segura que el cierre
+              normal. */}
         </div>
       )}
 
@@ -2897,8 +2902,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
           biblioteca de premios y la configuración de reglas — todo sin F5, sin
           salir del módulo y sin finalizar el juego. */}
       {phase==="cancelled"&&(
-        <div className="rey-split">
-          <div>
+          <>
             <div className="card" style={{borderColor:"rgba(255,214,0,.35)"}}>
               <div style={{textAlign:"center",padding:"4px 0 10px"}}>
                 <div style={{fontSize:34,marginBottom:6}}>👑</div>
@@ -2927,35 +2931,24 @@ function ReyPanel({sec, controls, sessionId, gameState}){
                 {premioElegido?.nombre || livePrize || "—"}
               </div>
 
-              {/* Mismo `launch()` que la primera vez: vuelve a correr el dry-run
-                  y sólo abre ronda si el servidor la aprueba de nuevo. */}
-              <button className="btn btn-p btn-full" onClick={launch}
-                disabled={busy||validando||!(premioElegido||livePrize)}>
-                {validando ? "⏳ VALIDANDO…" : "🎰 LANZAR SORTEO DE NUEVO"}
-              </button>
+              {/* Reintentar = 🔄 Nueva ronda de la barra: el mismo `launch()`,
+                  que vuelve a correr el dry-run y sólo abre ronda si el
+                  servidor la aprueba de nuevo. */}
               {!(premioElegido||livePrize)&&(
-                <div style={{fontSize:10,color:"#FCA5A5",marginTop:7,textAlign:"center"}}>
+                <div style={{fontSize:10,color:"#FCA5A5",marginBottom:7,textAlign:"center"}}>
                   Elegí un premio de la biblioteca para poder lanzar.
                 </div>
               )}
-              <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",margin:"7px 0 11px",lineHeight:1.5,
+              <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",lineHeight:1.5,
                 textAlign:"center"}}>
                 La pantalla gigante queda en "SORTEO CANCELADO" hasta que lances
-                de nuevo o cierres el juego. No se mueve sola.
+                de nuevo (🔄 Nueva ronda) o cierres el juego (⏹ Finalizar). No se
+                mueve sola.
               </div>
-              <button className="btn btn-r btn-full" onClick={finalizarJuego} disabled={busy}>
-                🎵 Finalizar juego y volver a DJ Democracy
-              </button>
             </div>
 
             {listaElegibles}
-          </div>
-
-          <div>
-            {bibliotecaPremios}
-            {configReglas}
-          </div>
-        </div>
+          </>
       )}
 
       {phase==="winner"&&(
@@ -2967,30 +2960,34 @@ function ReyPanel({sec, controls, sessionId, gameState}){
           <div style={{fontSize:11,color:"rgba(240,232,255,.4)",marginBottom:4}}>
             Premio: <strong style={{color:"#FFD600"}}>{livePrize || "—"}</strong>
           </div>
-          <div style={{fontSize:10,color:"rgba(240,232,255,.25)",marginBottom:14}}>
+          <div style={{fontSize:10,color:"rgba(240,232,255,.25)",marginBottom:10}}>
             Ya está en la pantalla gigante y en el celular del ganador.
           </div>
-          {/* Dos salidas distintas, separadas a propósito: seguir jugando o
-              cerrar el juego. Antes había un solo botón —"Nuevo sorteo"— que en
-              realidad hacía las dos cosas: limpiaba al ganador Y sacaba el juego
-              del aire, así que la TV se volvía a DJ Democracy sin que el rótulo
-              lo dijera en ningún lado. */}
-          <button className="btn btn-g btn-full" onClick={nuevaRonda} disabled={busy}>
-            🔁 Nueva ronda
-          </button>
-          <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",margin:"6px 0 12px",lineHeight:1.5}}>
-            Sigue en Rey del Orto: la TV queda en la pantalla del juego y podés
-            sortear de nuevo.
+          {/* Dos salidas distintas, en la barra: 🔄 Nueva ronda sortea otra vez
+              sin sacar el juego del aire; ⏹ Finalizar lo cierra y la TV vuelve
+              a DJ Democracy. */}
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",lineHeight:1.5}}>
+            Elegí el premio en la biblioteca y tocá 🔄 Nueva ronda para sortear
+            de nuevo, o ⏹ Finalizar para volver a DJ Democracy.
           </div>
-          <button className="btn btn-r btn-full" onClick={finalizarJuego} disabled={busy}>
-            🎵 Finalizar juego y volver a DJ Democracy
-          </button>
         </div>
       )}
+      </div>
 
-      {actionError&&(
-        <div style={{marginTop:10,color:"#FCA5A5",fontSize:11,textAlign:"center"}}>{actionError}</div>
-      )}
+      {/* Columna derecha: barra operativa, biblioteca, configuración. El error
+          va pegado a la barra: es donde el operador acaba de tocar. Abajo de
+          todo quedaba fuera de la vista y el botón parecía no reaccionar. */}
+      <div>
+        {barraOperativa}
+        {actionError&&(
+          <div className="card" style={{marginBottom:10,borderColor:"rgba(255,45,120,.4)"}}>
+            <div style={{color:"#FCA5A5",fontSize:11,lineHeight:1.5}}>{actionError}</div>
+          </div>
+        )}
+        {bibliotecaPremios}
+        {configReglas}
+      </div>
+      </div>
     </div>
   );
 }
