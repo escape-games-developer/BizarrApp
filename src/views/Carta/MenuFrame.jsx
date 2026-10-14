@@ -66,6 +66,7 @@ export default function MenuFrame({ visible = true, nombreCliente = null }) {
   const nombre = menu?.recibeNombre && nombreCliente ? nombreCliente : null;
   const menuUrl = menu ? menu.url + (nombre ? `#nombre=${encodeURIComponent(nombre)}` : "") : null;
   const [barra] = useState(anchoBarraScroll);
+  const recorte = menu?.recorteArriba ?? 0;
   const [estado, setEstado]   = useState("cargando"); // cargando | lento | listo | error
   // Cambiarla remonta el iframe. Sólo lo hace el botón de reintentar, que
   // aparece únicamente ante un error real.
@@ -131,7 +132,10 @@ export default function MenuFrame({ visible = true, nombreCliente = null }) {
         style={{
           display: "block",
           width: `calc(100% + ${barra}px)`,   // la barra de scroll queda recortada
-          height: "100%",
+          // Corre la carta hacia arriba para tapar la parte de su encabezado
+          // que repite la app (ver MENUS.recorteArriba).
+          marginTop: -recorte,
+          height: `calc(100% + ${recorte}px)`,
           border: "none",
           background: "#000000",
           // Sin esto, iOS no deja scrollear dentro del iframe.
