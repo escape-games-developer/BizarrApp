@@ -125,6 +125,11 @@ const djVotingCss = `
   .djv-super{font-size:29px;background:linear-gradient(135deg,rgba(255,214,0,.16),rgba(255,45,120,.14));
     border-color:rgba(255,214,0,.42);color:#FFD700;}
   .djv-super:active:not(:disabled){transform:scale(.96);}
+  .djv-super-on{box-shadow:0 0 14px rgba(255,214,0,.35);border-color:#FFD700;}
+  /* Súper Hate: el par negativo del súper voto, mismo cupo. */
+  .djv-hate{font-size:26px;background:linear-gradient(135deg,rgba(155,47,255,.18),rgba(255,59,48,.14));
+    border-color:rgba(255,59,48,.5);color:#FF6B5E;}
+  .djv-hate-on{box-shadow:0 0 14px rgba(255,59,48,.35);border-color:#FF3B30;}
   .djv-super-usado{background:#000000;border-color:rgba(245,230,192,.1);
     color:rgba(245,230,192,.3);}
   /* +1 / -1: valor del voto, apoyado sobre el borde superior del botón. */
@@ -134,6 +139,7 @@ const djVotingCss = `
   .djv-valor-up{color:#00F5A0;}
   .djv-valor-down{color:#FF3B30;}
   .djv-valor-super{color:#FFD700;}
+  .djv-valor-hate{color:#FF6B5E;}
   /* Cantidad de super votos disponibles, sobre el borde inferior. */
   .djv-valor-abajo{top:auto;bottom:-8px;}
 

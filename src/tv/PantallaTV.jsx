@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { supabaseAnon } from "../lib/supabase";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
@@ -7,11 +7,15 @@ import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen, Pal
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
 import FtlOverlay from "./FtlOverlay";
 import FtlStandby from "./FtlStandby";
+import { QrDeJuego } from "../components/QrEsquina";
 import TomatazoOverlay from "./TomatazoOverlay";
+import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
-import { resolveTv, guestUrl, ytThumb } from "../services/pantallaDj";
+import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
+import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
-import { loadTvConfig } from "../designers/lib/persistence";
+import { loadTvConfig, normalizeTvConfig } from "../designers/lib/persistence";
+import { DEFAULT_TV_CONFIG } from "../designers/defaults";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 
 /**
@@ -32,6 +36,22 @@ const C = {
 };
 
 // ─── Reacciones flotantes ────────────────────────────────────────────────────
+/**
+ * Diseño guardado en la base → config completa. Una config vieja o parcial
+ * puede no traer algún bloque o campo de pantalla: se completa con los valores
+ * por defecto para que la TV nunca lea algo indefinido.
+ */
+function completarConfigTv(remoto) {
+  const base = DEFAULT_TV_CONFIG;
+  return normalizeTvConfig({
+    ...base, ...remoto,
+    screen: { ...base.screen, ...remoto.screen,
+      overlay: { ...base.screen.overlay, ...remoto.screen?.overlay } },
+    blocks: Object.fromEntries(Object.keys({ ...base.blocks, ...remoto.blocks }).map((id) =>
+      [id, { ...base.blocks[id], ...remoto.blocks?.[id] }])),
+  });
+}
+
 function Reacciones({ eventId, size = "medium" }) {
   const [burbujas, setBurbujas] = useState([]);
   // Sufijo propio de esta instancia: dos componentes con el mismo nombre de
@@ -209,12 +229,23 @@ export default function PantallaTV() {
   const [eventId,  setEventId]  = useState(null);
   const [authErr,  setAuthErr]  = useState(null);
   const [unlocked, setUnlocked] = useState(false);
-  const [canvasConfig, setCanvasConfig] = useState(() => loadTvConfig("default"));
+  // Respaldo local: sólo se usa si el evento todavía no tiene diseño guardado
+  // en la base (el Diseñador TV sube el suyo al primer Guardar).
+  const [canvasLocal, setCanvasConfig] = useState(() => loadTvConfig("default"));
   const { gameState, session } = useGameState();
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
 
   const { event, candidates, current, loading } =
     usePantallaEvent({ eventId, client: supabaseAnon });
+
+  // El diseño de la TV es `pantalla_events.tv_canvas_config`: es lo que guarda
+  // el Diseñador TV y lo que hace que se vea igual en cualquier máquina. Llega
+  // con el evento y se actualiza solo por Realtime al guardar. Antes la TV leía
+  // sólo el localStorage del navegador, así que en la PC del bar no se aplicaba.
+  const canvasRemoto = event?.tv_canvas_config || null;
+  const canvasConfig = useMemo(
+    () => (canvasRemoto ? completarConfigTv(canvasRemoto) : canvasLocal),
+    [canvasRemoto, canvasLocal]);
   const sharesSession = !event?.session_id || event.session_id === session?.id;
   const activeGame = sharesSession ? gameState?.active_game : null;
   // El Duelo es un escenario, no un `active_game`, pero para la TV es lo mismo:
@@ -265,15 +296,23 @@ export default function PantallaTV() {
     : participanteFtl?.playing ? "performance"
     : participanteFtl ? "candidato"
     : "convocatoria";
+  const votacionCfg = useVotacionEscenario({ anonimo: true });
   const ftlPerformance  = modoFtl === "performance";
   const ftlCandidato    = modoFtl === "candidato";
   const ftlConvocatoria = modoFtl === "convocatoria";
-  // `soloTotales`: /tv entra por token, sin sesión de auth. Lee los totales
-  // públicos con el cliente anónimo y nunca toca follow_leader_votes.
-  // Sólo se piden totales si el juego tiene votación: el RPC de votos es de
-  // Follow the Leader y en Personal Trainer no hay nada que leer.
+  // Modo de votación del juego (Ajustes → Votación Escenario). La TV muestra
+  // SIEMPRE el barómetro; el modo sólo cambia cómo vota la gente y de dónde
+  // sale el %: 'toques' = energía, 'votos' = % de 👍, 'pelea' = posición de
+  // la pelea 👍/👎, 'off' = sin barómetro. /tv entra por token, sin sesión:
+  // todo con el cliente anónimo y sólo con el video sonando.
+  const modoVotacion = (showFtl && votacionCfg[juegoEsc.type]) || "off";
+  const turnoEnVivo = (participanteFtl?.playing && participanteFtl?.turn_id) || null;
+  const energiaFtl = useFtlEnergia(modoVotacion === "toques" ? turnoEnVivo : null,
+    { anonimo: true, cadaMs: 400 });
   const { totals: votosFtl } = useFollowLeaderVotes(
-    (juegoEsc?.votacion && participanteFtl?.turn_id) || null, null, { soloTotales: true });
+    modoVotacion === "votos" ? turnoEnVivo : null, null, { soloTotales: true });
+  const peleaFtl = useFtlPelea(modoVotacion === "pelea" ? turnoEnVivo : null,
+    { anonimo: true, cadaMs: 400 });
 
   // Con FTL en el aire la TV deja de ser la pantalla del DJ: se reusa su MOTOR
   // (players, audio, recortes, avance) pero se apaga toda su INTERFAZ — título,
@@ -326,7 +365,23 @@ export default function PantallaTV() {
   // convocatoria y con el participante preparado el DJ queda pausado en su
   // canción — no tiene sentido que suene música debajo de un QR ni detrás del
   // avatar de alguien que todavía no arrancó.
-  const cortarFuente = ftlConvocatoria || ftlCandidato;
+  // Video subido desde la PC (Biblioteca del Escenario): no pasa por los
+  // players de YouTube, lo reproduce un <video> encima. Mientras suena, el DJ
+  // queda pausado en su canción igual que con un video de YouTube.
+  const archivoFtl = !itemFtl && videoFtl?.url ? videoFtl : null;
+  const cortarFuente = ftlConvocatoria || ftlCandidato || !!archivoFtl;
+
+  // Terminó el video del participante (YouTube o archivo): la TV le avisa a la
+  // base y vuelve a la convocatoria por corte directo, igual que «■ Finalizar»
+  // del Admin. Una sola vez por turno; la base además es idempotente.
+  const turnoTerminadoRef = useRef(null);
+  const terminarVideoEscenario = () => {
+    const turno = participanteFtl?.turn_id;
+    if (!turno || turnoTerminadoRef.current === turno || !eventId || !token) return;
+    turnoTerminadoRef.current = turno;
+    tvEscenarioVideoTerminado(eventId, token, turno)
+      .catch((e) => { turnoTerminadoRef.current = null; console.error("[PantallaTV] fin de video de escenario:", e); });
+  };
   const reproduciendo = cortarFuente ? false : event?.is_playing !== false;
 
   const PLACAS_NO_TV = ["escenario_karaoke", "logo", "logo_animado"];
@@ -342,6 +397,8 @@ export default function PantallaTV() {
       // al terminarla, el servidor archivaría la canción del DJ que está
       // congelada detrás.
       autoAdvance: !itemFtl,
+      // Fin del video del juego: vuelve a la convocatoria, sin transición.
+      onFuenteTerminada: (itemId) => { if (itemFtl && itemId === itemFtl.id) terminarVideoEscenario(); },
       captionsEnabled: event?.youtube_captions_enabled === true,
       rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6,
       rainTailSeconds: event?.rain_tail_seconds ?? 0 });
@@ -472,6 +529,15 @@ export default function PantallaTV() {
             </div>
           ))}
 
+          {archivoFtl && (
+            <video key={archivoFtl.url} src={archivoFtl.url} autoPlay playsInline
+              muted={!screenAudioOn}
+              onEnded={terminarVideoEscenario}
+              onError={(e) => console.error("[PantallaTV] video de escenario:", e)}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+                objectFit: "contain", background: "#000", zIndex: 3 }}/>
+          )}
+
           {!fuente && !soloVideoFtl && (
             <div style={{ ...pantallaCentro, position: "absolute", inset: 0, zIndex: 5 }}>
               <div style={{ fontSize: 52, marginBottom: 14, opacity: .35 }}>🎧</div>
@@ -577,6 +643,10 @@ export default function PantallaTV() {
               <DueloBigscreen gameState={gameState} sessionId={session?.id ?? null}
                 webappUrl={window.location.origin}/>
             )}
+            {/* QR de Rey / Desafío / Sumate / Arma (Ajustes → QR en pantalla) */}
+            {(showRaffle || showTrivia || showSuma || showPalabra) && (
+              <QrDeJuego activeGame={activeGame}/>
+            )}
           </div>
         )}
 
@@ -590,7 +660,11 @@ export default function PantallaTV() {
 
         {ftlPerformance && !hasLiveLayer && !hasPlaca && (
           <FtlOverlay participante={participanteFtl}
-            votos={juegoEsc?.votacion ? votosFtl : null}/>
+            pct={modoVotacion === "toques" ? energiaFtl
+              : modoVotacion === "votos" ? (votosFtl.up_pct ?? 0)
+              : modoVotacion === "pelea" ? peleaFtl.pct
+              : null}
+            decae={modoVotacion === "toques"}/>
         )}
       </div>
 

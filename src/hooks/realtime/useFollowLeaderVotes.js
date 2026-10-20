@@ -24,6 +24,7 @@ const TOTALES_VACIOS = Object.freeze({ up: 0, down: 0, total: 0, up_pct: 0, down
 // Mensajes del RPC que no son fallas de la app sino reglas del juego.
 const MENSAJES_RPC = {
   "turn not open for voting": "La votación ya finalizó.",
+  "voting mode disabled": "La votación con 👍/👎 no está activa en este juego.",
   "protagonist cannot vote on their own turn": "No podés votar tu propia performance.",
   "turn not found": "Este turno ya no está disponible.",
   "not a follow the leader turn": "Este turno no admite votación.",

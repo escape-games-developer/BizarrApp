@@ -1,4 +1,7 @@
-import QRCode from "react-qr-code";
+import LogoCampana from "../components/LogoCampana";
+import LogoJuego from "../components/LogoJuego";
+import QrEsquina from "../components/QrEsquina";
+import { usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
 
 /**
  * Pantalla de convocatoria de Follow the Leader.
@@ -21,6 +24,9 @@ const C = { bg: "#08040F", gold: "#FFD600", white: "#F0E8FF" };
 
 export default function FtlStandby({ juego, webappUrl, participante = null }) {
   const url = `${webappUrl}/?view=escenario`;
+  // Ajustes → QR y logo (por juego: 'ftl' | 'pt').
+  const mostrarQr   = usePantallaQr()[juego.type] !== false;
+  const mostrarLogo = usePantallaLogo()[juego.type] !== false;
 
   // Candidato preparado: la TV ya muestra quién va a jugar, pero el video
   // todavía no arranca. El QR sale de escena — el turno de este ya está
@@ -56,33 +62,25 @@ export default function FtlStandby({ juego, webappUrl, participante = null }) {
     );
   }
 
+  // Convocatoria: logo BizarrApp con campana arriba a la izquierda (igual que
+  // las placas de anuncio), el logo del juego al centro y el QR —si está
+  // visible en Ajustes → QR en pantalla— abajo a la izquierda, con la leyenda
+  // arriba.
   return (
     <div data-tv-ftl-standby style={{
       position: "absolute", inset: 0, zIndex: 50,
-      background: `radial-gradient(circle at 50% 35%, #1A0D2E 0%, ${C.bg} 70%)`,
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      gap: "3.5vh", padding: "4vh 4vw", overflow: "hidden",
+      background: `radial-gradient(circle at 50% 40%, #1A0D2E 0%, ${C.bg} 70%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "4vh 4vw", overflow: "hidden",
     }}>
-      <img src={juego.placa} alt={juego.label} style={{
-        maxWidth: "52vw", maxHeight: "38vh", objectFit: "contain",
+      {mostrarLogo && <LogoCampana/>}
+
+      <LogoJuego src={juego.placa} alt={juego.label} style={{
+        maxWidth: "60vw", maxHeight: "62vh",
         filter: "drop-shadow(0 10px 40px rgba(255,149,0,.35))",
       }}/>
 
-      <div style={{
-        fontFamily: "Syne, sans-serif", fontWeight: 900,
-        fontSize: "clamp(22px, 3.4vw, 62px)", letterSpacing: ".06em",
-        color: C.gold, textShadow: "0 4px 22px rgba(0,0,0,.8)", textAlign: "center",
-      }}>ANOTATE PARA JUGAR</div>
-
-      <div style={{ background: "#fff", padding: "1.6vh", borderRadius: "1.4vh", display: "flex" }}>
-        <QRCode value={url} style={{ width: "17vh", height: "17vh" }}/>
-      </div>
-
-      <div style={{
-        fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600,
-        fontSize: "clamp(13px, 1.5vw, 26px)", color: "rgba(240,232,255,.62)",
-        letterSpacing: ".04em", textAlign: "center",
-      }}>Escaneá para participar</div>
+      {mostrarQr && <QrEsquina url={url}/>}
     </div>
   );
 }

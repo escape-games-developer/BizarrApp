@@ -91,6 +91,7 @@ const css = `
   .djv-cantoni .djv-voto-up-on{background:rgba(46,212,122,.18);border-color:var(--c-green);box-shadow:none;}
   .djv-cantoni .djv-voto-down-on{background:rgba(255,75,62,.18);border-color:var(--c-red);}
   .djv-cantoni .djv-super{background:rgba(255,210,31,.1);border-color:var(--c-yellow);color:var(--c-yellow);}
+  .djv-cantoni .djv-hate{background:rgba(255,75,62,.1);border-color:var(--c-red);color:var(--c-red);}
   .djv-cantoni .djv-super-usado{background:rgba(248,245,255,.03);border-color:var(--c-border);color:var(--c-text2);}
   .djv-cantoni .djv-valor{font-family:var(--c-ui);background:var(--c-surface);}
   .djv-cantoni .djv-tema-votado .djv-valor{background:#16213F;}

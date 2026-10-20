@@ -4,10 +4,10 @@ import { P } from "../../components/pantalla/pantallaUi";
 /**
  * Acordeón de configuración del panel DJ.
  *
- * `status` sigue existiendo como metadata técnica, pero por defecto NO se
- * muestra al operador: el editor original no expone chips PENDIENTE ni carteles
- * de implementación. Para pantallas internas de desarrollo se puede activar
- * con `showTechnicalStatus`.
+ * Una sección con `status="pendiente"` muestra el chip PENDIENTE y su aviso
+ * (`aviso`): son pantallas que guardan configuración pero que todavía nada
+ * consume. Antes se ocultaban y el operador creía que funcionaban. Para
+ * esconderlo en un caso puntual: `showTechnicalStatus={false}`.
  *
  * `embedded` permite reutilizar una sección dentro de otra (por ejemplo,
  * Carteles/Filtro/Código dentro de Recompensas) sin crear un acordeón anidado.
@@ -27,7 +27,7 @@ function leerAbierto(id, porDefecto) {
 
 export default function PanelSection({
   id, title, icon, status = "ok", defaultOpen = false, badge = null,
-  aviso = null, children, embedded = false, showTechnicalStatus = false,
+  aviso = null, children, embedded = false, showTechnicalStatus = true,
 }) {
   const [abierta, setAbierta] = useState(() => leerAbierto(id, defaultOpen));
 

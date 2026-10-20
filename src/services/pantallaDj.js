@@ -17,7 +17,7 @@ export const ITEM_COLS =
   "id,event_id,title,artist,album,cover_url,source_type,youtube_id,duration_seconds," +
   "position,enabled,locked,pinned,is_active_candidate,pos_votes,neg_votes,score," +
   "times_played,last_status,consecutive_last_place_rounds,hot_until," +
-  "trim_start_seconds,trim_end_seconds,youtube_volume,won_with_score";
+  "trim_start_seconds,trim_end_seconds,youtube_volume,won_with_score,category,edited";
 
 const unwrap = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
 
@@ -47,15 +47,20 @@ export function parseYoutubeLines(text) {
   for (const raw of String(text || "").split("\n")) {
     const line = raw.trim();
     if (!line) continue;
-    const [url, title, artist, start, end] = line.split("|").map((p) => p.trim());
+    // URL | Título | Artista | Inicio | Fin | Volumen (0-100) | Categoría (A/B/C/D)
+    const [url, title, artist, start, end, vol, cat] = line.split("|").map((p) => p.trim());
     const youtube_id = extractYtId(url);
     if (!youtube_id) { errors.push(line); continue; }
+    const volumen = vol === undefined || vol === "" ? null : Math.max(0, Math.min(100, Math.round(Number(vol) || 0)));
+    const categoria = /^[ABCD]$/i.test(cat || "") ? cat.toUpperCase() : null;
     items.push({
       youtube_id,
       title:  title  || "",
       artist: artist || "",
       trim_start_seconds: Number(start) || 0,
       trim_end_seconds:   end ? String(Number(end) || "") : "",
+      ...(volumen !== null ? { youtube_volume: volumen } : {}),
+      ...(categoria ? { category: categoria } : {}),
     });
   }
   return { items, errors };
@@ -104,6 +109,14 @@ export async function fetchMyVotes(eventId, userId) {
   if (!eventId || !userId) return [];
   return unwrap(await supabase.from("pantalla_votes")
     .select("item_id,vote_type,weight").eq("event_id", eventId).eq("user_id", userId)) || [];
+}
+
+/** La fila propia del invitado (la RLS sólo deja leer la suya): rol y súper votos. */
+export async function fetchMyParticipant(eventId, userId) {
+  if (!eventId || !userId) return null;
+  return unwrap(await supabase.from("pantalla_participants")
+    .select("role,super_votes_used,extra_super_votes")
+    .eq("event_id", eventId).eq("user_id", userId).maybeSingle());
 }
 
 export async function fetchParticipants(eventId) {
@@ -200,8 +213,10 @@ export const advanceEvent = (eventId, forceItemId = null, expectedCurrentId = nu
     _event_id: eventId, _force_item_id: forceItemId, _expected_current_id: expectedCurrentId,
   });
 
+// `pantalla_refill_candidates` es interna (sin EXECUTE público desde la
+// migración 20261020050000); el panel usa la versión con chequeo de admin.
 export const refillCandidates = (eventId) =>
-  rpc("pantalla_refill_candidates", { _event_id: eventId });
+  rpc("pantalla_refill_event", { _event_id: eventId });
 
 export const addItems = (eventId, items) =>
   rpc("pantalla_add_items", { _event_id: eventId, _items: items });
@@ -346,7 +361,87 @@ export const tvReport = (eventId, token, currentTime, duration) =>
  * de la canción anterior no puede avanzar la que ya está sonando.
  * `_reason` distingue el final normal del salto por video no reproducible.
  */
+/**
+ * Terminó el video del participante de un juego de Escenario: la TV vuelve a
+ * la convocatoria (baja al participante y cierra el turno). Idempotente.
+ */
+export const tvEscenarioVideoTerminado = (eventId, token, turnId) =>
+  rpc("tv_escenario_video_terminado", {
+    _event_id: eventId, _token: token, _turn_id: turnId,
+  }, supabaseAnon);
+
 export const tvSongEnded = (eventId, token, itemId, reason = "advance") =>
   rpc("pantalla_tv_song_ended", {
     _event_id: eventId, _token: token, _item_id: itemId, _reason: reason,
   }, supabaseAnon);
+
+// ── Sets de canciones (migración 20261020110000_pantalla_sets) ──────────────
+// Un set es un subconjunto con nombre de la playlist. Con un set activo, sólo
+// sus canciones entran a la votación (lo aplica el servidor).
+
+const FALTA_SETS = "Falta aplicar en Supabase la migración 20261020110000_pantalla_sets.";
+const errSets = (error) => {
+  const m = error?.message || String(error);
+  return new Error(/pantalla_sets|pantalla_set_items|active_set_id|pantalla_activate_set|pantalla_set_category_rotation|category_rotation/.test(m)
+    && /does not exist|could not find|schema cache/i.test(m) ? FALTA_SETS : m);
+};
+
+/** Sets del evento con los ids de sus canciones: [{ id, name, itemIds:Set }]. */
+export async function fetchSets(eventId) {
+  if (!eventId) return [];
+  const { data, error } = await supabase.from("pantalla_sets")
+    .select("id,name,created_at,pantalla_set_items(item_id)")
+    .eq("event_id", eventId).order("created_at", { ascending: true });
+  if (error) throw errSets(error);
+  return (data || []).map((s) => ({
+    id: s.id, name: s.name, created_at: s.created_at,
+    itemIds: new Set((s.pantalla_set_items || []).map((x) => x.item_id)),
+  }));
+}
+
+export async function createSet(eventId, name, itemIds) {
+  const { data, error } = await supabase.from("pantalla_sets")
+    .insert({ event_id: eventId, name: String(name).trim().slice(0, 60) }).select("id").single();
+  if (error) throw errSets(error);
+  if (itemIds.length) await addToSet(data.id, itemIds);
+  return data.id;
+}
+
+export async function addToSet(setId, itemIds) {
+  if (!itemIds.length) return 0;
+  const { error } = await supabase.from("pantalla_set_items")
+    .upsert(itemIds.map((item_id) => ({ set_id: setId, item_id })), { onConflict: "set_id,item_id", ignoreDuplicates: true });
+  if (error) throw errSets(error);
+  return itemIds.length;
+}
+
+export async function removeFromSet(setId, itemIds) {
+  if (!itemIds.length) return 0;
+  const { error } = await supabase.from("pantalla_set_items")
+    .delete().eq("set_id", setId).in("item_id", itemIds);
+  if (error) throw errSets(error);
+  return itemIds.length;
+}
+
+export async function deleteSet(setId) {
+  const { error } = await supabase.from("pantalla_sets").delete().eq("id", setId);
+  if (error) throw errSets(error);
+}
+
+/** Activa un set (o ninguno con null). El servidor retira las candidatas de afuera. */
+export async function activateSet(eventId, setId) {
+  const { data, error } = await supabase.rpc("pantalla_activate_set", { _event_id: eventId, _set_id: setId });
+  if (error) throw errSets(error);
+  return data;
+}
+
+/**
+ * Rotación por categorías: { enabled, slots: { A, B, C, D } } (lugares fijos
+ * por categoría en la ventana de candidatas). Guarda y re-completa la ventana.
+ */
+export async function saveCategoryRotation(eventId, rotation) {
+  const { data, error } = await supabase.rpc("pantalla_set_category_rotation",
+    { _event_id: eventId, _rotation: rotation });
+  if (error) throw errSets(error);
+  return data;
+}

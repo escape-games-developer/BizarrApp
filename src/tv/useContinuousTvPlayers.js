@@ -98,7 +98,7 @@ export function effectiveEndOf(item, duration) {
   return real;
 }
 
-export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
+export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, onFuenteTerminada = null, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
   const [visiblePlayer, setVisiblePlayer] = useState(0);
   const [rainPhase, setRainPhase] = useState("idle");
   // Qué item está realmente en pantalla, no cuál pidió el servidor. Es la señal
@@ -139,6 +139,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
   // archivaría la canción del DJ que quedó congelada detrás.
   const autoAdvanceRef = useRef(autoAdvance);
   autoAdvanceRef.current = autoAdvance;
+  // Se llama cuando termina un video SIN auto-avance (juego de Escenario).
+  const onFuenteTerminadaRef = useRef(onFuenteTerminada);
+  onFuenteTerminadaRef.current = onFuenteTerminada;
+  const terminadosRef = useRef(new Set());   // items sin auto-avance ya avisados
   captionsEnabledRef.current = captionsEnabled;
   const rainAnticipationRef = useRef(rainAnticipationSeconds);
   const rainTailRef = useRef(rainTailSeconds);
@@ -624,6 +628,18 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
     };
 
     /**
+     * Final de un video SIN auto-avance (juego de Escenario): se pausa y se
+     * avisa una sola vez por item. Lo llaman ENDED y el reloj (recorte de fin).
+     */
+    const terminarSinCruce = (index, itemId) => {
+      if (!itemId || terminadosRef.current.has(itemId)) return;
+      terminadosRef.current.add(itemId);
+      try { playersRef.current[index]?.pauseVideo(); } catch { /* noop */ }
+      debug("Fin de video de escenario — corte directo", itemId);
+      onFuenteTerminadaRef.current?.(itemId);
+    };
+
+    /**
      * ENDED sólo vale si viene del player ACTIVO **y** el video que terminó es
      * realmente `current_item_id`. Comparar el índice no alcanza.
      */
@@ -639,6 +655,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       if (itemId !== latestCurrentRef.current?.id) {
         logBlocked(REASON.STALE_ENDED, itemId, index, "player-item-is-not-current"); return;
       }
+      // Sin auto-avance (video de un juego de Escenario) el final no es un cruce
+      // de canciones: nada de lluvia ni de pedir avance —que lo rechazaría y
+      // relanzaría el mismo video—. Se avisa y la pantalla corta directo.
+      if (!autoAdvanceRef.current) { terminarSinCruce(index, itemId); return; }
       startTransition(itemId, REASON.NATURAL_ENDED);
     };
 
@@ -781,6 +801,15 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       if (!(effectiveEnd > time)) { ticks.hits = 0; return; }   // lecturas no confiables
 
       const remaining = effectiveEnd - time;
+
+      // Video de un juego de Escenario (sin auto-avance): no hay cruce ni
+      // lluvia anticipada. Sólo se detecta el final —incluido un recorte de
+      // fin antes del final real del video— y se corta directo.
+      if (!autoAdvanceRef.current) {
+        if (remaining <= 0.35) terminarSinCruce(index, item.id);
+        return;
+      }
+
       // Mismo cálculo que usará el cruce: acotado al largo real del tema, para
       // que un video más corto que la anticipación no dispare el cambio apenas
       // arranca. Sin esto, un short de 20 s con la anticipación en 30 pasaría de

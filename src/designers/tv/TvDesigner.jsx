@@ -66,9 +66,10 @@ export default function TvDesigner({ sessionId = "default" }) {
    * Guarda en los dos lados a propósito:
    *  - `pantalla_events.tv_canvas_config` es la fuente de verdad y lo que hace
    *    que el diseño viaje a cualquier máquina;
-   *  - el localStorage queda como espejo local porque la vista `/tv` de hoy
-   *    sigue leyendo de ahí y escucha el evento `bizarr-tv-config-saved`. Si el
-   *    espejo falla no se pierde nada: en la base ya quedó guardado.
+   *  - el localStorage queda como espejo local: `/tv` lo usa sólo como
+   *    respaldo si el evento todavía no tiene diseño en la base. Si el espejo
+   *    falla no se pierde nada: en la base ya quedó guardado y la TV lo toma
+   *    de ahí por Realtime.
    */
   const persistir = async (siguiente) => {
     if (!evento) {

@@ -29,9 +29,13 @@ import AjustesPanel from "./AjustesPanel";
 import { useSidebarConfig } from "../hooks/useSidebarConfig";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { getTvLink, tvUrl } from "../services/pantallaDj";
-import { avanzarDjAlSiguiente, recorteDeEscenario } from "../services/escenarioDj";
-import { usePlaylistCategoria } from "../hooks/usePlaylistCategoria";
+import { avanzarDjAlSiguiente } from "../services/escenarioDj";
+import { videoParaEscenario } from "../services/escenarioBiblioteca";
+import BibliotecaEscenario from "./escenario/BibliotecaEscenario";
+import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
+import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
+import FtlBarometro from "../components/FtlBarometro";
 import { iniciarJornada } from "../services/jornada";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
@@ -1342,17 +1346,22 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
   const juego = ESCENARIO_JUEGOS[type];
   const COL = juego.colorAdmin;
   const { queue, error: errCola, call, finish } = useEscenarioQueue(sessionId, type);
-  // Catálogo central de la categoría del juego ('ftl' | 'pt') en Playlists
-  // YouTube: es de donde el operador elige el video del desafío.
-  const { canciones: catalogo, loading: cargandoCatalogo } = usePlaylistCategoria(juego.catalogo);
+  // El video del desafío sale de la Biblioteca propia del juego
+  // (BibliotecaEscenario, columna derecha), no del catálogo de Playlists YouTube.
+  // Inscripto elegido en la cola (a mano o al azar) antes de llamarlo: uno solo.
+  const [elegidoId, setElegidoId] = useState(null);
 
-  // Totales de la votación del público. El turno es la fila de la cola que
-  // está `called`; el Admin sólo mira — no vota nunca. Sin votación en este
-  // juego no se pide nada: el hook queda con el turno en null.
-  const turnoActivo = juego.votacion
+  // Votación del público según Ajustes → Votación Escenario: 'toques' =
+  // barómetro, 'votos' = 👍/👎, 'off' = nada. El turno es la fila de la cola
+  // que está `called`; sólo se lee con el video sonando. El Admin sólo mira.
+  const modoVotacion = useVotacionEscenario()[type] || "off";
+  const turnoActivo = gameState?.escenario_participant?.playing
     ? (queue.find(q => q.status === "called")?.id || null)
     : null;
-  const { totals: votos } = useFollowLeaderVotes(turnoActivo, null, { soloTotales: true });
+  const energia = useFtlEnergia(modoVotacion === "toques" ? turnoActivo : null);
+  const { totals: votos } = useFollowLeaderVotes(modoVotacion === "votos" ? turnoActivo : null,
+    null, { soloTotales: true });
+  const pelea = useFtlPelea(modoVotacion === "pelea" ? turnoActivo : null);
   const [busy, setBusy] = useState(false);
   const [err,  setErr]  = useState(null);
   const [nota, setNota] = useState(null);   // qué canción quedó sonando en el DJ
@@ -1364,10 +1373,14 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
   const enElAire   = gameState?.active_escenario === type;
   const waiting    = queue.filter(q => q.status === "waiting");
   const active     = queue.find(q => q.status === "called") || null;
+  // Derivado por id: si la persona sale de la cola, la marca se cae sola.
+  const elegido    = waiting.find(q => q.id === elegidoId) || null;
   const proyectado = gameState?.escenario_participant || null;
   const enVivo     = !!proyectado?.playing;
   // Fuente ÚNICA del video: lo que eligió el operador. Nunca `entry.yt_id`.
   const videoActual = gameState?.escenario_video || null;
+  // YouTube (ytId) o archivo subido (url): las dos fuentes de la biblioteca.
+  const tieneVideo  = !!(videoActual?.ytId || videoActual?.url);
 
   // Toda acción pasa por acá: nada canta éxito si el backend devolvió error.
   const correr = async (fn) => {
@@ -1393,31 +1406,33 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
       avatar_emoji: entry.avatar_emoji || null,
     }, null);
     await oTirar(call(entry.id));
-    setNota("👤 Participante preparado. Ahora elegí el video del desafío.");
+    setElegidoId(null);
+    setNota("👤 Participante preparado. Ahora asignale un video desde la Biblioteca.");
   });
+
+  // Marca a una persona al azar entre los inscriptos (distinta de la marcada,
+  // si hay más de una). No la llama: el operador confirma con 🎤 Llamar.
+  const elegirAlAzar = () => {
+    const pool = waiting.length > 1 ? waiting.filter((p) => p.id !== elegidoId) : waiting;
+    if (!pool.length) return;
+    setElegidoId(pool[Math.floor(Math.random() * pool.length)].id);
+  };
 
   // El OPERADOR elige el desafío. Resuelve el recorte del catálogo central y
   // escribe SÓLO `escenario_video`: no toca al participante, así que se puede
   // cambiar de idea las veces que haga falta antes de ▶ Comenzar sin crear un
   // turno nuevo ni tocar los votos. Tampoco reproduce nada.
-  const elegirVideo = (cancion) => correr(async () => {
+  const elegirVideo = (video) => correr(async () => {
     if (!proyectado) throw new Error("Primero llamá a un participante al escenario.");
-    // El recorte se busca en la categoría DE ESTE juego: el mismo video puede
-    // estar recortado distinto en FTL y en PT.
-    const { trimStart, trimEnd } = await recorteDeEscenario(cancion.ytId, juego.catalogo);
-    await controls?.setEscenarioVideo({
-      ytId: cancion.ytId, ytTitle: cancion.title || null, trimStart, trimEnd,
-    });
-    setNota(`🎬 Desafío elegido: ${cancion.title || cancion.ytId}. Tocá ▶ Comenzar.`);
+    await controls?.setEscenarioVideo(videoParaEscenario(video));
+    setNota(`🎬 Desafío elegido: ${video.nombre}. Tocá 🚀 Lanzar video.`);
   });
 
   // ▶ Comenzar: recién acá suena el video del desafío, sobre los mismos players
   // del DJ. La canción del evento queda congelada y vuelve al terminar.
   const comenzar = () => correr(async () => {
     if (!proyectado) throw new Error("No hay participante preparado.");
-    if (!gameState?.escenario_video?.ytId) {
-      throw new Error("Elegí un video para comenzar.");
-    }
+    if (!tieneVideo) throw new Error("Elegí un video para comenzar.");
     await controls?.setPerformanceEscenario(proyectado, true);
     setNota("▶ En vivo. El DJ quedó congelado con su canción.");
   });
@@ -1483,6 +1498,70 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
       : `🎵 De vuelta en DJ Democracy — ${corte.motivo}.`);
   });
 
+  // ── Barra operativa ──────────────────────────────────────────────────────
+  // Mismo criterio que Rey / Sumate / Arma / Duelo: Anunciar · Lanzar ·
+  // Finalizar, ÚNICA ubicación de las tres acciones.
+  //   · Anunciar: sólo la placa `escenario_<type>` (sendPlaca), con el juego
+  //     fuera del aire — sendPlaca pone active_escenario=null.
+  //   · Convocatoria: escenario en el aire sin participante (se anotan).
+  //   · Lanzar: arranca el video del participante preparado (= ▶ Comenzar).
+  //   · Finalizar: con el juego al aire es el cierre completo (cerrarJuego);
+  //     con sólo la placa puesta, la retira.
+  const placaId  = `escenario_${type}`;
+  const anunciado = gameState?.active_placa === placaId && !enElAire;
+  const anunciar = () => correr(async () => {
+    const r = await controls?.sendPlaca(placaId);
+    if (r?.error) throw new Error(r.error.message || String(r.error));
+    setNota(`📢 Placa de ${juego.label} en pantalla. Todavía no hay convocatoria.`);
+  });
+  const finalizarJuego = () => {
+    if (enElAire) return cerrarJuego();
+    return correr(async () => {
+      const r = await controls?.clearPlaca();
+      if (r?.error) throw new Error(r.error.message || String(r.error));
+      setNota(`⏹ Placa de ${juego.label} retirada. La TV volvió a DJ Democracy.`);
+    });
+  };
+  const puedeAnunciar     = !busy && !enElAire && !anunciado;
+  const puedeConvocatoria = !busy && !enElAire;
+  const puedeLanzar       = !busy && enElAire && !!active && !!proyectado && !enVivo && tieneVideo;
+  const puedeFinalizar    = !busy && (enElAire || anunciado);
+  const motivoNoLanzar = !enElAire ? "Abrí la convocatoria primero."
+    : !active ? "Llamá a un participante al escenario."
+    : enVivo ? null
+    : !tieneVideo ? "Asignale un video desde la Biblioteca."
+    : null;
+
+  const barraOperativa = (
+    <div className="card" style={{marginBottom:10, borderColor:`${COL}4D`}}>
+      <div style={{display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:6}}>
+        <button className="btn btn-g" style={{padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
+          disabled={!puedeAnunciar} onClick={anunciar}
+          title={enElAire ? `${juego.label} ya está al aire` : anunciado ? "La placa ya está en pantalla" : `Mostrar la placa de ${juego.label}`}>
+          📢 Anunciar
+        </button>
+        <button className="btn btn-g" style={{padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
+          disabled={!puedeConvocatoria} onClick={abrirConvocatoria}
+          title={enElAire ? "La convocatoria ya está abierta" : "Abrir la convocatoria: el público se puede anotar"}>
+          📣 Abrir convocatoria
+        </button>
+        <button className="btn btn-p" style={{gridColumn:"span 2", padding:"11px 4px", fontSize:11.5, whiteSpace:"normal", lineHeight:1.25}}
+          disabled={!puedeLanzar} onClick={comenzar}
+          title="Arranca el video del participante en la TV">
+          {enVivo ? "🔴 En vivo" : "🚀 Lanzar video"}
+        </button>
+        <button className="btn btn-r" style={{gridColumn:"span 2", padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
+          disabled={!puedeFinalizar} onClick={finalizarJuego}
+          title={enElAire ? "Cerrar el juego y volver a DJ Democracy" : "Retirar la placa"}>
+          ⏹ Finalizar
+        </button>
+      </div>
+      {motivoNoLanzar && (enElAire || anunciado) && (
+        <div style={{fontSize:10, color:"rgba(240,232,255,.4)", textAlign:"center", marginTop:7}}>{motivoNoLanzar}</div>
+      )}
+    </div>
+  );
+
   if (!sessionId) return (
     <div style={{"--sg": sec.grad, "--gw": sec.glow}}>
       <div className="card">
@@ -1508,66 +1587,25 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
         </div>
       )}
 
-      {/* Estado + salida directa desde cualquier fase */}
-      <div className="card">
-        <div style={{display:"flex", alignItems:"center", gap:8, marginBottom: enElAire ? 10 : 0}}>
+      {/* Dos columnas, como el resto de los juegos: a la izquierda la
+          operación (estado, inscriptos, participante); a la derecha la barra
+          operativa, el juego y el catálogo. */}
+      <div className="pal-split">
+      <div>
+      {/* Estado */}
+      <div className="card" style={{marginBottom:10}}>
+        <div style={{display:"flex", alignItems:"center", gap:8}}>
           <div className="dot-live" style={{background: enVivo ? "#EF4444" : enElAire ? COL : "rgba(240,232,255,.2)",
             animation: enVivo ? "blink 1.2s infinite" : "none"}}/>
           <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:12.5, flex:1,
             color: enElAire ? "#00F5A0" : "rgba(240,232,255,.3)"}}>
-            {!enElAire ? "Fuera del aire — la TV está en DJ Democracy"
+            {!enElAire ? (anunciado ? "Anunciado — la placa está en pantalla" : "Fuera del aire — la TV está en DJ Democracy")
               : enVivo ? "EN VIVO: " + (proyectado.name || "participante en escenario")
               : proyectado ? "PREPARADO: " + (proyectado.name || "participante listo para comenzar")
               : "Convocatoria abierta — esperando participante"}
           </div>
         </div>
-        {enElAire && (
-          <button className="btn btn-g btn-full" disabled={busy} onClick={cerrarJuego}>
-            🎵 Cerrar y volver a DJ Democracy
-          </button>
-        )}
       </div>
-
-      {/* Catálogo — es el operador quien elige de acá, después de llamar al
-          participante. El cliente ya no ve ninguna lista. */}
-      {!cargandoCatalogo && (
-        <div className="card" style={{
-          marginBottom: 10,
-          borderColor: catalogo.length ? "rgba(240,232,255,.08)" : "rgba(255,149,0,.4)",
-        }}>
-          <div style={{display:"flex", alignItems:"center", gap:8}}>
-            <div style={{flex:1, fontSize:11.5, color: catalogo.length ? "rgba(240,232,255,.5)" : "#FF9500"}}>
-              {catalogo.length
-                ? `🎵 Catálogo: ${catalogo.length} video${catalogo.length === 1 ? "" : "s"} para asignarle al participante.`
-                : "⚠ No hay videos cargados: no vas a tener nada que asignarle al participante."}
-            </div>
-            <button className="btn btn-p" style={{padding:"5px 11px", fontSize:10, whiteSpace:"nowrap"}}
-              onClick={() => goTo?.("playlists")}>
-              {catalogo.length ? "Ver playlists" : "Cargar videos"}
-            </button>
-          </div>
-          {!catalogo.length && (
-            <div style={{fontSize:10.5, color:"rgba(240,232,255,.35)", marginTop:7, lineHeight:1.5}}>
-              En Playlists YouTube: creá una playlist, cargale temas y asignale la categoría
-              <strong> {juego.catalogo.toUpperCase()}</strong>. Queda guardado en Supabase y lo ven todas las PC y celulares.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Fuera del aire: abrir convocatoria */}
-      {!enElAire && (
-        <div className="card">
-          <div className="ctitle" style={{marginBottom:4}}>{juego.icon} {juego.label}</div>
-          <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
-            {juego.subAdmin} La música sigue saliendo por DJ Democracy: la TV no
-            corta el audio durante este juego.
-          </p>
-          <button className="btn btn-p btn-full" disabled={busy} onClick={abrirConvocatoria}>
-            📣 Abrir convocatoria
-          </button>
-        </div>
-      )}
 
       {/* Convocatoria abierta, nadie en escenario: la cola */}
       {enElAire && !active && (
@@ -1583,17 +1621,40 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
             </div>
           )}
           {/* Sin canción: el cliente sólo se postula. El desafío se elige
-              después, con el participante ya en el escenario. */}
-          {waiting.map((p, i) => (
-            <div key={p.id} className="qrow" style={{animationDelay: (i * .05) + "s"}}>
-              <div className="qavatar">{p.avatar_emoji || "👤"}</div>
-              <div className="qname">{p.user_name}</div>
-              <button className="btn btn-p" style={{padding:"5px 12px", fontSize:10}}
-                disabled={busy} onClick={() => llamar(p)}>
-                Llamar al escenario
+              después, con el participante ya en el escenario. El operador
+              marca UNA persona (tocando la fila o 🎲 al azar) y la llama. */}
+          {waiting.map((p, i) => {
+            const marcado = p.id === elegido?.id;
+            return (
+              <div key={p.id} className="qrow" role="radio" aria-checked={marcado} tabIndex={0}
+                onClick={() => setElegidoId(p.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setElegidoId(p.id); } }}
+                style={{animationDelay: (i * .05) + "s", cursor:"pointer",
+                  background: marcado ? `${COL}18` : undefined,
+                  outline: marcado ? `1.5px solid ${COL}` : "none", borderRadius:10}}>
+                <div style={{width:16, height:16, borderRadius:"50%", flexShrink:0,
+                  border:`2px solid ${marcado ? COL : "rgba(240,232,255,.25)"}`,
+                  background: marcado ? COL : "transparent", boxShadow: marcado ? "inset 0 0 0 3px #0D0820" : "none"}}/>
+                <div className="qavatar">{p.avatar_emoji || "👤"}</div>
+                <div className="qname">{p.user_name}</div>
+              </div>
+            );
+          })}
+          {waiting.length > 0 && (
+            <div style={{display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:6, marginTop:10}}>
+              <button className="btn btn-g" style={{padding:"9px 6px", fontSize:11}}
+                disabled={busy} onClick={elegirAlAzar}>
+                🎲 Elegir al azar
+              </button>
+              <button className="btn btn-p" style={{padding:"9px 6px", fontSize:11}}
+                disabled={busy || !elegido} onClick={() => elegido && llamar(elegido)}>
+                🎤 Llamar al escenario
               </button>
             </div>
-          ))}
+          )}
+          <div style={{fontSize:10, color:"rgba(240,232,255,.35)", textAlign:"center", marginTop:7}}>
+            {elegido ? `Elegido: ${elegido.user_name}` : waiting.length ? "Tocá una persona o elegí al azar." : ""}
+          </div>
         </div>
       )}
 
@@ -1613,43 +1674,58 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
               <div style={{fontSize:13, fontWeight:700, color:COL}}>{active.user_name}</div>
               {/* El video lo eligió el OPERADOR: sale de escenario_video, no de
                   la fila de la cola. */}
-              <div style={{fontSize:10, color: videoActual?.ytId ? "#00F5A0" : "rgba(240,232,255,.35)"}}>
-                {videoActual?.ytId
-                  ? `🎬 ${videoActual.ytTitle || videoActual.ytId}`
+              <div style={{fontSize:10, color: tieneVideo ? "#00F5A0" : "rgba(240,232,255,.35)"}}>
+                {tieneVideo
+                  ? `${videoActual.url ? "🎞️" : "🎬"} ${videoActual.ytTitle || videoActual.ytId || "Video"}`
                   : "Sin video asignado todavía"}
               </div>
             </div>
           </div>
 
-          {/* Votación del público — misma fuente que /tv y que el celular:
-              follow_leader_vote_totals. Los porcentajes los calcula la base.
-              Sólo mientras suena: preparado todavía no hay nada que votar. */}
-          {enVivo && juego.votacion && <>
-          <div style={{display:"flex", gap:8, marginBottom:12}}>
-            {[
-              {ico:"👍", n:votos.up,   pct:votos.up_pct,   col:"#00F5A0"},
-              {ico:"👎", n:votos.down, pct:votos.down_pct, col:"#FF2D78"},
-            ].map((v) => (
-              <div key={v.ico} style={{
-                flex:1, textAlign:"center", padding:"9px 6px", borderRadius:10,
-                background:`${v.col}0F`, border:`1px solid ${v.col}33`,
-              }}>
-                <div style={{fontSize:18, marginBottom:2}}>{v.ico}</div>
-                <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:20, color:v.col}}>
-                  {v.pct}%
-                </div>
-                <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)"}}>
-                  {v.n} voto{v.n === 1 ? "" : "s"}
-                </div>
-              </div>
-            ))}
-          </div>
-          {votos.total === 0 && (
-            <div style={{fontSize:10.5, color:"rgba(240,232,255,.3)", marginBottom:10, textAlign:"center"}}>
-              Todavía no votó nadie.
+          {/* Barómetro de energía — misma fuente que /tv y que el celular
+              (ftl_energia_pct). Sólo mientras suena el video. */}
+          {enVivo && modoVotacion === "toques" && (
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", letterSpacing:1,
+                textTransform:"uppercase", marginBottom:5}}>🔥 Energía del público</div>
+              <FtlBarometro pct={energia}/>
             </div>
           )}
-          </>}
+          {/* Mod 3: pelea de toques — barra en la posición de la pelea */}
+          {enVivo && modoVotacion === "pelea" && (
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", letterSpacing:1,
+                textTransform:"uppercase", marginBottom:5}}>⚔️ Pelea 👍 / 👎</div>
+              <FtlBarometro pct={pelea.pct} decae={false}/>
+              <div style={{display:"flex", justifyContent:"space-between", fontSize:10.5, marginTop:6}}>
+                <span style={{color:"#00F5A0"}}>👍 {pelea.positivos} toques</span>
+                <span style={{color:"#FF2D78"}}>👎 {pelea.negativos} toques</span>
+              </div>
+            </div>
+          )}
+          {/* Mod 2: el barómetro de la TV muestra el % de 👍 */}
+          {enVivo && modoVotacion === "votos" && (
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", letterSpacing:1,
+                textTransform:"uppercase", marginBottom:5}}>👍 Barómetro (votos positivos)</div>
+              <FtlBarometro pct={votos.up_pct ?? 0} decae={false}/>
+            </div>
+          )}
+          {enVivo && modoVotacion === "votos" && (
+            <div style={{display:"flex", gap:8, marginBottom:12}}>
+              {[
+                {ico:"👍", n:votos.up,   pct:votos.up_pct,   col:"#00F5A0"},
+                {ico:"👎", n:votos.down, pct:votos.down_pct, col:"#FF2D78"},
+              ].map((v) => (
+                <div key={v.ico} style={{flex:1, textAlign:"center", padding:"9px 6px", borderRadius:10,
+                  background:`${v.col}0F`, border:`1px solid ${v.col}33`}}>
+                  <div style={{fontSize:18, marginBottom:2}}>{v.ico}</div>
+                  <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:20, color:v.col}}>{v.pct}%</div>
+                  <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)"}}>{v.n} voto{v.n === 1 ? "" : "s"}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {!proyectado && (
             <div style={{marginBottom:10, padding:"9px 10px", borderRadius:10,
@@ -1666,58 +1742,10 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
 
           {!enVivo ? (
             <>
-              {/* ── El OPERADOR elige el desafío ──
-                  Recién acá aparece el catálogo, con el participante ya
-                  proyectado. Elegir NO reproduce: sólo escribe escenario_video,
-                  y se puede cambiar cuantas veces haga falta. */}
-              <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", letterSpacing:1,
-                textTransform:"uppercase", marginBottom:6}}>Video / desafío para el participante</div>
-
-              {cargandoCatalogo && (
-                <div style={{fontSize:11, color:"rgba(240,232,255,.3)", padding:"10px 0"}}>
-                  Cargando catálogo…
-                </div>
-              )}
-              {!cargandoCatalogo && catalogo.length === 0 && (
-                <div style={{fontSize:11, color:"#FF9500", padding:"10px 0", lineHeight:1.5}}>
-                  ⚠ No hay videos en la categoría {juego.catalogo.toUpperCase()}. Cargalos en Playlists YouTube.
-                </div>
-              )}
-
-              <div style={{maxHeight:260, overflowY:"auto", marginBottom:10}}>
-                {catalogo.map((c) => {
-                  const elegido = videoActual?.ytId === c.ytId;
-                  return (
-                    <button key={c.id} disabled={busy} onClick={() => elegirVideo(c)}
-                      style={{display:"flex", alignItems:"center", gap:9, width:"100%", textAlign:"left",
-                        padding:"7px 8px", marginBottom:5, borderRadius:10, cursor: busy?"wait":"pointer",
-                        background: elegido ? "rgba(0,245,160,.1)" : "rgba(240,232,255,.03)",
-                        border: `1px solid ${elegido ? "#00F5A0" : "rgba(240,232,255,.08)"}`}}>
-                      {c.thumb
-                        ? <img src={c.thumb} alt="" style={{width:52, height:30, objectFit:"cover", borderRadius:5, flexShrink:0}}/>
-                        : <div style={{width:52, height:30, borderRadius:5, flexShrink:0, background:"rgba(240,232,255,.06)"}}/>}
-                      <div style={{flex:1, minWidth:0}}>
-                        <div style={{fontSize:11, fontWeight:700, color: elegido ? "#00F5A0" : "#F0E8FF",
-                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.title}</div>
-                        {c.artist && (
-                          <div style={{fontSize:9.5, color:"rgba(240,232,255,.35)",
-                            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{c.artist}</div>
-                        )}
-                      </div>
-                      {elegido && <div style={{fontSize:11, color:"#00F5A0", flexShrink:0}}>✓</div>}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button className="btn btn-p btn-full" style={{marginBottom:8}}
-                disabled={busy || !videoActual?.ytId} onClick={comenzar}>
-                ▶ Comenzar
-              </button>
               <div style={{fontSize:10.5, color:"rgba(240,232,255,.35)", textAlign:"center", marginBottom:8}}>
-                {videoActual?.ytId
-                  ? "Está preparado. La TV lo muestra listo y el DJ sigue con su canción."
-                  : "Elegí un video para comenzar."}
+                {tieneVideo
+                  ? "Está preparado. Tocá 🚀 Lanzar video para arrancar."
+                  : "Asignale un video desde la Biblioteca (columna derecha)."}
               </div>
               <button className="btn btn-g btn-full" disabled={busy} onClick={finalizar}>
                 👤 Bajar del escenario — sigue la convocatoria
@@ -1730,6 +1758,30 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
           )}
         </div>
       )}
+      </div>
+
+      {/* ══ Derecha: barra operativa + juego + catálogo ══ */}
+      <div>
+        {barraOperativa}
+
+        <div className="card" style={{marginBottom:10}}>
+          <div className="ctitle" style={{marginBottom:4}}>{juego.icon} {juego.label}</div>
+          <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
+            {juego.subAdmin} La música sigue saliendo por DJ Democracy: la TV no
+            corta el audio durante este juego.
+            {!enElAire && " Tocá 🚀 Lanzar para abrir la convocatoria."}
+          </p>
+        </div>
+
+        {/* Biblioteca — links de YouTube, archivos de la PC y playlists. Con
+            un participante preparado, cada video tiene «Asignar». Elegir NO
+            reproduce: sólo escribe escenario_video. */}
+        <BibliotecaEscenario juego={type} col={COL}
+          puedeAsignar={enElAire && !!active && !!proyectado && !enVivo}
+          videoActualId={videoActual?.videoId || null}
+          onAsignar={elegirVideo} ocupado={busy}/>
+      </div>
+      </div>
     </div>
   );
 }

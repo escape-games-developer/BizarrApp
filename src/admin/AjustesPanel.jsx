@@ -2,6 +2,8 @@ import { useState } from "react";
 import VistaPanelOpciones from "./ajustes/VistaPanelOpciones";
 import RegistroClientes from "./ajustes/RegistroClientes";
 import CartaMenu from "./ajustes/CartaMenu";
+import VotacionEscenario from "./ajustes/VotacionEscenario";
+import QrPantalla from "./ajustes/QrPantalla";
 
 const card = {
   background: "rgba(240,232,255,.035)",
@@ -13,9 +15,10 @@ const card = {
 /**
  * Ajustes — centro de configuración administrativa de BizarrApp.
  *
- * Cada categoría es una entrada de CATEGORIAS con su propio componente. La
- * portada las lista como tarjetas; al elegir una se abre su pantalla. Todas
- * reciben las mismas props que AjustesPanel (`contexto`).
+ * Cada categoría es una entrada de CATEGORIAS con su propio componente y se
+ * muestra como una solapa, al estilo de las hojas de Excel: la fila de
+ * solapas va pegada a la hoja y la activa se funde con ella. Todas reciben
+ * las mismas props que AjustesPanel (`contexto`).
  *
  * Futuras: General, Juegos, Reglas y comportamientos, Pantalla, Otras. Las
  * reglas de cada juego siguen viviendo en su panel (p. ej. Arma la Palabra y
@@ -34,41 +37,53 @@ const CATEGORIAS = [
     Componente: RegistroClientes,
   },
   {
+    id: "votacion", icon: "🗳️", label: "Votación Escenario",
+    descripcion: "Elegí cómo vota el público en Follow the Leader y Personal Trainer: barómetro de toques o 👍/👎.",
+    Componente: VotacionEscenario,
+  },
+  {
+    id: "qr", icon: "🔳", label: "QR y logo",
+    descripcion: "Mostrá u ocultá el QR y el logo de BizarrApp en las pantallas de cada juego.",
+    Componente: QrPantalla,
+  },
+  {
     id: "carta", icon: "🍹", label: "Carta (menú)",
     descripcion: "Elegí qué carta ven los clientes en MENÚ: la actual o la de Pedidos Bizarren.",
     Componente: CartaMenu,
   },
 ];
 
-export default function AjustesPanel(contexto) {
-  const [abierta, setAbierta] = useState(null);
-  const cat = CATEGORIAS.find((c) => c.id === abierta);
+// Hoja y solapa activa comparten fondo y borde: así la solapa "sale" de la hoja.
+const HOJA_BG     = "#140C22";
+const HOJA_BORDE  = "rgba(155,47,255,.35)";
 
-  if (cat) {
-    const { Componente } = cat;
-    return (
-      <div style={{ maxWidth: 920 }}>
-        <button type="button" onClick={() => setAbierta(null)}
-          style={{ background: "none", border: "none", color: "rgba(240,232,255,.55)", fontSize: 12,
-            cursor: "pointer", padding: "2px 0", marginBottom: 10 }}>
-          ← Ajustes
-        </button>
-        <div style={{ ...card, borderColor: "rgba(155,47,255,.35)", background: "rgba(155,47,255,.06)", marginBottom: 14 }}>
-          <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
-            {cat.icon} {cat.label}
-          </div>
-          <p style={{ color: "rgba(240,232,255,.58)", fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>{cat.descripcion}</p>
-        </div>
-        <div style={card}>
-          <Componente {...contexto}/>
-        </div>
-      </div>
-    );
-  }
+const SOLAPAS_CSS = `
+  .ajs-solapas{display:flex;align-items:flex-end;gap:2px;overflow-x:auto;
+    padding:0 12px;margin-bottom:-1px;position:relative;z-index:1;scrollbar-width:thin;}
+  .ajs-solapa{flex:0 0 auto;display:flex;align-items:center;gap:7px;
+    padding:8px 16px 9px;font:inherit;font-size:12px;font-weight:600;white-space:nowrap;
+    color:rgba(240,232,255,.5);background:rgba(240,232,255,.04);cursor:pointer;
+    border:1px solid rgba(240,232,255,.1);border-bottom-color:${HOJA_BORDE};
+    border-radius:9px 9px 0 0;transition:background .15s,color .15s;}
+  .ajs-solapa:hover{color:rgba(240,232,255,.85);background:rgba(240,232,255,.08);}
+  .ajs-solapa[aria-selected="true"]{color:#F0E8FF;background:${HOJA_BG};
+    border-color:${HOJA_BORDE};border-bottom-color:${HOJA_BG};
+    box-shadow:inset 0 2px 0 #9B2FFF;padding-top:10px;cursor:default;}
+  .ajs-hoja{background:${HOJA_BG};border:1px solid ${HOJA_BORDE};
+    border-radius:0 14px 14px 14px;padding:22px;}
+  @media (max-width:560px){ .ajs-solapa{padding:8px 11px 9px;font-size:11px;} .ajs-hoja{padding:16px;} }
+`;
+
+export default function AjustesPanel(contexto) {
+  const [activa, setActiva] = useState(CATEGORIAS[0].id);
+  const cat = CATEGORIAS.find((c) => c.id === activa) || CATEGORIAS[0];
+  const { Componente } = cat;
 
   return (
     <div style={{ maxWidth: 920 }}>
-      <div style={{ ...card, borderColor: "rgba(155,47,255,.35)", background: "rgba(155,47,255,.06)" }}>
+      <style>{SOLAPAS_CSS}</style>
+
+      <div style={{ ...card, borderColor: "rgba(155,47,255,.35)", background: "rgba(155,47,255,.06)", marginBottom: 16 }}>
         <div style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
           Ajustes
         </div>
@@ -77,19 +92,21 @@ export default function AjustesPanel(contexto) {
         </p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12, marginTop: 14 }}>
+      <div className="ajs-solapas" role="tablist" aria-label="Categorías de ajustes">
         {CATEGORIAS.map((c) => (
-          <button key={c.id} type="button" onClick={() => setAbierta(c.id)}
-            style={{ ...card, textAlign: "left", cursor: "pointer", color: "#F0E8FF", font: "inherit" }}>
-            <div style={{ fontSize: 22, marginBottom: 10 }}>{c.icon}</div>
-            <strong style={{ display: "block", fontSize: 14, marginBottom: 6 }}>{c.label}</strong>
-            <span style={{ color: "rgba(240,232,255,.48)", fontSize: 11.5, lineHeight: 1.55 }}>{c.descripcion}</span>
+          <button key={c.id} type="button" role="tab" id={`ajs-tab-${c.id}`}
+            aria-selected={c.id === cat.id} aria-controls="ajs-hoja"
+            className="ajs-solapa" onClick={() => setActiva(c.id)}>
+            <span>{c.icon}</span>{c.label}
           </button>
         ))}
       </div>
 
-      <div style={{ ...card, marginTop: 14, textAlign: "center", color: "rgba(240,232,255,.42)", fontSize: 12 }}>
-        Las demás configuraciones se irán incorporando en esta sección.
+      <div className="ajs-hoja" role="tabpanel" id="ajs-hoja" aria-labelledby={`ajs-tab-${cat.id}`}>
+        <p style={{ color: "rgba(240,232,255,.55)", fontSize: 12.5, lineHeight: 1.6, margin: "0 0 18px" }}>
+          {cat.descripcion}
+        </p>
+        <Componente key={cat.id} {...contexto}/>
       </div>
     </div>
   );

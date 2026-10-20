@@ -24,6 +24,9 @@ import { Campo } from "../panelControls";
  * trabado por una sección que quizá nadie tocó.
  */
 
+// Roles que votan pero no entran en sorteos ni reciben premios.
+const SIN_PREMIOS = ["staff", "dj"];
+
 const PREMIOS = {
   extra_super_vote:     { ico: "🔥", label: "Súper voto extra" },
   giant_reaction:       { ico: "💥", label: "Reacción gigante" },
@@ -50,7 +53,6 @@ export default function SeccionSorteos({ event, participants, onError }) {
   const [otorgados, setOtorgados] = useState([]);
   const [destino,   setDestino]   = useState("");       // "" = sorteo
   const [premio,    setPremio]    = useState("");
-  const [sinStaff,  setSinStaff]  = useState(true);
   const [ocupado,   setOcupado]   = useState(false);
   const [aviso,     setAviso]     = useState(null);
 
@@ -82,10 +84,13 @@ export default function SeccionSorteos({ event, participants, onError }) {
 
   const corte = Date.now() - (event.kick_activity_minutes ?? 45) * 60_000;
 
-  const elegibles = useMemo(() => participants
-    .filter((p) => new Date(p.last_seen_at).getTime() > corte)
-    .filter((p) => !sinStaff || p.role !== "staff"),
-  [participants, corte, sinStaff]);
+  // Staff y DJ votan, pero nunca entran en sorteos ni reciben premios (igual
+  // que el original: son gente del local, no público).
+  const conPremio = useMemo(() => participants.filter((p) => !SIN_PREMIOS.includes(p.role)),
+    [participants]);
+  const elegibles = useMemo(() => conPremio
+    .filter((p) => new Date(p.last_seen_at).getTime() > corte),
+  [conPremio, corte]);
 
   const catalogo = habilitados ?? [];
   const nombre = (uid) => perfiles[uid] || "Sin nombre";
@@ -136,28 +141,16 @@ export default function SeccionSorteos({ event, participants, onError }) {
       <Campo label="A quién"
         hint={destino
           ? "Reconocimiento puntual: se guarda con source='manual'."
-          : `Sorteo al azar entre los presentes. Entran ${elegibles.length} de ${participants.length}.`}>
+          : `Sorteo al azar entre los presentes. Entran ${elegibles.length} de ${participants.length} (Staff y DJ no participan).`}>
         <select className="pdj-input" value={destino} disabled={ocupado}
           aria-label="Destinatario del premio"
           onChange={(e) => setDestino(e.target.value)}>
           <option value="">🎲 Sorteo al azar entre los presentes ({elegibles.length})</option>
-          {participants.map((p) => (
+          {conPremio.map((p) => (
             <option key={p.user_id} value={p.user_id}>{nombre(p.user_id)}</option>
           ))}
         </select>
       </Campo>
-
-      {!destino && (
-        <label style={{
-          display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-          fontSize: 10.5, color: "rgba(240,232,255,.55)", marginTop: -6, marginBottom: 11,
-        }}>
-          <input type="checkbox" checked={sinStaff} disabled={ocupado}
-            onChange={(e) => setSinStaff(e.target.checked)}
-            style={{ accentColor: "#9B2FFF", cursor: "pointer", flexShrink: 0 }} />
-          Dejar al staff fuera del sorteo
-        </label>
-      )}
 
       <Campo label="Premio adjunto"
         hint={habilitados === null ? "Cargando el catálogo…"

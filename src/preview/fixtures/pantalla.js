@@ -25,7 +25,7 @@ const candidates = Object.freeze([
 ].map((c) => Object.freeze({ ...c, cover_url: null })));
 
 const votos = { c2: "up", c4: "down" };
-const poderes = { up: { enabled: true, value: 1 }, down: { enabled: true, value: 1 }, super_up: { enabled: true, value: 5 } };
+const poderes = { up: { enabled: true, value: 1 }, down: { enabled: true, value: 1 }, super_up: { enabled: true, value: 5 }, super_down: { enabled: true, value: 5 } };
 
 const cli = Object.freeze({
   role: "guest",
@@ -34,6 +34,9 @@ const cli = Object.freeze({
   busy: null,
   error: null,
   superUsed: false,
+  superLeft: 1,
+  superQuota: 1,
+  superOn: () => null,
   powerOf: (tipo) => poderes[tipo] ?? { enabled: false, value: 0 },
   voteOn: (id) => votos[id] ?? null,
   vote: noop, superVote: noop, toggleKick: noop, react: noop, clearError: noop,

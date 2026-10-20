@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   addItems, reorderItems,
   deleteItems, setItemsEnabled, parseYoutubeLines, updateItem,
+  fetchSets, createSet, addToSet, removeFromSet, deleteSet, activateSet,
 } from "../../../services/pantallaDj";
 import { P } from "../../../components/pantalla/pantallaUi";
 import FilaCancion from "./FilaCancion";
+import SetsGuardados from "./SetsGuardados";
 
 /**
  * Columna principal del editor: la playlist del evento.
@@ -35,11 +37,26 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
   const [busy,        setBusy]        = useState(false);
   const [aviso,       setAviso]       = useState(null);
   const [buscar,      setBuscar]      = useState("");
+  const [categoria,   setCategoria]   = useState("todas");
+  // Sets de canciones: el activo decide qué entra a la votación (servidor).
+  const [sets,        setSets]        = useState([]);
+  const [setsError,   setSetsError]   = useState(null);
+  const [soloSet,     setSoloSet]     = useState(false);
+  const [verSets,     setVerSets]     = useState(false);
   const [seleccion,   setSeleccion]   = useState(() => new Set());
   const [arrastrando, setArrastrando] = useState(null);
   const [encima,      setEncima]      = useState(null);
 
   useEffect(() => { setSeleccion(new Set()); }, [event.id]);
+
+  const cargarSets = useCallback(async () => {
+    try { setSets(await fetchSets(event.id)); setSetsError(null); }
+    catch (err) { setSets([]); setSetsError(err.message); }
+  }, [event.id]);
+  useEffect(() => { cargarSets(); }, [cargarSets, event.active_set_id]);
+
+  const setActivo = sets.find((x) => x.id === event.active_set_id) || null;
+  useEffect(() => { if (!setActivo) setSoloSet(false); }, [setActivo]);
 
   const flash = (msg) => { setAviso(msg); setTimeout(() => setAviso(null), 3800); };
 
@@ -55,11 +72,18 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
     () => [...items].sort((a, b) => a.position - b.position), [items]);
 
   const q = buscar.trim().toLowerCase();
-  const visibles = useMemo(() => {
-    if (!q) return ordenados;
-    return ordenados.filter((i) =>
-      `${i.title} ${i.artist || ""} ${i.album || ""}`.toLowerCase().includes(q));
-  }, [ordenados, q]);
+  const visibles = useMemo(() => ordenados.filter((i) =>
+    (!soloSet || !setActivo || setActivo.itemIds.has(i.id))
+    && (categoria === "todas" || (i.category || "A") === categoria)
+    && (!q || `${i.title} ${i.artist || ""} ${i.album || ""}`.toLowerCase().includes(q))),
+  [ordenados, q, categoria, soloSet, setActivo]);
+
+  // Cantidad por categoría, para el selector (como el original: «(434)»).
+  const porCategoria = useMemo(() => {
+    const m = { todas: ordenados.length, A: 0, B: 0, C: 0, D: 0 };
+    ordenados.forEach((i) => { m[i.category || "A"] = (m[i.category || "A"] || 0) + 1; });
+    return m;
+  }, [ordenados]);
 
   const indiceDe = useMemo(() => {
     const m = new Map();
@@ -172,6 +196,13 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
   const idsSeleccionados = [...seleccion];
   const borrables = idsSeleccionados.filter((id) => id !== current?.id);
 
+  // Operaciones de sets: refrescan la lista de sets además de la playlist.
+  const conSets = (fn, mensaje) => correr(async () => {
+    const r = await fn();
+    await cargarSets();
+    if (mensaje) flash(typeof mensaje === "function" ? mensaje(r) : mensaje);
+  });
+
   const accionMasiva = (fn, mensaje) => correr(async () => {
     const n = await fn();
     setSeleccion(new Set());
@@ -187,6 +218,21 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
         }}>{aviso}</div>
       )}
 
+      {/* ── Set activo ─────────────────────────────────────────────────── */}
+      <div className={`pdj-set-banner${setActivo ? " pdj-set-banner-on" : ""}${setsError ? " pdj-set-banner-falta" : ""}`}>
+        <span className="pdj-set-banner-ico">◎</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {setsError
+            ? <><strong>Sets de canciones</strong> — {setsError}</>
+            : setActivo
+              ? <><strong>Set activo: {setActivo.name}</strong> — {setActivo.itemIds.size} temas</>
+              : <><strong>Sin set activo</strong> — entran a la votación todas las canciones habilitadas</>}
+        </div>
+        <button type="button" className="pdj-mini" disabled={!!setsError} onClick={() => setVerSets(true)}>
+          {setActivo ? "Cambiar de set" : sets.length ? "Elegir set" : "Crear un set"}
+        </button>
+      </div>
+
       {/* ── Agregar de YouTube ─────────────────────────────────────────── */}
       <div className="pdj-card pdj-youtube-card">
         <div className="pdj-card-titulo">
@@ -194,7 +240,7 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
         </div>
         <div className="pdj-youtube-help">
           Pegá uno o varios links (uno por línea). Soporta youtube.com/watch, youtu.be y /shorts/.<br />
-          <span>Opcional: <code>URL | Título | Artista</code> para forzar título y artista manuales, o <code>URL | Título | Artista | Inicio | Fin</code> (segundos de recorte).</span>
+          <span>Opcional: <code>URL | Título | Artista</code> para forzar título y artista manuales, o <code>URL | Título | Artista | Inicio | Fin</code> (segundos de recorte). También opcionales al final: <code>| Volumen</code> (0-100) y <code>| Categoría</code> (A/B/C/D).</span>
         </div>
         <textarea className="pdj-input" value={texto} disabled={busy}
           onChange={(e) => setTexto(e.target.value)}
@@ -214,6 +260,27 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
           <input className="pdj-input" style={{ flex: "1 1 190px", width: "auto" }}
             placeholder="🔍 Buscar por título, artista o álbum…"
             value={buscar} onChange={(e) => setBuscar(e.target.value)} />
+          <label className="pdj-plcat">
+            <span>Ver categoría</span>
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
+              aria-label="Filtrar por categoría">
+              <option value="todas">Todas</option>
+              {["A", "B", "C", "D"].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <span className="pdj-plcat-n">({porCategoria[categoria] ?? 0})</span>
+          </label>
+          {setActivo && (
+            <label className="pdj-plcat" style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={soloSet} onChange={(e) => setSoloSet(e.target.checked)}
+                style={{ accentColor: "#00E5FF" }}/>
+              <span>Ver solo el set activo</span>
+              <span className="pdj-plcat-n">({setActivo.name})</span>
+            </label>
+          )}
+          <button className="pdj-mini" disabled={!!setsError} onClick={() => setVerSets(true)}
+            title={setsError || "Ver, activar y crear sets de canciones"}>
+            ☰ Sets guardados ({sets.length})
+          </button>
           <button className="pdj-mini" disabled title="La búsqueda automática de portadas estará disponible próximamente">
             Buscar portadas faltantes (0)
           </button>
@@ -266,6 +333,16 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
               }}>
               ✕ Eliminar
             </button>
+            {setActivo && <>
+              <button className="pdj-mini" disabled={busy}
+                onClick={() => conSets(() => addToSet(setActivo.id, idsSeleccionados), (n) => `✓ ${n} agregada(s) al set «${setActivo.name}»`)}>
+                ＋ Al set activo
+              </button>
+              <button className="pdj-mini" disabled={busy}
+                onClick={() => conSets(() => removeFromSet(setActivo.id, idsSeleccionados), (n) => `✓ ${n} quitada(s) del set «${setActivo.name}»`)}>
+                − Del set activo
+              </button>
+            </>}
             <button className="pdj-mini" onClick={() => setSeleccion(new Set())}>Limpiar</button>
           </div>
         )}
@@ -284,7 +361,7 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
         {items.length > 0 && visibles.length === 0 && (
           <div className="pdj-vacio">
             <div className="pdj-vacio-ico">🔍</div>
-            <div className="pdj-vacio-tit">Ningún tema coincide con la búsqueda</div>
+            <div className="pdj-vacio-tit">Ningún tema coincide con la búsqueda o la categoría</div>
           </div>
         )}
 
@@ -294,9 +371,21 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
             seleccionado={seleccion.has(item.id)} onSeleccionar={seleccionar}
             onMover={(id, delta) => moverA(id, (indiceDe.get(id) ?? 0) + delta)}
             onIrAPosicion={(id, n) => moverA(id, n - 1)}
-            refresh={refresh} onError={onError} drag={drag} />
+            refresh={refresh} onError={onError} drag={drag}
+            enSet={!!setActivo && setActivo.itemIds.has(item.id)} />
         ))}
+
       </div>
+
+      {verSets && (
+        <SetsGuardados sets={sets} activoId={event.active_set_id} seleccionadas={seleccion.size} ocupado={busy}
+          onCerrar={() => setVerSets(false)}
+          onActivar={(id) => conSets(() => activateSet(event.id, id),
+            (r) => id ? `✓ Set activado${r?.retiradas ? ` · ${r.retiradas} candidata(s) de afuera retirada(s)` : ""}` : "✓ Sin set: entran todas las canciones")}
+          onCrear={(nombre) => conSets(async () => { await createSet(event.id, nombre, idsSeleccionados); setSeleccion(new Set()); },
+            `✓ Set «${nombre}» creado`)}
+          onBorrar={(id) => conSets(() => deleteSet(id), "✓ Set borrado")}/>
+      )}
     </>
   );
 }

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
-import QRCode from "react-qr-code";
+import QrEsquina from "../components/QrEsquina";
+import LogoCampana from "../components/LogoCampana";
+import LogoJuego from "../components/LogoJuego";
+import { usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
 import { useDueloRound } from "../hooks/realtime/useDueloRound";
 import {
   faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
@@ -53,11 +56,11 @@ function Face({ emoji, photo, size, borderColor }) {
 
 // ── DuelHeader — logos centrales posicionados independientes (dentro del área central) ──
 // BizarrApp: chico, hacia el participante 1 (izq). Duelo: grande, centrado sobre el video.
-function DuelHeader() {
+function DuelHeader({ conLogoApp = true }) {
   return (
     <div className="center-header">
-      <img className="bizarrapp-logo" src={LOGO_APP} alt="BizarrApp"
-        onError={(e) => { e.currentTarget.style.display = "none"; }} />
+      {conLogoApp && <img className="bizarrapp-logo" src={LOGO_APP} alt="BizarrApp"
+        onError={(e) => { e.currentTarget.style.display = "none"; }} />}
       <img className="duel-logo" src={LOGO_DUELO} alt="Duelo de Talentos"
         onError={(e) => { e.currentTarget.style.display = "none"; }} />
     </div>
@@ -605,6 +608,9 @@ const duelStyles = (
  */
 export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo = null }) {
   const live = useDueloRound(demo ? null : sessionId);
+  // Ajustes → QR en pantalla: el QR de la convocatoria se puede ocultar.
+  const mostrarQr   = usePantallaQr().duelo !== false;
+  const mostrarLogo = usePantallaLogo().duelo !== false;
   const currentRound = demo ? demo.round : live.round;
   const counts = demo ? (demo.counts || { p1: 0, p2: 0 }) : live.counts;
   const nowMs = demo ? Date.now() : live.now;
@@ -723,26 +729,16 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         {keyframes}
+        {/* Logo BizarrApp con campana, igual que las demás convocatorias
+            (Ajustes → QR y logo). */}
+        {mostrarLogo && <LogoCampana src={LOGO_APP}/>}
         {/* Única identificación del juego: el logo oficial (asset existente). */}
-        <img src={PLACA} alt="Duelo de Talentos"
-          style={{ height: "68vh", maxWidth: "80vw", objectFit: "contain", animation: "dueloPop .5s ease" }}
-          onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        <LogoJuego src={PLACA} alt="Duelo de Talentos"
+          style={{ height: "68vh", maxWidth: "80vw" }}/>
 
-        {/* QR + leyenda: bloque compacto abajo a la izquierda. */}
-        <div style={{
-          position: "absolute", left: "2.2vw", bottom: "3vh",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.8vh",
-          width: "clamp(110px, 8.5vw, 170px)",
-        }}>
-          <div style={{ background: "#fff", padding: "clamp(6px, 0.5vw, 10px)", borderRadius: 10, width: "100%", boxSizing: "border-box" }}>
-            <QRCode value={`${webappUrl}/?view=games&game=duelo`} size={256}
-              style={{ width: "100%", height: "auto", display: "block" }} />
-          </div>
-          <div style={{
-            fontSize: "clamp(11px, 0.8vw, 16px)", fontWeight: 700, color: "#F0E8FF",
-            textAlign: "center", lineHeight: 1.2,
-          }}>Escaneame para postularte</div>
-        </div>
+        {/* QR + leyenda abajo a la izquierda: el mismo bloque que el resto de
+            los juegos (QrEsquina). */}
+        {mostrarQr && <QrEsquina url={`${webappUrl}/?view=games&game=duelo`} texto="Escaneá para postularte"/>}
       </div>
     );
   }
@@ -827,7 +823,7 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
         particles={particles.filter((p) => p.slot === 1)} onParticleDone={onParticleDone} />
 
       <main className="video-zone">
-        <DuelHeader />
+        <DuelHeader conLogoApp={mostrarLogo} />
         {hasVideo ? (
           <div className="video-wrapper">
             <div className="youtube-player-container">

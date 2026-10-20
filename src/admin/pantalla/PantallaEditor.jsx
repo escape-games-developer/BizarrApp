@@ -3,6 +3,7 @@ import { guestUrl } from "../../services/pantallaDj";
 import PlaylistPanel from "./playlist/PlaylistPanel";
 import SeccionContenido from "./sections/SeccionContenido";
 import SeccionVotacion from "./sections/SeccionVotacion";
+import SeccionCiclo from "./sections/SeccionCiclo";
 
 function AccesoEvento({ event }) {
   const url = guestUrl(event.code);
@@ -24,8 +25,9 @@ function AccesoEvento({ event }) {
  * playlist a la izquierda y, a la derecha, acceso fijo + dos selectores fijos
  * (contenido / votación) y luego los acordeones de configuración.
  *
- * El ciclo de vida del evento NO vive en este lateral: la original usa
- * «Ir en vivo» en el header y «Finalizar y resumen» en la consola DJ.
+ * El ciclo de vida del evento (Iniciar / Finalizar / Duplicar, SeccionCiclo)
+ * va arriba de todo, acá y en la consola en vivo: sin él no había forma de
+ * poner un evento en vivo ni de cerrarlo desde el Admin.
  */
 export default function PantallaEditor({ shared, secciones }) {
   const { event } = shared;
@@ -38,6 +40,7 @@ export default function PantallaEditor({ shared, secciones }) {
         </div>
 
         <aside className="pdj-shell-side">
+          <SeccionCiclo {...shared} />
           <AccesoEvento event={event} />
           <SeccionContenido {...shared} />
           <SeccionVotacion {...shared} />

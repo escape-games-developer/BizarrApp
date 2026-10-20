@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchVotePowers, saveVotePowers, resetPowers } from "../../../services/pantallaDj";
+import { fetchVotePowers, saveVotePowers, resetPowers, saveEventFields } from "../../../services/pantallaDj";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
 import { BotonGuardar, useGuardado } from "../panelControls";
@@ -71,7 +71,47 @@ function Celda({ role, tipo, value, onChange }) {
   );
 }
 
-export default function SeccionPoderes({ event, onError }) {
+/**
+ * Cupo de súper votos por invitado (`pantalla_events.super_votes_per_user`).
+ * Lo comparten Súper Voto y Súper Hate, y se le suman los extra que gane el
+ * invitado. Antes no tenía control: quedaba fijo en 1.
+ */
+function CupoSuperVotos({ event, refresh, onError }) {
+  const [valor, setValor] = useState(event.super_votes_per_user ?? 1);
+  const [estado, setEstado] = useState("idle");
+  useEffect(() => { setValor(event.super_votes_per_user ?? 1); }, [event.super_votes_per_user]);
+
+  const guardar = async () => {
+    const n = Math.max(0, Math.min(20, Math.round(Number(valor) || 0)));
+    setValor(n);
+    if (n === (event.super_votes_per_user ?? 1)) return;
+    setEstado("guardando");
+    try {
+      await saveEventFields(event.id, { super_votes_per_user: n });
+      await refresh?.();
+      setEstado("ok"); setTimeout(() => setEstado("idle"), 2000);
+    } catch (err) { setEstado("idle"); onError?.(err); }
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "0 0 14px" }}>
+      <label htmlFor="cupo-super" className="pdj-campo-lbl" style={{ margin: 0 }}>
+        SÚPER VOTOS POR PERSONA
+      </label>
+      <input id="cupo-super" type="number" min={0} max={20} value={valor}
+        onChange={(e) => setValor(e.target.value)} onBlur={guardar}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        style={{ width: 64, padding: "5px 8px", borderRadius: 10, background: "#07070a",
+          color: P.texto, border: "1px solid rgba(240,232,255,.14)" }}/>
+      <span className="pdj-campo-hint" style={{ margin: 0 }}>
+        {estado === "guardando" ? "Guardando…" : estado === "ok" ? "✓ Guardado"
+          : "Por evento. Súper Voto y Súper Hate comparten este cupo; los premios suman extras."}
+      </span>
+    </div>
+  );
+}
+
+export default function SeccionPoderes({ event, refresh, onError }) {
   const [base, setBase] = useState({});
   const [borr, setBorr] = useState({});
   const [reseteando, setReseteando] = useState(false);
@@ -131,6 +171,8 @@ export default function SeccionPoderes({ event, onError }) {
         Definí qué tipos de voto puede usar cada rol y cuánto pesa cada uno. Si un tipo está apagado,
         el servidor rechaza el intento y el botón no se muestra al invitado.
       </div>
+
+      <CupoSuperVotos event={event} refresh={refresh} onError={onError}/>
 
       <div style={{ overflowX: "auto" }}>
         <div style={{ minWidth: 720 }}>

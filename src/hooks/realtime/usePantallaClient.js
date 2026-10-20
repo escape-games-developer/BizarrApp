@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import {
   joinEvent, heartbeat, castVote, clearVote, castSuperVote,
   getKickStatus, toggleKickVote, sendReaction,
-  fetchMyVotes, fetchVotePowers,
+  fetchMyVotes, fetchVotePowers, fetchMyParticipant,
 } from "../../services/pantallaDj";
 import { fetchEmojiPackForRole, EMOJIS_POR_DEFECTO } from "../../services/pantallaConfig";
 
@@ -25,6 +25,8 @@ export function usePantallaClient(event, user) {
   const canPlay = Boolean(eventId && userId && event?.status === "live");
 
   const [role,     setRole]     = useState("guest");
+  // Fila propia de pantalla_participants: súper votos usados y extras ganados.
+  const [yo,       setYo]       = useState(null);
   const [myVotes,  setMyVotes]  = useState([]);
   const [powers,   setPowers]   = useState([]);
   const [kick,     setKick]     = useState(null);
@@ -41,6 +43,19 @@ export function usePantallaClient(event, user) {
     if (!canPlay) return;
     try { setMyVotes(await fetchMyVotes(eventId, userId)); }
     catch (err) { console.error("[usePantallaClient] votos:", err); }
+  }, [canPlay, eventId, userId]);
+
+  // Rol y súper votos salen de la fila propia del invitado. Se relee al
+  // entrar y cada vez que esa fila cambia (el DJ le cambia el rol, gana un
+  // súper voto extra, usa uno desde otro dispositivo).
+  const refreshYo = useCallback(async () => {
+    if (!canPlay) return;
+    try {
+      const fila = await fetchMyParticipant(eventId, userId);
+      if (!fila) return;
+      setYo(fila);
+      setRole(fila.role || "guest");
+    } catch (err) { console.error("[usePantallaClient] participante:", err); }
   }, [canPlay, eventId, userId]);
 
   const refreshKick = useCallback(async () => {
@@ -60,11 +75,7 @@ export function usePantallaClient(event, user) {
         setRole(res?.role || "guest");
         setJoined(true);
         setPowers(await fetchVotePowers(eventId));
-        // El pack de emojis se pide con el rol que ACABA de devolver `joinEvent`,
-        // no con el del estado: `setRole` todavía no se aplicó en este tick y
-        // pedirlo con el rol viejo le daría al VIP los emojis de invitado.
-        try { setEmojis(await fetchEmojiPackForRole(eventId, res?.role || "guest")); }
-        catch (err) { console.error("[usePantallaClient] emojis:", err); }
+        await refreshYo();
         await refreshVotes();
         await refreshKick();
       } catch (err) {
@@ -73,7 +84,33 @@ export function usePantallaClient(event, user) {
       }
     })();
     return () => { cancelled = true; };
-  }, [canPlay, eventId, refreshVotes, refreshKick]);
+  }, [canPlay, eventId, refreshVotes, refreshKick, refreshYo]);
+
+  // El pack de emojis depende del rol: se pide de nuevo si el DJ lo cambia.
+  useEffect(() => {
+    if (!joined) return;
+    let cancelado = false;
+    fetchEmojiPackForRole(eventId, role)
+      .then((e) => { if (!cancelado) setEmojis(e); })
+      .catch((err) => console.error("[usePantallaClient] emojis:", err));
+    return () => { cancelado = true; };
+  }, [joined, eventId, role]);
+
+  // La fila propia por realtime (la RLS sólo deja ver la suya): un cambio de
+  // rol o de súper votos llega solo, sin recargar.
+  useEffect(() => {
+    if (!canPlay) return;
+    const channel = supabase
+      .channel(`pantalla-yo-${eventId}-${userId}-${canalId.current}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "pantalla_participants", filter: `event_id=eq.${eventId}` },
+        (payload) => {
+          const fila = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
+          if (fila?.user_id === userId) refreshYo();
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [canPlay, eventId, userId, refreshYo]);
 
   // Heartbeat: mantiene "activo" al invitado para el cálculo del kick.
   useEffect(() => {
@@ -108,10 +145,17 @@ export function usePantallaClient(event, user) {
     return v?.vote_type ?? null;
   }, [myVotes]);
 
-  const superUsed = useMemo(
-    () => myVotes.some((v) => v.vote_type === "super_up" || v.vote_type === "super_down"),
-    [myVotes],
-  );
+  // Cupo de súper votos (Súper Voto y Súper Hate comparten el mismo cupo, igual
+  // que en el servidor): los del evento + los extra ganados − los usados.
+  const superQuota = (event?.super_votes_per_user ?? 1) + (yo?.extra_super_votes ?? 0);
+  const superLeft  = Math.max(0, superQuota - (yo?.super_votes_used ?? 0));
+  const superUsed  = superLeft === 0;
+
+  /** Súper voto ya puesto en este tema (super_up | super_down | null). */
+  const superOn = useCallback((itemId) => {
+    const v = myVotes.find((x) => x.item_id === itemId && (x.vote_type === "super_up" || x.vote_type === "super_down"));
+    return v?.vote_type ?? null;
+  }, [myVotes]);
 
   /** Envuelve una acción: marca el tema como ocupado y expone el error real. */
   const run = useCallback(async (itemId, fn) => {
@@ -127,8 +171,9 @@ export function usePantallaClient(event, user) {
     else                         await castVote(eventId, itemId, type);
   }), [run, voteOn, eventId]);
 
-  const superVote = useCallback((itemId) =>
-    run(itemId, () => castSuperVote(eventId, itemId, "super_up")), [run, eventId]);
+  const superVote = useCallback((itemId, type = "super_up") =>
+    run(itemId, async () => { await castSuperVote(eventId, itemId, type); await refreshYo(); }),
+  [run, eventId, refreshYo]);
 
   const toggleKick = useCallback(async () => {
     setError(null);
@@ -143,7 +188,7 @@ export function usePantallaClient(event, user) {
 
   return {
     role, joined, myVotes, powers, kick, busy, error, emojis,
-    powerOf, voteOn, superUsed,
+    powerOf, voteOn, superUsed, superLeft, superQuota, superOn,
     vote, superVote, toggleKick, react,
     clearError: () => setError(null),
   };

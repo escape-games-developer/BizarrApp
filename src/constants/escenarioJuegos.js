@@ -23,11 +23,8 @@ export const ESCENARIO_JUEGOS = {
     // Categoría del catálogo central (playlist_categories.slug) de donde el
     // operador elige el video del desafío.
     catalogo: "ftl",
-    // Votación 👍/👎 del público durante la performance.
-    // OJO: el RPC `cast_follow_leader_vote` sólo acepta turnos con
-    // escenario_queue.type = 'ftl'. Habilitarla en otro juego requiere
-    // generalizar ese guard en Supabase — ver el requerimiento del informe.
-    votacion: true,
+    // La votación del público (toques / 👍👎 / ninguna) ya no se define acá:
+    // la elige Ajustes → Votación Escenario (useVotacionEscenario).
 
     // Admin
     colorAdmin: "#FF9500",
@@ -54,10 +51,6 @@ export const ESCENARIO_JUEGOS = {
     label: "Personal Trainer",
     icon:  "🏋️",
     catalogo: "pt",
-    // Queda en false hasta que el guard del RPC acepte turnos 'pt'. El resto
-    // del juego funciona igual; sin esto, cada voto del público volvería con
-    // "not a follow the leader turn".
-    votacion: false,
 
     colorAdmin: "#00F5A0",
     subAdmin:   "Dirige una clase de gym dance grupal y toda la sala lo sigue desde su lugar.",

@@ -2,7 +2,10 @@ import { useState } from "react";
 import { BlockedView, VideoRow }           from "../../components/UI";
 import { useYouTubePlaylists }             from "../../hooks/useYouTubePlaylists";
 import { useEscenarioQueue }               from "../../hooks/realtime/useEscenarioQueue";
+import { useFtlEnergia, useFtlToques, useFtlPelea, useFtlPeleaToques } from "../../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes }            from "../../hooks/realtime/useFollowLeaderVotes";
+import { useVotacionEscenario }            from "../../hooks/useVotacionEscenario";
+import FtlBarometro                       from "../../components/FtlBarometro";
 import { ESCENARIO_JUEGOS }                from "../../constants/escenarioJuegos";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
@@ -119,13 +122,10 @@ function DueloView() {
   );
 }
 
-// ─── Votación del público durante un turno de FTL ────────────────────────────
-// El turno es `escenario_participant.turn_id` (= escenario_queue.id). Cambiar
-// de participante cambia el turno, así que los contadores y el voto propio
-// arrancan de cero solos: no hay nada que limpiar a mano.
-//
-// El voto no se escribe nunca directo: va por el RPC cast_follow_leader_vote,
-// que es quien valida que el turno esté abierto y que no vote el protagonista.
+// ─── Mod 2: votación 👍/👎 durante un turno ───────────────────────────────────
+// El voto va por el RPC cast_follow_leader_vote, que valida turno abierto,
+// modo 'votos' activo en Ajustes y que no vote el protagonista. Cambiar de
+// participante cambia el turno: contadores y voto propio arrancan de cero.
 function VotacionFtl({ turnId, userId }) {
   const { totals, myVote, castVote, error } = useFollowLeaderVotes(turnId, userId);
   const [enviando, setEnviando] = useState(null);
@@ -154,12 +154,12 @@ function VotacionFtl({ turnId, userId }) {
           return (
             <button key={o.voto} onClick={() => votar(o.voto)} disabled={!!enviando}
               style={{
-                flex: 1, padding: "14px 8px", borderRadius: 14, cursor: enviando ? "wait" : "pointer",
+                flex: 1, padding: "18px 8px", borderRadius: 16, cursor: enviando ? "wait" : "pointer",
                 background: elegido ? `${o.color}22` : "rgba(255,255,255,.03)",
                 border: `2px solid ${elegido ? o.color : "rgba(255,255,255,.08)"}`,
                 transition: "all .18s", WebkitTapHighlightColor: "transparent",
               }}>
-              <div style={{ fontSize: 30, marginBottom: 4, opacity: enviando === o.voto ? .5 : 1 }}>
+              <div style={{ fontSize: 40, marginBottom: 4, opacity: enviando === o.voto ? .5 : 1 }}>
                 {o.icono}
               </div>
               <div style={{
@@ -187,6 +187,123 @@ function VotacionFtl({ turnId, userId }) {
   );
 }
 
+// ─── Mod 3: pelea de toques 👍/👎 durante un turno ────────────────────────────
+// Cada uno toca 👍 o 👎 todas las veces que quiera (RPC ftl_pelear). La barra
+// arranca en el medio y queda donde la deja la pelea: no se descarga sola.
+function PeleaFtl({ turnId, enVivo }) {
+  const { pct } = useFtlPelea(enVivo ? turnId : null, { cadaMs: 1000 });
+  const { tocar, mios, error } = useFtlPeleaToques(enVivo ? turnId : null);
+  const [pulso, setPulso] = useState({ pos: 0, neg: 0 });
+
+  const alTocar = (lado) => (e) => {
+    e.preventDefault();
+    if (!enVivo) return;
+    tocar(lado);
+    setPulso((p) => ({ ...p, [lado]: p[lado] + 1 }));
+    if (navigator.vibrate) navigator.vibrate(12);
+  };
+
+  const BOTONES = [
+    { lado: "pos", icono: "👍", color: "#34D399", texto: "¡ARRIBA!", n: mios.pos },
+    { lado: "neg", icono: "👎", color: "#F87171", texto: "¡ABAJO!",  n: mios.neg },
+  ];
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{
+        fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 13,
+        color: "rgba(255,215,0,.75)", marginBottom: 10, letterSpacing: ".04em",
+      }}>⚔️ ¡PELEÁ LA BARRA!</div>
+
+      <FtlBarometro pct={pct} decae={false}/>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        {BOTONES.map((b) => (
+          <button key={b.lado} type="button" onPointerDown={alTocar(b.lado)} disabled={!enVivo}
+            style={{
+              flex: 1, padding: "28px 8px", borderRadius: 18, touchAction: "manipulation", userSelect: "none",
+              cursor: enVivo ? "pointer" : "default",
+              background: enVivo ? `${b.color}1F` : "rgba(255,255,255,.03)",
+              border: `2px solid ${enVivo ? b.color : "rgba(255,255,255,.08)"}`,
+              color: "#F5E6C0", WebkitTapHighlightColor: "transparent",
+            }}>
+            <div key={pulso[b.lado]} style={{ fontSize: 46, lineHeight: 1,
+              animation: pulso[b.lado] ? "ftlPulso .25s ease-out" : "none" }}>{b.icono}</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: 14, marginTop: 8,
+              color: enVivo ? b.color : "rgba(245,230,192,.4)" }}>{b.texto}</div>
+            {b.n > 0 && <div style={{ fontSize: 10.5, color: "rgba(245,230,192,.4)", marginTop: 3 }}>{b.n} toques</div>}
+          </button>
+        ))}
+      </div>
+      <style>{"@keyframes ftlPulso{0%{transform:scale(1.35)}100%{transform:scale(1)}}"}</style>
+
+      <div style={{ fontSize: 11, color: "rgba(245,230,192,.35)", marginTop: 9, textAlign: "center" }}>
+        {enVivo ? "Tocá todas las veces que quieras: 👍 la sube, 👎 la baja" : "Esperá a que arranque el video"}
+      </div>
+
+      <ErrorNota texto={error}/>
+    </div>
+  );
+}
+
+// ─── Mod 1: toques del público durante un turno ──────────────────────────────
+// El turno es `escenario_participant.turn_id` (= escenario_queue.id). Cada
+// toque suma energía al barómetro (RPC ftl_tocar, que valida turno abierto,
+// video sonando y que no toque el protagonista). La energía baja sola si el
+// público deja de tocar: el % lo calcula la base (ftl_energia_pct).
+function ToquesFtl({ turnId, enVivo }) {
+  const pct = useFtlEnergia(enVivo ? turnId : null, { cadaMs: 1000 });
+  const { tocar, misToques, error } = useFtlToques(enVivo ? turnId : null);
+  const [pulso, setPulso] = useState(0);
+
+  const alTocar = (e) => {
+    e.preventDefault();
+    if (!enVivo) return;
+    tocar();
+    setPulso((p) => p + 1);
+    if (navigator.vibrate) navigator.vibrate(12);
+  };
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{
+        fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 13,
+        color: "rgba(255,215,0,.75)", marginBottom: 10, letterSpacing: ".04em",
+      }}>🔥 ¡DALE ENERGÍA!</div>
+
+      <FtlBarometro pct={pct}/>
+
+      <button type="button" onPointerDown={alTocar} disabled={!enVivo}
+        style={{
+          width: "100%", marginTop: 14, padding: "34px 12px", borderRadius: 20,
+          cursor: enVivo ? "pointer" : "default", touchAction: "manipulation", userSelect: "none",
+          background: enVivo ? "radial-gradient(circle at 50% 40%, rgba(255,149,0,.35), rgba(255,45,120,.18))"
+            : "rgba(255,255,255,.03)",
+          border: `2px solid ${enVivo ? "#FF9500" : "rgba(255,255,255,.08)"}`,
+          color: "#F5E6C0", WebkitTapHighlightColor: "transparent",
+        }}>
+        <div key={pulso} style={{ fontSize: 56, lineHeight: 1,
+          animation: pulso ? "ftlPulso .25s ease-out" : "none" }}>👏</div>
+        <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: 17, marginTop: 10 }}>
+          {enVivo ? "¡TOCÁ!" : "Esperá a que arranque el video"}
+        </div>
+        <div style={{ fontSize: 11, color: "rgba(245,230,192,.45)", marginTop: 4 }}>
+          {enVivo ? "Cuanto más tocás, más sube la barra" : "Cuando empiece, tocá acá todas las veces que quieras"}
+        </div>
+      </button>
+      <style>{"@keyframes ftlPulso{0%{transform:scale(1.35)}100%{transform:scale(1)}}"}</style>
+
+      {misToques > 0 && (
+        <div style={{ fontSize: 11, color: "rgba(245,230,192,.35)", marginTop: 8, textAlign: "center" }}>
+          Sumaste {misToques} toque{misToques === 1 ? "" : "s"}
+        </div>
+      )}
+
+      <ErrorNota texto={error}/>
+    </div>
+  );
+}
+
 // ─── Juegos de escenario con participante único (FTL y Personal Trainer) ─────
 // Mismo contrato para los dos, por eso una sola vista parametrizada: el
 // cliente SÓLO se postula, el video lo elige el operador después de llamarlo.
@@ -197,6 +314,7 @@ function VotacionFtl({ turnId, userId }) {
 function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido }) {
   const { myEntry, isEnrolled, enroll, leave, loading, error } =
     useEscenarioQueue(sessionId, juego.type, user?.id ?? null);
+  const modoVotacion = useVotacionEscenario()[juego.type] || "off";
 
   // El cliente NO elige video. Se postula y listo: el video del desafío lo
   // elige el operador DESPUÉS de llamarlo al escenario, y viaja en
@@ -248,9 +366,13 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
         </div>
       </div>
 
-      {/* La votación 👍/👎 es por juego: el RPC sólo acepta turnos de FTL. */}
-      {juego.votacion
+      {/* Modo de votación elegido en Ajustes → Votación Escenario. */}
+      {modoVotacion === "toques"
+        ? <ToquesFtl turnId={turnId} enVivo={!!participante.playing}/>
+        : modoVotacion === "votos"
         ? <VotacionFtl turnId={turnId} userId={user?.id ?? null}/>
+        : modoVotacion === "pelea"
+        ? <PeleaFtl turnId={turnId} enVivo={!!participante.playing}/>
         : (
           <div style={{ marginTop: 16, textAlign: "center", fontSize: 12,
             color: "rgba(245,230,192,.35)", lineHeight: 1.6 }}>

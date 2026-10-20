@@ -11,6 +11,8 @@ import SeccionSorteos from "./sections/SeccionSorteos";
 import SeccionesPendientesVivo from "./sections/SeccionesPendientesVivo";
 import HistorialTab from "./HistorialTab";
 import PanelSection from "./PanelSection";
+import SeccionCiclo from "./sections/SeccionCiclo";
+import CorreccionRapida from "./CorreccionRapida";
 
 /**
  * Consola «En vivo» — la vista de cabina.
@@ -91,6 +93,7 @@ export default function PantallaConsola({ shared }) {
 
   const [ocupado, setOcupado] = useState(false);
   const [kick,    setKick]    = useState(null);
+  const [correccion, setCorreccion] = useState(false);
 
   // El kick se mide por canción: se relee cuando cambia la que suena.
   const cargarKick = useCallback(async () => {
@@ -164,6 +167,16 @@ export default function PantallaConsola({ shared }) {
           {event.voting_disabled && <div className="pdj-campo-hint" style={{ color: P.amarillo }}>La votación está desactivada.</div>}
         </SonandoAhora>
 
+        {/* Corrección rápida: las 3 que sonaron y las 3 próximas, editables. */}
+        <button type="button" className="pdj-cr-abrir" onClick={() => setCorreccion(true)}>
+          🔧 Corrección rápida
+        </button>
+        {correccion && (
+          <CorreccionRapida items={shared.items} history={shared.history} candidates={candidates}
+            refresh={refresh} refreshAdmin={refreshAdmin} onError={onError}
+            onCerrar={() => setCorreccion(false)}/>
+        )}
+
         {/* ── Top en vivo ────────────────────────────────────────── */}
         <div className="pdj-card pdj-live-ranking">
           <div className="pdj-card-titulo">
@@ -211,6 +224,8 @@ export default function PantallaConsola({ shared }) {
       <aside className="pdj-shell-side">
         <div className="pdj-shell-side-tit">Cabina</div>
 
+        {/* Iniciar / Finalizar / Duplicar: el único lugar del ciclo de vida. */}
+        <SeccionCiclo {...shared} />
         <SeccionQr {...shared} />
         <SeccionesPendientesVivo event={event} onlyRoles />
         <SeccionEstadisticas stats={stats} />

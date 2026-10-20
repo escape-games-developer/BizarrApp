@@ -1,69 +1,66 @@
+import FtlBarometro from "../components/FtlBarometro";
+
 /**
- * Overlay de Follow the Leader sobre el video del DJ.
+ * Overlay de Follow the Leader sobre el video del participante.
  *
- * Es TRANSPARENTE a propósito: el video que baila el líder se reproduce en los
- * mismos players A/B del DJ, como fuente TEMPORAL — la canción del evento sigue
- * congelada detrás. Acá no hay ningún reproductor: montar otro iframe daría dos
- * audios sonando a la vez.
- *
- * Por eso este componente NO va dentro del contenedor opaco de juego en vivo
- * de PantallaTV — ese fondo taparía justamente lo que hay que ver.
+ * Es TRANSPARENTE a propósito: el video de YouTube se reproduce en los mismos
+ * players A/B del DJ, como fuente TEMPORAL (la canción del evento sigue
+ * congelada detrás), y el subido desde la PC en un <video> debajo. Por eso no
+ * va dentro del contenedor opaco de juego en vivo de PantallaTV.
  *
  * La convocatoria (FTL abierto y todavía sin nadie en escena) NO se dibuja acá:
  * es `FtlStandby`, una pantalla completa del juego.
  *
- * No se muestra ni el título del video ni el nombre del participante: el video
- * ES el contenido y cualquier cartel le compite. Queda el avatar como única
- * seña de quién está en el escenario, y los dos porcentajes.
- *
- * `votos` es la fila de `follow_leader_vote_totals` del turno en curso, tal
- * como la devuelve la base: `up_pct` y `down_pct` son columnas generadas y acá
- * no se recalcula nada. Llega en null mientras no haya turno (convocatoria);
- * con turno y sin votos todavía, la base ya devuelve 0% — eso sí es dato real.
+ * Diseño, todo sobre el margen izquierdo:
+ *   · esquina superior izquierda: avatar + nombre del participante
+ *   · debajo: el barómetro VERTICAL y rectangular, con las divisiones de los
+ *     cuatro tramos y sin número ni rótulo. Es el mismo en los dos modos de
+ *     Ajustes → Votación Escenario; sólo cambia de dónde sale `pct`:
+ *       Mod 1 → energía de toques (ftl_energia_pct)
+ *       Mod 2 → % de 👍 (follow_leader_vote_totals.up_pct)
+ *     null = juego sin votación, sin barómetro.
  */
 
-const C = { gold: "#FFD600", green: "#00F5A0", pink: "#FF2D78", white: "#F0E8FF" };
+const C = { gold: "#FFD600", white: "#F0E8FF" };
 
-function Barra({ icono, pct, color }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.6vw" }}>
-      <span style={{ fontSize: "2.2vw", lineHeight: 1, filter: "drop-shadow(0 2px 6px #000)" }}>{icono}</span>
-      <span style={{
-        fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "2.4vw",
-        color, textShadow: "0 2px 10px #000", minWidth: "4.5vw",
-      }}>{pct}%</span>
-    </div>
-  );
-}
-
-export default function FtlOverlay({ participante, votos = null }) {
-  // Sólo se usa con participante en escena: la convocatoria es FtlStandby, una
-  // pantalla entera, no un cartel encima del DJ.
+export default function FtlOverlay({ participante, pct = null, decae = true }) {
   if (!participante) return null;
 
   const emoji = participante.avatar_emoji || "🎤";
+  const nombre = participante.name || "Participante";
 
   return (
     <div data-tv-ftl style={{
-      position: "absolute", top: "3vh", left: "2.5vw",
+      position: "absolute", inset: 0,
       zIndex: 50,                       // debajo de la lluvia, placas y juegos
       pointerEvents: "none",            // nunca tapa nada clickeable
-      display: "flex", flexDirection: "column", alignItems: "center", gap: "1.2vh",
     }}>
       <div style={{
-        width: "6vw", height: "6vw", borderRadius: "50%",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "3.2vw", background: "rgba(8,4,15,.55)",
-        backdropFilter: "blur(6px)",
-        border: `2px solid ${C.gold}`, boxShadow: "0 0 30px rgba(255,214,0,.4)",
-      }}>{emoji}</div>
+        position: "absolute", top: "3vh", left: "2vw", bottom: "4vh", width: "12vw",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: "1.2vh",
+      }}>
+        {/* Esquina superior izquierda: avatar + nombre */}
+        <div style={{
+          width: "7.5vw", height: "7.5vw", flexShrink: 0, borderRadius: "50%",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "4.2vw", background: "rgba(8,4,15,.6)",
+          backdropFilter: "blur(6px)",
+          border: `3px solid ${C.gold}`, boxShadow: "0 0 36px rgba(255,214,0,.45)",
+        }}>{emoji}</div>
+        <div style={{
+          fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "1.8vw", lineHeight: 1.1,
+          color: C.white, textAlign: "center", textShadow: "0 2px 12px #000, 0 0 2px #000",
+          maxWidth: "12vw", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+        }}>{nombre}</div>
 
-      {votos && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5vh" }}>
-          <Barra icono="👍" pct={votos.up_pct   ?? 0} color={C.green}/>
-          <Barra icono="👎" pct={votos.down_pct ?? 0} color={C.pink}/>
-        </div>
-      )}
+        {/* Barómetro vertical: ocupa el resto del margen hacia abajo */}
+        {pct !== null && (
+          <div style={{ flex: 1, minHeight: 0, width: "3.1vw", marginTop: "1.5vh" }}>
+            <FtlBarometro pct={pct} tamano="tv" decae={decae}/>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

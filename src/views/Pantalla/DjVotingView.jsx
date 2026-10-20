@@ -93,7 +93,8 @@ function SonandoAhora({ current, kick, onKick, puedeVotar, conPortada }) {
 // ─── Card de candidata ───────────────────────────────────────────────────────
 function TemaCard({
   item, index, miVoto, puedeUp, pesoUp, puedeDown, pesoDown,
-  puedeSuper, superUsado, pesoSuper, ocupado, onVote, onSuper,
+  puedeSuper, pesoSuper, puedeHate, pesoHate, superLeft, superEnTema,
+  ocupado, onVote, onSuper,
 }) {
   const cover = portada(item);
   const caliente = item.hot_until && new Date(item.hot_until) > new Date();
@@ -102,7 +103,10 @@ function TemaCard({
   if (index === 0)          clase.push("djv-tema-1");
   if (miVoto === "up")      clase.push("djv-tema-votado");
   if (miVoto === "down")    clase.push("djv-tema-contra");
-  const conAcciones = puedeUp || puedeDown || puedeSuper;
+  const conAcciones = puedeUp || puedeDown || puedeSuper || puedeHate;
+  // Súper Voto y Súper Hate comparten el cupo. Un tema ya súper-votado no
+  // acepta otro súper (el servidor no le sumaría peso y gastaría el cupo).
+  const superAgotado = superLeft <= 0 || !!superEnTema;
 
   return (
     <div className={clase.join(" ")}>
@@ -125,8 +129,9 @@ function TemaCard({
           <b style={{ color: colorScore(item.score) }}>{conSigno(item.score)}</b>
         </div>
 
-        {/* Orden fijo: 👍 | 🔥 | 👎. El +N / -N de arriba de cada botón es
-            el valor real del voto para el rol (powerOf), sólo informativo. */}
+        {/* Orden fijo: 👍 | 🔥 | 💀 | 👎. El +N / -N de arriba de cada botón es
+            el valor real del voto para el rol (powerOf), sólo informativo.
+            Cada botón aparece sólo si el rol tiene ese poder encendido. */}
         {conAcciones && (
           <div className="djv-acciones">
             {puedeUp && (
@@ -141,14 +146,29 @@ function TemaCard({
 
             {puedeSuper && (
               <button
-                className={`djv-voto djv-super${superUsado ? " djv-super-usado" : ""}`}
-                onClick={() => onSuper(item.id)} disabled={ocupado || superUsado}
-                aria-label={superUsado ? "Super voto ya utilizado" : "Usar el super voto"}>
+                className={`djv-voto djv-super${superAgotado && superEnTema !== "super_up" ? " djv-super-usado" : ""}${superEnTema === "super_up" ? " djv-super-on" : ""}`}
+                onClick={() => onSuper(item.id, "super_up")} disabled={ocupado || superAgotado}
+                aria-label={superEnTema === "super_up" ? "Ya le diste un Súper Voto a este tema"
+                  : superLeft <= 0 ? "No te quedan súper votos" : "Usar un Súper Voto"}>
                 <span className="djv-valor djv-valor-super" aria-hidden="true">+{pesoSuper}</span>
                 🔥
-                {/* Super votos disponibles: uno por evento. */}
+                {/* Súper votos que le quedan (compartidos con el Súper Hate). */}
                 <span className="djv-valor djv-valor-super djv-valor-abajo" aria-hidden="true">
-                  x{superUsado ? 0 : 1}
+                  x{superLeft}
+                </span>
+              </button>
+            )}
+
+            {puedeHate && (
+              <button
+                className={`djv-voto djv-hate${superAgotado && superEnTema !== "super_down" ? " djv-super-usado" : ""}${superEnTema === "super_down" ? " djv-hate-on" : ""}`}
+                onClick={() => onSuper(item.id, "super_down")} disabled={ocupado || superAgotado}
+                aria-label={superEnTema === "super_down" ? "Ya le diste un Súper Hate a este tema"
+                  : superLeft <= 0 ? "No te quedan súper votos" : "Usar un Súper Hate"}>
+                <span className="djv-valor djv-valor-hate" aria-hidden="true">-{pesoHate}</span>
+                💀
+                <span className="djv-valor djv-valor-hate djv-valor-abajo" aria-hidden="true">
+                  x{superLeft}
                 </span>
               </button>
             )}
@@ -238,6 +258,7 @@ export default function DjVotingView({
   const up    = cli.powerOf("up");
   const down  = cli.powerOf("down");
   const super_ = cli.powerOf("super_up");
+  const hate  = cli.powerOf("super_down");
   // El invitado vota: su sesión anónima tiene un auth.uid() propio, que es lo
   // que la votación necesita para contar un voto por persona. `registered`
   // sigue en false y así queda — no le escribimos nada a la base para esto.
@@ -313,16 +334,23 @@ export default function DjVotingView({
             pesoDown={down.value}
             puedeSuper={super_.enabled && puedeVotar}
             pesoSuper={super_.value}
-            superUsado={cli.superUsed}
+            puedeHate={hate.enabled && puedeVotar}
+            pesoHate={hate.value}
+            superLeft={cli.superLeft ?? (cli.superUsed ? 0 : 1)}
+            superEnTema={cli.superOn?.(item.id) ?? null}
             ocupado={cli.busy === item.id}
             onVote={cli.vote}
             onSuper={cli.superVote}
           />
         ))}
 
-        {(cli.superUsed || cli.role !== "guest") && (
+        {((super_.enabled || hate.enabled) || cli.role !== "guest") && (
           <div className="djv-pie">
-            {cli.superUsed && <div>🔥 Ya usaste tu Super Voto en este evento</div>}
+            {(super_.enabled || hate.enabled) && (
+              <div>{cli.superUsed
+                ? "🔥 Ya usaste todos tus súper votos en este evento"
+                : `🔥 Te ${cli.superLeft === 1 ? "queda" : "quedan"} ${cli.superLeft} súper ${cli.superLeft === 1 ? "voto" : "votos"}`}</div>
+            )}
             {cli.role !== "guest" && <div>Estás votando como <strong>{cli.role.toUpperCase()}</strong></div>}
           </div>
         )}

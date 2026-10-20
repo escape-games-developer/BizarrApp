@@ -1,10 +1,11 @@
 import { saveEventFields } from "../../../services/pantallaDj";
 import PanelSection from "../PanelSection";
+import RotacionCategorias from "./RotacionCategorias";
 import { BotonGuardar, CampoNumero, useBorrador, useGuardado } from "../panelControls";
 
 const CAMPOS = ["active_candidates_count", "relegation_rounds_threshold"];
 
-export default function SeccionReglas({ event, refresh }) {
+export default function SeccionReglas({ event, items, refresh, onError }) {
   const [b, set] = useBorrador(
     {
       active_candidates_count: event.active_candidates_count,
@@ -41,6 +42,8 @@ export default function SeccionReglas({ event, refresh }) {
 
       <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado}
         onClick={guardar} texto="Guardar reglas" />
+
+      <RotacionCategorias event={event} items={items} refresh={refresh} onError={onError} />
     </PanelSection>
   );
 }

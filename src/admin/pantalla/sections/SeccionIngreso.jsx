@@ -82,7 +82,7 @@ export default function SeccionIngreso({ event, refresh, onError }) {
   return (
     <PanelSection id="ingreso-invitados" title="Ingreso de invitados"
       status="pendiente"
-      aviso="BizarrApp ya tiene identidad propia. La configuraciÃ³n se conserva para alcanzar la experiencia DJ Democracy sin crear un segundo login.">
+      aviso="BizarrApp ya tiene identidad propia. La configuración se conserva para alcanzar la experiencia DJ Democracy sin crear un segundo login.">
       <div style={{
         padding: 12, borderRadius: 14, marginBottom: 12,
         background: "rgba(240,232,255,.025)", border: "1px solid rgba(240,232,255,.09)",
@@ -102,7 +102,7 @@ export default function SeccionIngreso({ event, refresh, onError }) {
                   set("nickname_suffixes", copia);
                 }} />
               <button type="button" className="pdj-ico pdj-ico-peligro"
-                title="Eliminar sufijo" onClick={() => quitarSufijo(i)}>ðŸ—‘</button>
+                title="Eliminar sufijo" onClick={() => quitarSufijo(i)}>🗑</button>
             </div>
           ))}
           <div style={{ display: "flex", gap: 6 }}>
@@ -121,11 +121,11 @@ export default function SeccionIngreso({ event, refresh, onError }) {
       }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, color: P.texto }}>Datos de contacto del invitado</div>
         <div className="pdj-campo-hint" style={{ marginTop: 2 }}>
-          Se piden en la pantalla de unirse. Ãštiles para contactar a ganadores de premios.
+          Se piden en la pantalla de unirse. Útiles para contactar a ganadores de premios.
         </div>
         <SelectorModo label="Email" value={b.require_email_mode}
           onChange={(v) => set("require_email_mode", v)} />
-        <SelectorModo label="TelÃ©fono" value={b.require_phone_mode}
+        <SelectorModo label="Teléfono" value={b.require_phone_mode}
           onChange={(v) => set("require_phone_mode", v)} />
       </div>
 
@@ -135,7 +135,7 @@ export default function SeccionIngreso({ event, refresh, onError }) {
       }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, color: P.texto }}>Base de contactos</div>
         <div className="pdj-campo-hint" style={{ marginTop: 2, marginBottom: 10 }}>
-          Copia permanente de los datos de contacto: se conserva aunque borres invitados o corra la limpieza automÃ¡tica. {contactos.length} contacto(s) registrados.
+          Copia permanente de los datos de contacto: se conserva aunque borres invitados o corra la limpieza automática. {contactos.length} contacto(s) registrados.
         </div>
         <button type="button" className="pdj-mini" disabled={cargando || contactos.length === 0}
           onClick={() => descargarTexto(`contactos-${event.code}.csv`, contactosACsv(contactos), "text/csv;charset=utf-8")}>
