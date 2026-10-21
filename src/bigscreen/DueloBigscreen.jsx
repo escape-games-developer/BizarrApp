@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import QrEsquina from "../components/QrEsquina";
 import LogoCampana from "../components/LogoCampana";
 import LogoJuego from "../components/LogoJuego";
+import FtlBarometro from "../components/FtlBarometro";
 import { usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
 import { useDueloRound } from "../hooks/realtime/useDueloRound";
 import {
-  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
+  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, anchoBarraP1,
 } from "../services/duelo";
 
 const P1_COLOR = "#ff1688"; // Participante 1 — fucsia
@@ -371,6 +372,11 @@ function ContestantColumn({ side, name, color, avatar, percent, leader, avatarRe
       <VoteParticleLayer particles={particles} avatarRef={avatarRef} color={color} onDone={onParticleDone} />
       <ContestantInfo name={name} color={color} avatar={avatar} percent={percent} side={side}
         leader={leader} avatarRef={avatarRef} pulse={pulse} popups={popups} />
+      {/* Barómetro vertical de Follow the Leader con el % de este participante.
+          No decae: en el Duelo el % sólo cambia cuando el público vota. */}
+      <div className="column-barometro">
+        <FtlBarometro pct={percent} tamano="tv" decae={false} />
+      </div>
       <div ref={glowRef} className="column-bottom-glow" />
     </div>
   );
@@ -564,6 +570,11 @@ const duelStyles = (
     .vote-spark--right { background: radial-gradient(circle, #fff 0%, #ffd65a 70%); box-shadow: 0 0 6px #ffd65a, 0 0 12px rgba(255,130,0,0.9); }
 
     /* ── Info del participante (por encima de las partículas) ── */
+    .column-barometro {
+      position: absolute; z-index: 14; left: 50%; transform: translateX(-50%);
+      top: clamp(250px, 33vh, 380px); bottom: clamp(22px, 5vh, 56px);
+      width: clamp(34px, 3.1vw, 60px); pointer-events: none;
+    }
     .contestant-info {
       position: relative; z-index: 15;
       display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -593,7 +604,8 @@ const duelStyles = (
  * TalentDuelScreen — el Duelo en /tv y /pantalla (gráfica televisiva).
  *
  * Fases (faseDuelo, la misma que usan Admin y Cliente):
- *   convocatoria → logo oficial + QR chico abajo a la izquierda (nada más)
+ *   convocatoria → la placa de anuncio `duelo` (prop `placa`, la arma quien
+ *                  monta esto con su PlacaScreen). Sin `placa`: logo + QR.
  *   voting       → duelistas, VS, video, aplausómetro, reloj si la ronda lo tiene
  *   result       → ganador o EMPATE según applause_sessions.result
  * Cancelar / cerrar deja la fase en convocatoria u `off` (la TV vuelve al DJ).
@@ -606,7 +618,7 @@ const duelStyles = (
  * `demo` (sólo Diseñador): { round, counts } de muestra; con él no se abre
  * ninguna suscripción.
  */
-export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo = null }) {
+export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo = null, placa = null }) {
   const live = useDueloRound(demo ? null : sessionId);
   // Ajustes → QR en pantalla: el QR de la convocatoria se puede ocultar.
   const mostrarQr   = usePantallaQr().duelo !== false;
@@ -698,10 +710,10 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
     setTimeout(() => setPopups((prev) => prev.filter((p) => p.id !== pid)), 800);
   }, []);
 
-  // Líder por aplausos absolutos (sólo para el brillo visual; no es el resultado).
-  const c1 = counts?.p1 ?? 0, c2 = counts?.p2 ?? 0;
-  const leader = c1 > c2 ? 1 : (c2 > c1 ? 2 : 0);
+  // Líder por porcentaje (sólo para el brillo visual; no es el resultado).
   const pct = porcentajesDuelo(counts);
+  const c1 = pct.p1, c2 = pct.p2;
+  const leader = c1 > c2 ? 1 : (c2 > c1 ? 2 : 0);
   const prevLeaderRef = useRef(0);
   useEffect(() => {
     if (fase !== "voting") { prevLeaderRef.current = leader; return; }
@@ -721,6 +733,9 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
   if (!fase) return null;
 
   // ── CONVOCATORIA ────────────────────────────────────────────────────────────
+  // Anunciar abre la convocatoria y la pantalla muestra la placa del anuncio:
+  // no hay una pantalla de convocatoria aparte.
+  if (fase === "inviting" && placa) return placa;
   if (fase === "inviting") {
     return (
       <div style={{
@@ -857,7 +872,7 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
         particles={particles.filter((p) => p.slot === 2)} onParticleDone={onParticleDone} />
 
       <div className="duel-split">
-        <div className="duel-split-fill" style={{ width: `${pct.p1}%` }} />
+        <div className="duel-split-fill" style={{ width: `${anchoBarraP1(pct)}%` }} />
       </div>
     </div>
   );

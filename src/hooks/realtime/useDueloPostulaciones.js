@@ -12,6 +12,9 @@ import { supabase } from "../../lib/supabase";
  *  · Cambiar el estado o borrar filas es sólo de admin.
  *  · `duelo_launch_round` pasa a 'selected' a los dos elegidos; el resto sigue
  *    'waiting' y queda disponible para los próximos duelos.
+ *  · Al cerrarse la ronda (migración 20261020150000) la postulación de los dos
+ *    duelistas se BORRA si terminó y vuelve a 'waiting' si se canceló: el que
+ *    ya subió se tiene que volver a postular.
  *
  * @param {string|null} sessionId
  * @param {object|null} user   usuario autenticado (sólo se usa `id`)

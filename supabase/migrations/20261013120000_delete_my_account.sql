@@ -10,7 +10,11 @@
 -- Antes hay que soltar las tres referencias que no son cascade y frenarían el
 -- borrado:
 --   - sessions.created_by            → null (dato de auditoría del admin)
---   - applause_sessions.p1/p2_user_id → null (el duelo queda, sin el jugador)
+--   - applause_sessions.p1/p2_user_id → null en PT / FTL. Las rondas de DUELO
+--                                       donde jugó se borran: el CHECK
+--                                       applause_sessions_duelo_consistente
+--                                       exige los dos jugadores (sus totales y
+--                                       aportes caen en cascada por round_id)
 --   - applause_user_contrib.user_id  → se borra (es NOT NULL; son los aplausos
 --                                       que aportó, no tienen sentido sin él)
 --
@@ -37,6 +41,8 @@ begin
   end if;
 
   update public.sessions          set created_by = null where created_by = v_uid;
+  delete from public.applause_sessions
+   where game_type = 'duelo' and v_uid in (p1_user_id, p2_user_id);
   update public.applause_sessions set p1_user_id = null where p1_user_id = v_uid;
   update public.applause_sessions set p2_user_id = null where p2_user_id = v_uid;
   delete from public.applause_user_contrib where user_id = v_uid;

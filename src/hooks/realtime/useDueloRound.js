@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import {
-  APLAUSOS_MAX_POR_ENVIO, enviarAplausos, finalizarRondaDuelo,
+  finalizarRondaDuelo, modoDeRonda, tocarDuelo, votarDuelo, miVotoDuelo,
 } from "../../services/duelo";
+
+/** Toques (Mod 1): la base acepta una tanda cada 400 ms de hasta 12. */
+const TOQUES_MAX_POR_ENVIO = 12;
+const TOQUES_FLUSH_MS = 500;
 
 function makeInstanceId() {
   return Math.random().toString(36).slice(2, 8);
 }
+
+const COUNTS_VACIOS = Object.freeze({ p1: 0, p2: 0 });
 
 /**
  * useDueloRound — la última ronda de Duelo de la sesión y sus totales.
@@ -16,6 +22,8 @@ function makeInstanceId() {
  * quedarse con la fila que llegó. Así una fila vieja tocada por un cierre
  * tardío nunca desplaza a la ronda vigente.
  *
+ * `counts`: { p1, p2 } toques o votos de cada lado.
+ *
  * @param {string|null} sessionId
  * @param {{ autoFinish?: boolean }} opts  autoFinish: el llamador está
  *   autenticado y puede pedir el cierre por tiempo (Admin y Cliente; la TV
@@ -23,7 +31,7 @@ function makeInstanceId() {
  */
 export function useDueloRound(sessionId, { autoFinish = false } = {}) {
   const [round, setRound]   = useState(null);
-  const [counts, setCounts] = useState({ p1: 0, p2: 0 });
+  const [counts, setCounts] = useState(COUNTS_VACIOS);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const instanceIdRef = useRef(makeInstanceId());
@@ -64,16 +72,18 @@ export function useDueloRound(sessionId, { autoFinish = false } = {}) {
   }, [sessionId]);
 
   // ── Totales de la ronda ──────────────────────────────────────────────────
+  // Con el voto único un total BAJA cuando alguien cambia su voto: se toma
+  // siempre la fila que llega. Al reconectar se relee todo.
   const roundId = round?.id || null;
   useEffect(() => {
-    if (!roundId) { setCounts({ p1: 0, p2: 0 }); return; }
+    if (!roundId) { setCounts(COUNTS_VACIOS); return; }
     let cancelled = false;
 
     async function fetchCounts() {
       const { data, error } = await supabase
         .from("applause_counts").select("slot,total").eq("round_id", roundId);
       if (cancelled || error || !data) return;
-      const c = { p1: 0, p2: 0 };
+      const c = { ...COUNTS_VACIOS };
       data.forEach((r) => {
         if (r.slot === 1) c.p1 = Number(r.total) || 0;
         if (r.slot === 2) c.p2 = Number(r.total) || 0;
@@ -90,10 +100,7 @@ export function useDueloRound(sessionId, { autoFinish = false } = {}) {
       }, (payload) => {
         const row = payload.new;
         if (!row || (row.slot !== 1 && row.slot !== 2)) return;
-        // Los totales sólo crecen: un evento viejo que llega tarde no los baja.
-        const key = row.slot === 1 ? "p1" : "p2";
-        const total = Number(row.total) || 0;
-        setCounts((prev) => (total > prev[key] ? { ...prev, [key]: total } : prev));
+        setCounts((prev) => ({ ...prev, [`p${row.slot}`]: Number(row.total) || 0 }));
       })
       .subscribe((status) => { if (status === "SUBSCRIBED") fetchCounts(); });
 
@@ -128,165 +135,139 @@ export function useDueloRound(sessionId, { autoFinish = false } = {}) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Aplausos del espectador
+// Votos del espectador
 // ════════════════════════════════════════════════════════════════════════
-const FLUSH_MS = 300;
 
 /** Códigos que cierran la votación para este usuario en esta ronda. */
 const CODIGOS_CIERRE = new Set([
   "VOTING_CLOSED", "ROUND_FINISHED", "ROUND_CANCELLED", "ROUND_EXPIRED",
-  "ROUND_NOT_FOUND", "ROUND_NOT_VOTING",
+  "ROUND_NOT_FOUND", "ROUND_NOT_VOTING", "WRONG_MODE",
 ]);
 
-const hintKey = (roundId, userId) => `duelo_aplausos:${roundId}:${userId}`;
-function leerHint(roundId, userId) {
-  try {
-    const raw = localStorage.getItem(hintKey(roundId, userId));
-    if (raw == null) return null;          // sin pista: el saldo es desconocido
-    const v = Number(raw);
-    return Number.isFinite(v) && v >= 0 ? v : null;
-  } catch { return null; }
-}
-function guardarHint(roundId, userId, used) {
-  try { localStorage.setItem(hintKey(roundId, userId), String(used)); } catch { /* noop */ }
-}
-
 /**
- * useAplausos — taps del espectador agrupados en lotes para `applause_add`.
- *
- * · Cada tap suma a un buffer por slot. Cada 300 ms sale UN lote (1..50) del
- *   slot con más taps pendientes; nunca hay dos llamadas en vuelo a la vez.
- * · El cupo es por usuario y por ronda, SUMANDO los dos duelistas. El saldo
- *   confiable es el que devuelve el backend (`used` / `remaining`). Tras un F5
- *   se arranca del último `used` que devolvió el backend en este dispositivo
- *   (localStorage, sólo como pista: la próxima respuesta lo corrige).
- * · Aceptación parcial: si el backend acepta menos que el lote, lo que sobró
- *   se descarta — ya no hay saldo que lo pueda contener.
- * · Un código de cierre (cancelada, terminada, tiempo) vacía el buffer y
- *   bloquea nuevos taps.
+ * Código de rechazo → bloqueo de la UI. null = reintentar (red caída o ritmo
+ * de toques). Un RPC_ERROR (p. ej. la función no existe en la base) se
+ * muestra como error en vez de reintentarse en silencio.
  */
-export function useAplausos(round, userId) {
-  const roundId = round?.id || null;
-  const limit   = Number(round?.tap_limit) || 0;
-  const votando = round?.status === "voting";
+function bloqueoDe(code) {
+  if (code === "DUELIST_CANNOT_VOTE" || code === "NOT_PRESENT" || code === "LIMIT_REACHED") return code;
+  if (CODIGOS_CIERRE.has(code)) return "CLOSED";
+  if (code === "NETWORK_ERROR" || code === "TOO_FAST") return null;
+  return "ERROR";
+}
 
-  const bufRef      = useRef({ 1: 0, 2: 0 });
-  const inflightRef = useRef(0);
-  const usedRef     = useRef(0);
-  const backoffRef  = useRef(0);
-  const [, setTick] = useState(0);
-  const [bloqueo, setBloqueo] = useState(null); // null | LIMIT_REACHED | DUELIST_CANNOT_VOTE | NOT_PRESENT | CLOSED | ERROR
-  const [confirmado, setConfirmado] = useState(false); // ¿el saldo ya vino del backend?
-  const rerender = () => setTick((t) => t + 1);
-
-  // Nueva ronda → todo de cero (con la pista de este dispositivo si la hay).
-  useEffect(() => {
-    bufRef.current = { 1: 0, 2: 0 };
-    inflightRef.current = 0;
-    backoffRef.current = 0;
-    const hint = roundId && userId ? leerHint(roundId, userId) : null;
-    usedRef.current = hint ?? 0;
-    setConfirmado(hint != null);
-    setBloqueo(hint != null && limit > 0 && hint >= limit ? "LIMIT_REACHED" : null);
-    rerender();
-  }, [roundId, userId, limit]);
-
-  const pendientes = () => bufRef.current[1] + bufRef.current[2] + inflightRef.current;
-  const restante = Math.max(0, limit - usedRef.current - pendientes());
-
-  const aplicarRespuesta = useCallback((r, slot, delta) => {
-    if (r?.ok && r.code === "ACCEPTED") {
-      usedRef.current = Number(r.used) || usedRef.current + (Number(r.accepted) || 0);
-      guardarHint(roundId, userId, usedRef.current);
-      setConfirmado(true);
-      const sobrante = delta - (Number(r.accepted) || 0);
-      if (Number(r.remaining) <= 0 || sobrante > 0) {
-        bufRef.current = { 1: 0, 2: 0 };
-        setBloqueo("LIMIT_REACHED");
-      }
-      return;
-    }
-    const code = r?.code;
-    if (code === "LIMIT_REACHED") {
-      if (typeof r.used === "number") { usedRef.current = r.used; guardarHint(roundId, userId, r.used); }
-      else usedRef.current = limit;
-      setConfirmado(true);
-      bufRef.current = { 1: 0, 2: 0 };
-      setBloqueo("LIMIT_REACHED");
-    } else if (code === "DUELIST_CANNOT_VOTE") {
-      bufRef.current = { 1: 0, 2: 0 };
-      setBloqueo("DUELIST_CANNOT_VOTE");
-    } else if (code === "NOT_PRESENT") {
-      bufRef.current = { 1: 0, 2: 0 };
-      setBloqueo("NOT_PRESENT");
-    } else if (CODIGOS_CIERRE.has(code)) {
-      bufRef.current = { 1: 0, 2: 0 };
-      setBloqueo("CLOSED");
-    } else if (code === "NETWORK_ERROR" || code === "RPC_ERROR") {
-      // Falla de transporte: el lote vuelve al buffer y se reintenta.
-      bufRef.current[slot] += delta;
-      backoffRef.current = 5;
-    } else {
-      // INVALID_SLOT / INVALID_DELTA / UNAUTHORIZED: no tiene sentido reintentar.
-      console.warn("[useAplausos] rechazo:", code, r?.error);
-      bufRef.current = { 1: 0, 2: 0 };
-      setBloqueo("ERROR");
-    }
-  }, [roundId, userId, limit]);
-
-  const flush = useCallback(async () => {
-    if (!roundId || inflightRef.current) return;
-    if (backoffRef.current > 0) { backoffRef.current -= 1; return; }
-    const b = bufRef.current;
-    const slot = b[1] >= b[2] ? 1 : 2;
-    const delta = Math.min(b[slot], APLAUSOS_MAX_POR_ENVIO);
-    if (delta < 1) return;
-    b[slot] -= delta;
-    inflightRef.current = delta;
-    const r = await enviarAplausos(roundId, slot, delta);
-    inflightRef.current = 0;
-    aplicarRespuesta(r, slot, delta);
-    rerender();
-  }, [roundId, aplicarRespuesta]);
-
-  useEffect(() => {
-    if (!votando || !roundId) return;
-    const id = setInterval(flush, FLUSH_MS);
-    return () => {
-      clearInterval(id);
-      // Salir de la vista con taps sin enviar: último intento.
-      flush();
-    };
-  }, [votando, roundId, flush]);
-
-  // La ronda dejó de votar (cierre, cancelación): lo pendiente ya no vale.
-  useEffect(() => {
-    if (!votando) { bufRef.current = { 1: 0, 2: 0 }; rerender(); }
-  }, [votando]);
-
-  // NOT_PRESENT no es definitivo: la presencia se renueva con el heartbeat de
-  // usePresence. Pasados unos segundos se deja volver a intentar.
+/** NOT_PRESENT no es definitivo: la presencia se renueva con el heartbeat. */
+function useLiberarPresencia(bloqueo, setBloqueo) {
   useEffect(() => {
     if (bloqueo !== "NOT_PRESENT") return;
     const id = setTimeout(() => setBloqueo(null), 8000);
     return () => clearTimeout(id);
-  }, [bloqueo]);
+  }, [bloqueo, setBloqueo]);
+}
+
+/**
+ * useToquesDuelo — Mod 1: el espectador toca a uno de los dos participantes.
+ * Los toques se acumulan por participante y cada 500 ms sale una tanda de
+ * hasta 12 (`applause_add`); la base frena el ritmo (TOO_FAST → se reintenta).
+ *
+ * Tope por persona: el de la ronda (`tap_limit`, regla «Límite de toques por
+ * persona»). null = toques continuos e indefinidos. El saldo confiable es el
+ * `used` que devuelve la base; tras un F5 el primer envío lo corrige.
+ */
+export function useToquesDuelo(round) {
+  const roundId = round?.id || null;
+  const activo  = round?.status === "voting" && modoDeRonda(round) === "toques";
+  const limite  = round?.tap_limit ?? null;
+
+  const bufRef      = useRef({ 1: 0, 2: 0 });
+  const inflightRef = useRef(0);
+  const usadosRef   = useRef(0);   // confirmados por la base
+  const [mios, setMios]       = useState(0);
+  const [bloqueo, setBloqueo] = useState(null);
+
+  useEffect(() => {
+    bufRef.current = { 1: 0, 2: 0 };
+    inflightRef.current = 0; usadosRef.current = 0;
+    setMios(0); setBloqueo(null);
+  }, [roundId]);
+  useLiberarPresencia(bloqueo, setBloqueo);
+
+  const pendientes = () => bufRef.current[1] + bufRef.current[2] + inflightRef.current;
+
+  const flush = useCallback(async () => {
+    if (!roundId || inflightRef.current) return;
+    const b = bufRef.current;
+    const slot = b[1] >= b[2] ? 1 : 2;
+    const n = Math.min(b[slot], TOQUES_MAX_POR_ENVIO);
+    if (!n) return;
+    b[slot] -= n;
+    inflightRef.current = n;
+    const r = await tocarDuelo(roundId, slot, n);
+    inflightRef.current = 0;
+    if (typeof r?.used === "number") usadosRef.current = r.used;
+    if (r?.ok) {
+      // Con tope, lo que la base no aceptó ya no entra: se descarta.
+      if (r.remaining === 0 || (Number(r.accepted) || n) < n) {
+        bufRef.current = { 1: 0, 2: 0 };
+        if (r.remaining === 0) setBloqueo("LIMIT_REACHED");
+      }
+      setMios(usadosRef.current + pendientes());
+      return;
+    }
+    const bloq = bloqueoDe(r?.code);
+    if (bloq) { bufRef.current = { 1: 0, 2: 0 }; setBloqueo(bloq); }
+    else bufRef.current[slot] += n;                 // red o ritmo: se reintenta
+  }, [roundId]);
+
+  useEffect(() => {
+    if (!activo) return;
+    const id = setInterval(flush, TOQUES_FLUSH_MS);
+    return () => { clearInterval(id); flush(); };
+  }, [activo, flush]);
 
   const tap = useCallback((slot) => {
-    if (slot !== 1 && slot !== 2) return false;
-    if (!votando || bloqueo) return false;
-    if (limit - usedRef.current - pendientes() <= 0) return false;
+    if (!activo || bloqueo || (slot !== 1 && slot !== 2)) return false;
+    if (limite != null && usadosRef.current + pendientes() >= limite) return false;
+    if (bufRef.current[slot] >= 2 * TOQUES_MAX_POR_ENVIO) return false;   // red lenta
     bufRef.current[slot] += 1;
-    rerender();
+    setMios(usadosRef.current + pendientes());
     return true;
-  }, [votando, bloqueo, limit]);
+  }, [activo, bloqueo, limite]);
 
-  return {
-    tap,
-    restante,             // saldo mostrado (confirmado - pendiente)
-    limite: limit,
-    usados: usedRef.current + pendientes(),
-    confirmado,           // false = todavía no habló el backend en este dispositivo
-    bloqueo,
-  };
+  const restante = limite == null ? null : Math.max(0, limite - mios);
+  return { tap, mios, limite, restante, bloqueo };
+}
+
+/**
+ * useVotoDuelo — Mod 2: el voto único a uno de los dos (`duelo_votar`), que se
+ * puede cambiar. `miVoto` arranca de la base (`duelo_mi_voto`), así un F5 lo
+ * conserva.
+ */
+export function useVotoDuelo(round, userId) {
+  const roundId = round?.id || null;
+  const activo  = modoDeRonda(round) === "votos";
+  const [miVoto, setMiVoto]     = useState(null);   // 1 | 2 | null
+  const [enviando, setEnviando] = useState(false);
+  const [bloqueo, setBloqueo]   = useState(null);
+
+  useEffect(() => {
+    setMiVoto(null); setBloqueo(null);
+    if (!activo || !roundId || !userId) return;
+    let vivo = true;
+    miVotoDuelo(roundId).then((v) => { if (vivo) setMiVoto(v); });
+    return () => { vivo = false; };
+  }, [activo, roundId, userId]);
+  useLiberarPresencia(bloqueo, setBloqueo);
+
+  const votar = useCallback(async (slot) => {
+    if (!activo || !roundId || enviando || bloqueo || miVoto === slot) return;
+    setEnviando(true);
+    const r = await votarDuelo(roundId, slot);
+    setEnviando(false);
+    if (r?.ok) { setMiVoto(r.slot ?? slot); return; }
+    const bloq = bloqueoDe(r?.code);
+    if (bloq) setBloqueo(bloq);
+  }, [activo, roundId, enviando, bloqueo, miVoto]);
+
+  return { votar, miVoto, enviando, bloqueo };
 }

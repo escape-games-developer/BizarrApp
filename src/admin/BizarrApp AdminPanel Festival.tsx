@@ -66,8 +66,8 @@ import {
 import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
 import {
   lanzarRondaDuelo, finalizarRondaDuelo, cancelarRondaDuelo, pushDuelo, mensajeDueloAdmin,
-  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
-  REGLA_DUELO_DURACION, REGLA_DUELO_APLAUSOS,
+  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, anchoBarraP1,
+  REGLA_DUELO_DURACION, REGLA_DUELO_APLAUSOS, REGLA_DUELO_MODO, MODOS_DUELO, modoDeRonda,
   DUELO_DURACION_MIN, DUELO_DURACION_MAX, DUELO_APLAUSOS_MIN, DUELO_APLAUSOS_MAX,
 } from "../services/duelo";
 import {
@@ -755,7 +755,7 @@ const DUELO_P1 = "#FF2D78";
 const DUELO_P2 = "#FF9500";
 
 // Tarjeta de un duelista (fase de votación / resultado).
-function DueloLado({p, col, pct, votos, ganador}){
+function DueloLado({p, col, pct, votos, ganador, unidad = "toque"}){
   return (
     <div style={{flex:1,borderRadius:11,padding:"12px 8px",textAlign:"center",
       background:`${col}10`,border:`1.5px solid ${ganador?col:`${col}44`}`}}>
@@ -764,8 +764,85 @@ function DueloLado({p, col, pct, votos, ganador}){
         <DueloAvatar emoji={p?.avatar_emoji} photo={p?.photo_url} col={col}/>
         <div style={{fontSize:11.5,fontWeight:700,color:col}}>{p?.name}</div>
         <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:26,color:col}}>{pct}%</div>
-        <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>{votos} aplauso{votos===1?"":"s"}</div>
+        <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>{votos} {unidad}{votos===1?"":"s"}</div>
       </div>
+    </div>
+  );
+}
+
+// ── Cronómetro del Duelo (regla duracion_votacion) ─────────────────────────
+// Activado: la ronda se lanza con cuenta regresiva y se cierra sola. Apagado:
+// sin reloj, la cierra el operador con 🏁 Finalizar duelo. El tiempo se
+// guarda aunque esté apagado. Rige desde el próximo lanzamiento.
+function DueloCronometroCard({col}){
+  const { loading, error, reglaPorKey, actualizarRegla } = useReglasDuelo();
+  const duracion = reglaPorKey(REGLA_DUELO_DURACION);
+  const segGuardado = typeof duracion?.value?.segundos === "number" ? duracion.value.segundos : null;
+
+  const [min, setMin] = useState("");
+  const [seg, setSeg] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [aviso, setAviso] = useState(null); // {ok, text}
+
+  const sincronizar = (s) => {
+    setMin(s == null ? "" : String(Math.floor(s / 60)));
+    setSeg(s == null ? "" : String(s % 60).padStart(2, "0"));
+  };
+  useEffect(() => { sincronizar(segGuardado); }, [segGuardado]);
+
+  const guardar = async (patch, okText) => {
+    if (guardando) return;
+    setGuardando(true); setAviso(null);
+    try { await actualizarRegla(REGLA_DUELO_DURACION, patch); setAviso({ok:true, text:okText}); }
+    catch (e) { setAviso({ok:false, text:e?.message || String(e)}); }
+    finally { setGuardando(false); }
+  };
+
+  if (loading || error || !duracion) return null;
+
+  const m = min.trim() === "" ? 0 : Number(min.trim());
+  const s = seg.trim() === "" ? 0 : Number(seg.trim());
+  const total = m * 60 + s;
+  const formato = /^\d*$/.test(min.trim()) && /^\d*$/.test(seg.trim()) && s < 60;
+  const motivo = !formato ? "Usá números: minutos y segundos (0 a 59)."
+    : motivoDuracionInvalida(String(total)) && `Entre ${formatoReloj(DUELO_DURACION_MIN)} y ${formatoReloj(DUELO_DURACION_MAX)} min.`;
+  const sucio = formato && total !== segGuardado;
+
+  const inputStyle = {width:52,padding:"7px 6px",borderRadius:9,fontSize:15,
+    fontFamily:"'DM Sans',sans-serif",fontWeight:700,textAlign:"center",
+    background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.12)",color:"#F0E8FF"};
+
+  return (
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+        <div className="ctitle" style={{margin:0}}>⏱ Cronómetro</div>
+        <Toggle on={duracion.enabled} color={col} label={guardando ? "Guardando…" : duracion.enabled ? "Activado" : "Desactivado"}
+          onToggle={() => guardar({ enabled: !duracion.enabled },
+            duracion.enabled ? "Cronómetro desactivado." : "Cronómetro activado.")}/>
+      </div>
+      <div style={{display:"flex",gap:6,alignItems:"center",marginTop:10,opacity:duracion.enabled?1:.45}}>
+        <input value={min} onChange={(e)=>setMin(e.target.value)} inputMode="numeric" aria-label="Minutos" style={inputStyle}/>
+        <span style={{fontSize:10,color:"rgba(240,232,255,.4)"}}>min</span>
+        <input value={seg} onChange={(e)=>setSeg(e.target.value)} inputMode="numeric" aria-label="Segundos" style={inputStyle}/>
+        <span style={{fontSize:10,color:"rgba(240,232,255,.4)"}}>seg</span>
+        <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11,marginLeft:"auto"}}
+          disabled={guardando || !!motivo || !sucio}
+          onClick={() => guardar({ value: { segundos: total } }, `Tiempo guardado: ${formatoReloj(total)}.`)}>
+          {guardando ? "…" : "Guardar"}
+        </button>
+      </div>
+      {motivo && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivo}</div>}
+      <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:8,lineHeight:1.5}}>
+        {duracion.enabled
+          ? "La votación arranca con esta cuenta regresiva y se cierra sola al llegar a 0."
+          : "Sin cronómetro: la votación sigue abierta hasta que toques 🏁 Finalizar duelo."}
+        {" "}Rige desde el próximo lanzamiento.
+      </div>
+      {aviso && (
+        <div style={{fontSize:10.5,color:aviso.ok?"#00F5A0":"#FCA5A5",marginTop:6}}>
+          {aviso.ok ? "✓ " : "✕ "}{aviso.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -773,20 +850,22 @@ function DueloLado({p, col, pct, votos, ganador}){
 // ── Reglas del Duelo (duelo_reglas_config) ─────────────────────────────────
 function DueloReglasCard({col, enJuego}){
   const { loading, error: reglasError, reglaPorKey, actualizarRegla } = useReglasDuelo();
-  const duracion = reglaPorKey(REGLA_DUELO_DURACION);
+  const modoRegla = reglaPorKey(REGLA_DUELO_MODO);
+  const modo = modoRegla?.value?.modo || "toques";
   const aplausos = reglaPorKey(REGLA_DUELO_APLAUSOS);
-  const segGuardado = typeof duracion?.value?.segundos === "number" ? duracion.value.segundos : null;
   const maxGuardado = typeof aplausos?.value?.max === "number" ? aplausos.value.max : null;
 
-  const [segInput, setSegInput] = useState("");
   const [maxInput, setMaxInput] = useState("");
   const [guardando, setGuardando] = useState(null); // key que se está guardando
   const [aviso, setAviso] = useState(null);          // {ok, text}
 
-  // Los inputs se resincronizan con lo PERSISTIDO. Apagar la duración no toca
-  // `value`: el número sigue acá aunque la regla esté en OFF.
-  useEffect(() => { setSegInput(segGuardado == null ? "" : String(segGuardado)); }, [segGuardado]);
+  // El input se resincroniza con lo PERSISTIDO.
   useEffect(() => { setMaxInput(maxGuardado == null ? "" : String(maxGuardado)); }, [maxGuardado]);
+  const motivoMax = motivoAplausosInvalido(maxInput);
+  const sucioMax  = maxInput !== (maxGuardado == null ? "" : String(maxGuardado));
+  const inputStyle = {width:74,padding:"7px 9px",borderRadius:9,fontSize:13,
+    fontFamily:"'DM Sans',sans-serif",fontWeight:700,textAlign:"center",
+    background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.12)",color:"#F0E8FF"};
 
   const guardar = async (key, patch, okText) => {
     if (guardando) return;
@@ -796,85 +875,90 @@ function DueloReglasCard({col, enJuego}){
     finally { setGuardando(null); }
   };
 
-  const inputStyle = {width:74,padding:"7px 9px",borderRadius:9,fontSize:13,
-    fontFamily:"'DM Sans',sans-serif",fontWeight:700,textAlign:"center",
-    background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.12)",color:"#F0E8FF"};
-
   if (loading) return (
     <div className="card"><div className="ctitle">⚙️ Configuración</div>
       <div style={{fontSize:11,color:"rgba(240,232,255,.3)"}}>Cargando configuración…</div>
     </div>
   );
-  if (reglasError || !duracion || !aplausos) return (
+  if (reglasError) return (
     <div className="card"><div className="ctitle">⚙️ Configuración</div>
-      <div style={{fontSize:11,color:"#FCA5A5",lineHeight:1.5}}>
-        {reglasError || "Faltan reglas del Duelo en la base."}
-      </div>
+      <div style={{fontSize:11,color:"#FCA5A5",lineHeight:1.5}}>{reglasError}</div>
     </div>
   );
-
-  const motivoSeg = motivoDuracionInvalida(segInput);
-  const motivoMax = motivoAplausosInvalido(maxInput);
-  const sucioSeg  = segInput !== (segGuardado == null ? "" : String(segGuardado));
-  const sucioMax  = maxInput !== (maxGuardado == null ? "" : String(maxGuardado));
 
   return (
     <div className="card">
       <div className="ctitle">⚙️ Configuración de reglas</div>
 
-      {/* Duración de la votación: ON/OFF + segundos */}
+      {/* Modo de votación: por toques o voto único, uno activo */}
       <div className="rey-regla">
         <div className="rey-regla-hdr">
-          <div className="rey-regla-t">Duración de la votación</div>
-          <div className={`rey-regla-estado ${duracion.enabled ? "rey-regla-on" : "rey-regla-off"}`}>
-            {duracion.enabled ? "ACTIVA" : "INACTIVA"}
+          <div className="rey-regla-t">Modo de votación</div>
+          <div className="rey-regla-estado rey-regla-on">{MODOS_DUELO[modo].titulo.split(" · ")[0]}</div>
+        </div>
+        {!modoRegla ? (
+          <div className="rey-regla-d" style={{color:"#FCA5A5"}}>
+            Falta aplicar en Supabase la migración 20261020130000_duelo_modos_votacion.
           </div>
-          <Toggle on={duracion.enabled} color={col}
-            label={guardando===REGLA_DUELO_DURACION ? "Guardando…" : ""}
-            onToggle={() => guardar(REGLA_DUELO_DURACION, { enabled: !duracion.enabled },
-              duracion.enabled ? "Duración desactivada: la votación la cierra el operador." : "Duración activada.")}/>
-        </div>
-        <div className="rey-regla-d">
-          {duracion.enabled
-            ? "La votación se cierra sola al terminar la cuenta regresiva."
-            : "Sin cuenta regresiva: sólo el operador cierra la votación."}
-        </div>
-        <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9}}>
-          <input value={segInput} onChange={(e)=>setSegInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
-          <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
-            disabled={!!guardando || !!motivoSeg || !sucioSeg}
-            onClick={() => guardar(REGLA_DUELO_DURACION, { value: { segundos: Number(segInput.trim()) } }, "Duración guardada.")}>
-            {guardando===REGLA_DUELO_DURACION ? "…" : "Guardar"}
-          </button>
-          <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
-            Segundos, entre {DUELO_DURACION_MIN} y {DUELO_DURACION_MAX}.
+        ) : (
+          <div style={{display:"grid",gap:6,marginTop:8}}>
+            {Object.entries(MODOS_DUELO).map(([id, m]) => {
+              const activo = modo === id;
+              return (
+                <button key={id} type="button" className="btn"
+                  disabled={!!guardando || activo}
+                  onClick={() => guardar(REGLA_DUELO_MODO, { value: { modo: id } }, `${m.titulo} activado.`)}
+                  style={{textAlign:"left",padding:"9px 11px",borderRadius:10,whiteSpace:"normal",lineHeight:1.4,
+                    background: activo ? "rgba(155,47,255,.12)" : "rgba(240,232,255,.03)",
+                    border:`1px solid ${activo ? "rgba(155,47,255,.5)" : "rgba(240,232,255,.1)"}`,
+                    color:"#F0E8FF",cursor: activo ? "default" : "pointer"}}>
+                  <div style={{fontSize:11.5,fontWeight:800}}>
+                    {activo ? "● " : "○ "}{m.titulo}
+                  </div>
+                  <div style={{fontSize:10,color:"rgba(240,232,255,.45)",marginTop:3}}>{m.detalle}</div>
+                </button>
+              );
+            })}
           </div>
-        </div>
-        {motivoSeg && segInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoSeg}</div>}
+        )}
       </div>
 
-      {/* Máximo de aplausos por usuario: siempre activa, sólo el valor */}
-      <div className="rey-regla">
-        <div className="rey-regla-hdr">
-          <div className="rey-regla-t">Máximo de aplausos por persona</div>
-          <div className="rey-regla-estado rey-regla-on">SIEMPRE ACTIVA</div>
-        </div>
-        <div className="rey-regla-d">
-          Tope por persona y por ronda, sumando a los dos participantes.
-        </div>
-        <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9}}>
-          <input value={maxInput} onChange={(e)=>setMaxInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
-          <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
-            disabled={!!guardando || !!motivoMax || !sucioMax}
-            onClick={() => guardar(REGLA_DUELO_APLAUSOS, { value: { max: Number(maxInput.trim()) } }, "Máximo de aplausos guardado.")}>
-            {guardando===REGLA_DUELO_APLAUSOS ? "…" : "Guardar"}
-          </button>
-          <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
-            Entre {DUELO_APLAUSOS_MIN} y {DUELO_APLAUSOS_MAX}.
+      {/* El cronómetro vive en DueloCronometroCard, junto a la preparación. */}
+
+      {/* Límite de toques por persona (Mod 1): activado = tope; apagado =
+          toques continuos e indefinidos. Apagado conserva el número. */}
+      {aplausos && (
+        <div className="rey-regla" style={{opacity: modo === "toques" ? 1 : .55}}>
+          <div className="rey-regla-hdr">
+            <div className="rey-regla-t">Límite de toques por persona</div>
+            <div className={`rey-regla-estado ${aplausos.enabled ? "rey-regla-on" : "rey-regla-off"}`}>
+              {aplausos.enabled ? "ACTIVO" : "SIN LÍMITE"}
+            </div>
+            <Toggle on={aplausos.enabled} color={col}
+              label={guardando===REGLA_DUELO_APLAUSOS ? "Guardando…" : ""}
+              onToggle={() => guardar(REGLA_DUELO_APLAUSOS, { enabled: !aplausos.enabled },
+                aplausos.enabled ? "Sin límite: toques continuos e indefinidos." : "Límite de toques activado.")}/>
           </div>
+          <div className="rey-regla-d">
+            {aplausos.enabled
+              ? "Cada persona puede tocar hasta este total por ronda, sumando a los dos participantes."
+              : "Toques continuos e indefinidos: cada persona toca todas las veces que quiera."}
+            {modo !== "toques" && " Sólo aplica al Mod 1 · Por toques."}
+          </div>
+          <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9,opacity:aplausos.enabled?1:.45}}>
+            <input value={maxInput} onChange={(e)=>setMaxInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
+            <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
+              disabled={!!guardando || !!motivoMax || !sucioMax}
+              onClick={() => guardar(REGLA_DUELO_APLAUSOS, { value: { max: Number(maxInput.trim()) } }, "Límite de toques guardado.")}>
+              {guardando===REGLA_DUELO_APLAUSOS ? "…" : "Guardar"}
+            </button>
+            <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
+              Toques, entre {DUELO_APLAUSOS_MIN} y {DUELO_APLAUSOS_MAX}.
+            </div>
+          </div>
+          {motivoMax && maxInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoMax}</div>}
         </div>
-        {motivoMax && maxInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoMax}</div>}
-      </div>
+      )}
 
       {enJuego && (
         <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:6,lineHeight:1.5}}>
@@ -921,6 +1005,7 @@ function DueloPanel({sec, controls, sessionId, gameState}){
   const votando = round?.status === "voting";
   const [d1, d2] = duelistasDeRonda(round);
   const pct = porcentajesDuelo(counts);
+  const modoRonda = modoDeRonda(round);
   const seg = votando ? segundosRestantes(round, now) : null;
 
   // La selección se DERIVA de la lista por id: si la fila desaparece, se cae sola.
@@ -985,32 +1070,43 @@ function DueloPanel({sec, controls, sessionId, gameState}){
   const videoIgnorado  = videoInput.trim().length > 0 && !videoParseado;
 
   // ── Acciones ─────────────────────────────────────────────────────────────
-  // ANUNCIAR: sólo la placa `duelo` del catálogo común (PlacaScreen), igual que
-  // el anuncio de Arma / Sumate / Desafío. No abre convocatoria, no crea ronda
-  // ni toca postulaciones: es `sendPlaca("duelo")`, el mismo que ya usa la
-  // sección Placas. (No es `announceGame`: ese escribe `game_<id>` y la placa
-  // del Duelo se llama `duelo`.)
-  const anunciado = gameState?.active_placa === "duelo" && !alAire;
-  const anunciar = () => correr(async () => {
-    const e = await controls?.sendPlaca("duelo");
-    if (e?.error) throw new Error(e.error.message || String(e.error));
-    setNota("📢 Placa de Duelo en pantalla. Todavía no hay convocatoria.");
-  });
+  // Cuatro pasos: Anunciar → Lanzar → Finalizar (vuelve a la placa) → Cerrar.
+  // No hay pantalla de convocatoria aparte: con el Duelo en el escenario y sin
+  // ronda votando, /tv y /pantalla muestran la placa `duelo` (DueloBigscreen).
 
-  // ABRIR CONVOCATORIA / NUEVA RONDA: deja el Duelo en el escenario sin ronda
-  // votando. Primero `duelo_cancel_round` sin bajar la pantalla (idempotente:
-  // NO_ACTIVE_ROUND es ok), después la capa. Los postulantes quedan.
-  const abrirConvocatoria = () => correr(async () => {
+  // Placa `duelo` suelta del flujo viejo (sendPlaca desde la sección Placas).
+  const anunciado = gameState?.active_placa === "duelo" && !alAire;
+
+  // ANUNCIAR: placa en pantalla + convocatoria abierta en un solo paso. Primero
+  // `duelo_cancel_round` sin bajar la pantalla (idempotente: NO_ACTIVE_ROUND es
+  // ok), después la capa. Los postulantes quedan.
+  const anunciar = () => correr(async () => {
     const c = await cancelarRondaDuelo(sessionId, false);
     if (!c?.ok) throw new Error(mensajeDueloAdmin(c));
-    if (!alAire) {
-      await controls?.abrirConvocatoriaDuelo();
-      pushDuelo(sessionId, { title:"🎤 ¡Duelo de Talentos!", body:"Postulate para subir al escenario", tag:"duelo-open" });
-      setNota("📣 Convocatoria abierta. El público ya se puede postular.");
-    } else {
-      setNota("🔁 Listo para la próxima ronda. Elegí a los dos participantes.");
-    }
+    await controls?.abrirConvocatoriaDuelo();
+    pushDuelo(sessionId, { title:"🎤 ¡Duelo de Talentos!", body:"Postulate para subir al escenario", tag:"duelo-open" });
+    setNota("📢 Duelo anunciado: placa en pantalla y convocatoria abierta.");
   });
+
+  // NUEVA RONDA: baja el resultado y vuelve la placa. El Duelo sigue en el
+  // escenario y la convocatoria sigue abierta.
+  const volverAPlaca = () => correr(async () => {
+    const c = await cancelarRondaDuelo(sessionId, false);
+    if (!c?.ok) throw new Error(mensajeDueloAdmin(c));
+    setNota("🔁 Placa en pantalla. Elegí a los dos participantes de la próxima ronda.");
+  });
+
+  // El resultado (por Finalizar o por el reloj de la ronda) queda en pantalla
+  // RESULTADO_SEG y después vuelve sola la placa. Con varios admins abiertos
+  // corre en cada uno; `duelo_cancel_round` es idempotente.
+  const RESULTADO_SEG = 8;
+  const volverAPlacaRef = useRef(volverAPlaca);
+  volverAPlacaRef.current = volverAPlaca;
+  useEffect(() => {
+    if (fase !== "result" || !round?.result) return;
+    const t = setTimeout(() => volverAPlacaRef.current(), RESULTADO_SEG * 1000);
+    return () => clearTimeout(t);
+  }, [fase, round?.id, round?.result]);
 
   // LANZAR: una sola autoridad, `duelo_launch_round`. Cancela sola la ronda
   // activa anterior, pone el Duelo al aire y congela participantes y reglas.
@@ -1033,66 +1129,62 @@ function DueloPanel({sec, controls, sessionId, gameState}){
     pushDuelo(sessionId, { title:"🎤 ¡Empezó el Duelo!",
       body:`${r.p1?.name || "P1"} vs ${r.p2?.name || "P2"}. ¡Aplaudí a tu favorito!`, tag:"duelo-launch" });
     setNota(r.timed
-      ? `🚀 Duelo lanzado — ${r.duration_seconds}s de votación, ${r.tap_limit} aplausos por persona.`
-      : `🚀 Duelo lanzado — sin límite de tiempo, ${r.tap_limit} aplausos por persona.`);
+      ? `🚀 Duelo lanzado — ${r.duration_seconds}s de votación.`
+      : "🚀 Duelo lanzado — sin límite de tiempo: la cerrás con 🏁 Finalizar duelo.");
   });
 
-  // FINALIZAR Y REVELAR: el resultado lo calcula y persiste el servidor.
-  const finalizar = () => correr(async () => {
-    if (!round?.id) return;
-    const r = await finalizarRondaDuelo(round.id, true);
-    if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
-    setNota(r.result === "tie" ? "🤝 Resultado: empate." : "🏆 Resultado revelado.");
-  });
-
-  // CANCELAR RONDA (votando) / CERRAR DUELO (sin ronda): `duelo_cancel_round`.
-  // Votando: cancela y el Duelo sigue en el escenario (convocatoria). Sin
-  // ronda: saca el Duelo de la pantalla. NO_ACTIVE_ROUND con ok:true es éxito.
-  const cancelarOCerrar = () => correr(async () => {
-    if (anunciado && !votando) {
-      // Sólo estaba la placa de anuncio: se retira, sin tocar rondas.
-      const e = await controls?.clearPlaca();
-      if (e?.error) throw new Error(e.error.message || String(e.error));
-      setNota("⏹ Placa de Duelo retirada. La TV volvió a DJ Democracy.");
-    } else if (votando) {
-      if (!window.confirm("¿Cancelar la ronda en curso? No va a haber ganador.")) return;
-      const r = await cancelarRondaDuelo(sessionId, false);
+  // FINALIZAR DUELO. Votando: el servidor calcula y persiste el resultado, que
+  // queda RESULTADO_SEG en pantalla y después vuelve sola la placa (efecto de
+  // arriba). Con el resultado ya en pantalla: vuelve la placa en el acto.
+  const finalizar = () => {
+    if (fase === "result") return volverAPlaca();
+    return correr(async () => {
+      if (!round?.id) return;
+      const r = await finalizarRondaDuelo(round.id, true);
       if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
-      setNota("⛔ Ronda cancelada. El Duelo sigue en el escenario.");
-    } else {
+      setNota(`${r.result === "tie" ? "🤝 Empate." : "🏆 Ganador en pantalla."} En ${RESULTADO_SEG}s vuelve la placa con la convocatoria abierta.`);
+    });
+  };
+
+  // CERRAR DUELO: `duelo_cancel_round` bajando la pantalla → la TV vuelve a DJ
+  // Democracy. Con una ronda votando, la cancela sin ganador (con confirmación).
+  // NO_ACTIVE_ROUND con ok:true es éxito.
+  const cerrar = () => correr(async () => {
+    if (votando && !window.confirm("Hay una ronda votando. ¿Cerrar el Duelo igual? La ronda se cancela sin ganador.")) return;
+    if (alAire || votando) {
       const r = await cancelarRondaDuelo(sessionId, true);
       if (!r?.ok) throw new Error(mensajeDueloAdmin(r));
-      setNota("⏹ Duelo cerrado. La TV volvió a DJ Democracy.");
     }
+    if (gameState?.active_placa === "duelo") {
+      const e = await controls?.clearPlaca();
+      if (e?.error) throw new Error(e.error.message || String(e.error));
+    }
+    setNota("⏹ Duelo cerrado. La TV volvió a DJ Democracy.");
   });
 
-  // Anunciar: sólo con el Duelo fuera del escenario y sin su placa ya puesta.
-  const puedeAnunciar  = !busy && !!sessionId && !alAire && !votando && !anunciado;
-  const puedeAbrir     = !busy && !!sessionId && (!alAire || fase === "result");
-  const puedeFinalizar = !busy && votando;
-  const puedeCancelar  = !busy && !!sessionId && (votando || alAire || anunciado);
+  const puedeAnunciar  = !busy && !!sessionId && !alAire && !votando;
+  const puedeFinalizar = !busy && (votando || fase === "result");
+  const puedeCerrar    = !busy && !!sessionId && (votando || alAire || anunciado);
 
-  // ÚNICA ubicación de las acciones del Duelo. Fila 1: preparación (anunciar ·
-  // convocatoria). Fila 2: lanzar, a lo ancho. Fila 3: cierre (finalizar · cancelar).
+  // ÚNICA ubicación de las acciones del Duelo, en el orden en que se usan.
+  const btnBarra = {padding:"10px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25};
   const barraOperativa = (
     <div className="card" style={{marginBottom:10, borderColor:"rgba(255,45,120,.3)"}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
-        <button className="btn btn-g" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeAnunciar} onClick={anunciar}
-          title={alAire ? "El Duelo ya está en el escenario" : anunciado ? "La placa ya está en pantalla" : "Mostrar la placa de Duelo de Talentos"}>
+        <button className="btn btn-g" style={btnBarra} disabled={!puedeAnunciar} onClick={anunciar}
+          title={alAire ? "El Duelo ya está anunciado" : "Placa en pantalla y convocatoria abierta"}>
           📢 Anunciar
         </button>
-        <button className="btn btn-g" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeAbrir} onClick={abrirConvocatoria}
-          title={fase === "result" ? "Bajar el resultado y preparar otra ronda" : "Poner el Duelo en el escenario para recibir postulaciones"}>
-          {fase === "result" ? "🔁 Nueva ronda" : "📣 Abrir convocatoria"}
-        </button>
-        <button className="btn btn-p" style={{gridColumn:"span 2",padding:"10px 4px",fontSize:11,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeLanzar} onClick={lanzar}>
+        <button className="btn btn-p" style={btnBarra} disabled={!puedeLanzar} onClick={lanzar}>
           🚀 Lanzar duelo
         </button>
-        <button className="btn btn-p" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeFinalizar} onClick={finalizar}>
-          🏁 Finalizar y revelar
+        <button className="btn btn-p" style={btnBarra} disabled={!puedeFinalizar} onClick={finalizar}
+          title={fase === "result" ? "Bajar el resultado y volver a la placa" : "Cerrar la votación, mostrar el ganador y volver a la placa"}>
+          🏁 Finalizar duelo
         </button>
-        <button className="btn btn-r" style={{padding:"9px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25}} disabled={!puedeCancelar} onClick={cancelarOCerrar}>
-          {votando ? "⛔ Cancelar ronda" : (anunciado && !alAire) ? "⏹ Quitar placa" : "⏹ Cerrar Duelo"}
+        <button className="btn btn-r" style={btnBarra} disabled={!puedeCerrar} onClick={cerrar}
+          title="Sacar el Duelo de la pantalla y volver a DJ Democracy">
+          ⏹ Cerrar duelo
         </button>
       </div>
       {motivoNoLanzar && !votando && (fase === "convocatoria" || fase === "result") && (
@@ -1101,31 +1193,39 @@ function DueloPanel({sec, controls, sessionId, gameState}){
     </div>
   );
 
-  const ESTADO_LABEL = { off:"Fuera del escenario", convocatoria:"Convocatoria abierta",
+  const ESTADO_LABEL = { off:"Fuera del escenario", convocatoria:"Anunciado · convocatoria abierta",
     voting:"Votación en curso", result:"Resultado en pantalla" };
 
   // ── Lista de postulantes ─────────────────────────────────────────────────
+  // Sólo los que esperan: el elegido como P1/P2 pasa a «Duelistas
+  // seleccionados» (vuelve si se lo quita del lugar) y el que está en el
+  // escenario ('selected') ya no es postulante. Al finalizar la ronda su
+  // postulación se borra en la base y para volver se tiene que postular.
+  const enLista = postulaciones.filter(p =>
+    p.status !== "selected" && p.id !== selP1 && p.id !== selP2);
   const listaPostulantes = (
     <div className="card" style={{marginBottom:10}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8}}>
         <div className="ctitle" style={{margin:0}}>Postulantes</div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)"}}>
-            {postulaciones.filter(p=>p.status!=="rejected").length} disponibles
+            {enLista.filter(p=>p.status!=="rejected").length} disponibles
           </div>
           <button className="btn btn-g" style={{padding:"3px 9px",fontSize:9.5}}
             disabled={busy || postulaciones.length===0} onClick={vaciarLista}>🧹 Vaciar</button>
         </div>
       </div>
 
-      {postulaciones.length===0 && (
+      {enLista.length===0 && (
         <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",textAlign:"center",padding:"14px 0"}}>
-          {alAire ? "Todavía no se postuló nadie…" : "Abrí la convocatoria para recibir postulaciones."}
+          {!alAire ? "Tocá 📢 Anunciar para recibir postulaciones."
+            : postulaciones.length===0 ? "Todavía no se postuló nadie…"
+            : "No hay más postulantes esperando."}
         </div>
       )}
 
       <div className="rey-list">
-        {postulaciones.map((p)=>{
+        {enLista.map((p)=>{
           const es1 = selP1===p.id, es2 = selP2===p.id;
           const enRonda = enRondaIds.includes(p.user_id);
           const rechazada = p.status==="rejected";
@@ -1137,8 +1237,7 @@ function DueloPanel({sec, controls, sessionId, gameState}){
                 <div className="qname">{p.user_name}</div>
                 <div style={{fontSize:9,color:"rgba(240,232,255,.35)"}}>
                   {enRonda ? "🎤 en el escenario"
-                    : rechazada ? "inactiva (de un flujo anterior)"
-                    : p.status==="selected" ? "ya participó · disponible" : "esperando"}
+                    : rechazada ? "inactiva (de un flujo anterior)" : "esperando"}
                 </div>
               </div>
               {rechazada ? (
@@ -1192,6 +1291,8 @@ function DueloPanel({sec, controls, sessionId, gameState}){
           Elegir no es lanzar: nadie se entera hasta que toques 🚀 Lanzar duelo.
         </div>
       </div>
+
+      <DueloCronometroCard col={DUELO_P1}/>
 
       <div className="card" style={{marginBottom:10}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8}}>
@@ -1252,12 +1353,11 @@ function DueloPanel({sec, controls, sessionId, gameState}){
               <div>
                 <div className="ctitle" style={{margin:0}}>🎤 Duelo de Talentos</div>
                 <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>
-                  Estado: {fase === "off" && anunciado ? "Anunciado (placa en pantalla)" : ESTADO_LABEL[fase]}
+                  Estado: {fase === "off" && anunciado ? "Placa suelta (sin convocatoria)" : ESTADO_LABEL[fase]}
                 </div>
               </div>
               {fase!=="off" && <div className="chip chip-live"><div className="dot-live"/>
-                {fase==="voting"?"Votando":fase==="result"?"Resultado":"Convocatoria"}</div>}
-              {fase==="off" && anunciado && <div className="chip chip-live"><div className="dot-live"/>Anunciado</div>}
+                {fase==="voting"?"Votando":fase==="result"?"Resultado":"Anunciado"}</div>}
             </div>
             {votando && !alAire && (
               <div style={{fontSize:10.5,color:"#FFD600",marginTop:8,lineHeight:1.5}}>
@@ -1277,12 +1377,14 @@ function DueloPanel({sec, controls, sessionId, gameState}){
                 </div>
               </div>
               <div style={{display:"flex",gap:8,margin:"10px 0 8px"}}>
-                <DueloLado p={d1} col={DUELO_P1} pct={pct.p1} votos={counts.p1}/>
-                <DueloLado p={d2} col={DUELO_P2} pct={pct.p2} votos={counts.p2}/>
+                <DueloLado p={d1} col={DUELO_P1} pct={pct.p1} votos={counts.p1} unidad={modoRonda === "votos" ? "voto" : "toque"}/>
+                <DueloLado p={d2} col={DUELO_P2} pct={pct.p2} votos={counts.p2} unidad={modoRonda === "votos" ? "voto" : "toque"}/>
               </div>
-              <DueloSplitBar p1={pct.p1}/>
+              <DueloSplitBar p1={anchoBarraP1(pct)}/>
               <div style={{fontSize:10,color:"rgba(240,232,255,.35)"}}>
-                Tope: {round?.tap_limit} aplausos por persona en esta ronda.
+                {MODOS_DUELO[modoRonda].titulo}
+                {modoRonda === "toques" && (round?.tap_limit
+                  ? ` · tope ${round.tap_limit} toques por persona` : " · toques sin límite")}
               </div>
             </div>
           )}
@@ -1300,8 +1402,8 @@ function DueloPanel({sec, controls, sessionId, gameState}){
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:8}}>
-                <DueloLado p={d1} col={DUELO_P1} pct={pct.p1} votos={counts.p1} ganador={resultado==="p1"}/>
-                <DueloLado p={d2} col={DUELO_P2} pct={pct.p2} votos={counts.p2} ganador={resultado==="p2"}/>
+                <DueloLado p={d1} col={DUELO_P1} pct={pct.p1} votos={counts.p1} unidad={modoRonda === "votos" ? "voto" : "toque"} ganador={resultado==="p1"}/>
+                <DueloLado p={d2} col={DUELO_P2} pct={pct.p2} votos={counts.p2} unidad={modoRonda === "votos" ? "voto" : "toque"} ganador={resultado==="p2"}/>
               </div>
             </div>
           )}

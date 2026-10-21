@@ -7,15 +7,14 @@ import { supabase } from "../lib/supabase";
  *   duelo_launch_round  → abre la ronda, fija participantes, video y reglas
  *   duelo_finish_round  → cierra la medición y persiste `result` (p1|p2|tie)
  *   duelo_cancel_round  → cancela la ronda activa y limpia la presentación
- *   applause_add        → un lote de aplausos (1..50) de un espectador
+ *   applause_add        → una tanda de toques (hasta 12) a un participante (Mod 1)
+ *   duelo_votar         → el voto único a uno de los dos (Mod 2)
+ *   (migraciones 20261020130000 y 20261020170000)
  *
  * Las RPC devuelven SIEMPRE un jsonb `{ ok, code, ... }` y no tiran por reglas
  * de negocio. Acá se normaliza la respuesta; nunca se decide nada que el
- * backend ya decide (ganador, cupo, quién puede votar).
+ * backend ya decide (puntaje, ganador, quién puede votar).
  */
-
-/** Máximo de taps por llamada a `applause_add` (espejo de c_max_delta). */
-export const APLAUSOS_MAX_POR_ENVIO = 50;
 
 /** Rangos de las reglas, espejo de los CHECK de `duelo_reglas_config`. */
 export const DUELO_DURACION_MIN = 10;
@@ -25,6 +24,22 @@ export const DUELO_APLAUSOS_MAX = 1000;
 
 export const REGLA_DUELO_DURACION = "duracion_votacion";
 export const REGLA_DUELO_APLAUSOS = "max_aplausos_usuario";
+export const REGLA_DUELO_MODO = "modo_votacion";
+
+/**
+ * Modos de votación (regla `modo_votacion`). En los dos, los barómetros se
+ * reparten el 100 % según los toques o votos de cada lado. La ronda congela
+ * su modo al lanzarse (`applause_sessions.vote_mode`).
+ */
+export const MODOS_DUELO = {
+  toques: { titulo: "Mod 1 · Por toques",
+    detalle: "El público toca a uno de los dos participantes todas las veces que quiera. Cuantos más toques recibe, más porcentaje tiene." },
+  votos:  { titulo: "Mod 2 · Voto único",
+    detalle: "Cada persona vota una sola vez, a uno o al otro (puede cambiar su voto). El porcentaje es la parte de votos de cada uno." },
+};
+
+/** Modo de la ronda; las rondas anteriores a la migración son de toques. */
+export const modoDeRonda = (round) => (round?.vote_mode === "votos" ? "votos" : "toques");
 
 /**
  * Llama una RPC que devuelve jsonb. Un error de transporte o de Postgres se
@@ -59,8 +74,20 @@ export const finalizarRondaDuelo = (roundId, force = true) =>
 export const cancelarRondaDuelo = (sessionId, clearScreen = true) =>
   rpcJson("duelo_cancel_round", { p_session: sessionId, p_clear_screen: clearScreen });
 
-export const enviarAplausos = (roundId, slot, delta) =>
-  rpcJson("applause_add", { p_round: roundId, p_slot: slot, p_delta: delta });
+/** Mod 1: una tanda de toques (hasta 12) a un participante. */
+export const tocarDuelo = (roundId, slot, toques) =>
+  rpcJson("applause_add", { p_round: roundId, p_slot: slot, p_delta: toques });
+
+/** Mod 2: el voto único (votar al otro lo mueve). */
+export const votarDuelo = (roundId, slot) =>
+  rpcJson("duelo_votar", { p_round: roundId, p_slot: slot });
+
+/** Mod 2: a quién voté en esta ronda (1 | 2 | null). */
+export async function miVotoDuelo(roundId) {
+  const { data, error } = await supabase.rpc("duelo_mi_voto", { p_round: roundId });
+  if (error) { console.error("[duelo] duelo_mi_voto:", error); return null; }
+  return data === 1 || data === 2 ? data : null;
+}
 
 /** Push nativo a los conectados de la sesión (Edge Function `send-push`). */
 export async function pushDuelo(sessionId, { title, body, tag }) {
@@ -90,6 +117,7 @@ const MENSAJES_ADMIN = {
   ROUND_NOT_FOUND:     "La ronda ya no existe.",
   ROUND_CANCELLED:     "La ronda fue cancelada.",
   VOTING_STILL_OPEN:   "La votación sigue abierta.",
+  WRONG_MODE:          "La ronda usa otro modo de votación.",
   NETWORK_ERROR:       "No se pudo contactar al servidor. Revisá la conexión.",
   RPC_ERROR:           "El servidor rechazó la operación.",
 };
@@ -145,15 +173,22 @@ export function faseDuelo(gameState, round) {
   return "convocatoria";
 }
 
-/** Reparto 0–100 de los totales. Sólo presentación: el ganador es `round.result`. */
+/**
+ * Los dos barómetros se reparten el 100 % según los toques o votos de cada
+ * lado: A = totalA / (totalA + totalB). Mientras uno sube, el otro baja. Sin
+ * ningún voto los dos están en 0 %. Sólo presentación: el ganador es
+ * `round.result`.
+ */
 export function porcentajesDuelo(counts) {
-  const p1 = Number(counts?.p1) || 0;
-  const p2 = Number(counts?.p2) || 0;
-  const total = p1 + p2;
-  if (!total) return { p1: 50, p2: 50 };
-  const p1Pct = Math.round((p1 / total) * 100);
-  return { p1: p1Pct, p2: 100 - p1Pct };
+  const a = Math.max(0, Number(counts?.p1) || 0);
+  const b = Math.max(0, Number(counts?.p2) || 0);
+  if (!(a + b)) return { p1: 0, p2: 0 };
+  const p1 = Math.round((a * 100) / (a + b));
+  return { p1, p2: 100 - p1 };
 }
+
+/** Ancho del lado P1 en una barra partida: al medio mientras nadie votó. */
+export const anchoBarraP1 = (pct) => (pct.p1 + pct.p2 === 0 ? 50 : pct.p1);
 
 /** Segundos que faltan para `voting_ends_at` (null si la ronda no tiene reloj). */
 export function segundosRestantes(round, nowMs) {

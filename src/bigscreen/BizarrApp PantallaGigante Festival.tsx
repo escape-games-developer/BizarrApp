@@ -789,7 +789,8 @@ export function EscenarioScreen({ gameState, sessionId, demoDuelo = null }) {
   // Los demás escenarios (ftl, pt, karaoke) siguen con el render clásico de abajo.
   if (type === "duelo") {
     return <DueloBigscreen gameState={gameState} sessionId={sessionId}
-      webappUrl={window.location.origin} demo={demoDuelo} />;
+      webappUrl={window.location.origin} demo={demoDuelo}
+      placa={<PlacaScreen logo={LOGO} gameState={{ ...gameState, active_placa:"duelo", placa_custom:null }}/>} />;
   }
 
   const INFO = {
@@ -897,8 +898,8 @@ export function PlacaScreen({ logo, gameState }) {
       grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)", bg:"linear-gradient(160deg,#08040F,#0D0820,#08040F)",
       glow:"rgba(155,47,255,.4)", border:"rgba(155,47,255,.25)" },
     // Placas de ANUNCIAR de los juegos de escenario (mismo criterio).
-    // `duelo` es sólo el ANUNCIO; la convocatoria con QR es otra pantalla
-    // (DueloBigscreen), que se muestra al abrir la convocatoria.
+    // `duelo` es el anuncio Y la convocatoria: DueloBigscreen la muestra
+    // mientras el Duelo está en el escenario sin ronda votando.
     duelo:         placaDeJuego("/placas/Duelo_de_talento-removebg-preview.png",  "Duelo de Talentos",  PALETA_PLACA.duelo),
     escenario_ftl: placaDeJuego("/placas/Follow_de_leader-removebg-preview.png",  "Follow the Leader",  PALETA_PLACA.ftl),
     escenario_pt:  placaDeJuego("/placas/Personal_Trainer-removebg-preview.png",  "Personal Trainer",   PALETA_PLACA.pt),
@@ -1185,15 +1186,17 @@ export default function PantallaGigante() {
       id:"demo", game_type:"duelo", p1_user_id:"d1", p1_name:"SOFI", p1_avatar:JSON.stringify({ avatar_emoji:"🦄" }),
       p2_user_id:"d2", p2_name:"JUAN", p2_avatar:JSON.stringify({ avatar_emoji:"🎸" }), tap_limit:100,
     };
+    // Toques de muestra de cada participante.
+    const muestra = (a, b) => ({ p1:a, p2:b });
     if (designerState === "dueloVoting") return {
-      round:{ ...base, status:"voting", voting_ends_at:new Date(Date.now() + 45000).toISOString() },
-      counts:{ p1:132, p2:98 },
+      round:{ ...base, status:"voting", vote_mode:"toques", voting_ends_at:new Date(Date.now() + 45000).toISOString() },
+      counts:muestra(132, 98),
     };
     if (designerState === "dueloWinner") return {
-      round:{ ...base, status:"finished", result:"p1", winner_slot:1 }, counts:{ p1:212, p2:167 },
+      round:{ ...base, status:"finished", vote_mode:"toques", result:"p1", winner_slot:1 }, counts:muestra(212, 167),
     };
     if (designerState === "dueloTie") return {
-      round:{ ...base, status:"finished", result:"tie", winner_slot:null }, counts:{ p1:150, p2:150 },
+      round:{ ...base, status:"finished", vote_mode:"toques", result:"tie", winner_slot:null }, counts:muestra(150, 150),
     };
     return null;
   })();

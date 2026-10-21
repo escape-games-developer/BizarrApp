@@ -641,7 +641,8 @@ export default function PantallaTV() {
             {showPalabra && <PalabraScreen sessionId={session?.id ?? null}/>}
             {showDuelo && (
               <DueloBigscreen gameState={gameState} sessionId={session?.id ?? null}
-                webappUrl={window.location.origin}/>
+                webappUrl={window.location.origin}
+                placa={<PlacaScreen logo="/logo.png" gameState={{ ...gameState, active_placa:"duelo", placa_custom:null }}/>}/>
             )}
             {/* QR de Rey / Desafío / Sumate / Arma (Ajustes → QR en pantalla) */}
             {(showRaffle || showTrivia || showSuma || showPalabra) && (

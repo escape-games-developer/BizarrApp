@@ -17,7 +17,10 @@ import {
  * Autoridad: los CHECK de la tabla.
  *   duracion_votacion    → value = {"segundos": 10..600}; enabled ON/OFF
  *                          (apagada conserva el valor).
- *   max_aplausos_usuario → value = {"max": 10..1000}; siempre enabled.
+ *   max_aplausos_usuario → value = {"max": 10..1000}; enabled ON = tope de
+ *                          toques por persona, OFF = toques indefinidos
+ *                          (migración 20261020190000; apagada conserva el valor).
+ *   modo_votacion        → value = {"modo": "toques" | "votos"}.
  */
 
 const COLUMNAS = "id,key,enabled,value,updated_at";

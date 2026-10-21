@@ -1,9 +1,15 @@
 import React, { useState } from "react";
 import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
-import { useDueloRound, useAplausos } from "../../hooks/realtime/useDueloRound";
+import { useDueloRound, useToquesDuelo, useVotoDuelo } from "../../hooks/realtime/useDueloRound";
 import {
-  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
+  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, modoDeRonda, anchoBarraP1,
 } from "../../services/duelo";
+
+// Cómo se vota en cada modo (ver MODOS_DUELO).
+const TEXTO_MODO = {
+  toques: { consigna: "Tocá sin parar al que más te guste: cuantos más toques, más porcentaje" },
+  votos:  { consigna: "Votá a uno de los dos. Podés cambiar tu voto hasta que termine" },
+};
 
 const DUELO_LOGO = "/placas/Duelo_de_talento-removebg-preview.png";
 const PINK = "#FF2D95";
@@ -72,17 +78,20 @@ const cajaCentro = {
  *   · postulación   → duelo_postulaciones (mi fila)
  *   · votación      → applause_sessions + applause_counts
  *   · resultado     → applause_sessions.result (lo decide el servidor)
- *   · mi saldo      → lo que devuelve applause_add (used / remaining)
+ *   · mis votos     → applause_add (toques) / duelo_votar (voto único)
  */
 export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack }) {
   const { postulaciones, misPostulacion, postularme, error } = useDueloPostulaciones(sessionId, user);
   const { round, counts, now, vencida } = useDueloRound(sessionId, { autoFinish: true });
-  const aplausos = useAplausos(round, user?.id || null);
+  const toques = useToquesDuelo(round);
+  const voto = useVotoDuelo(round, user?.id || null);
   const [enviando, setEnviando] = useState(false);
 
   const fase = faseDuelo({ ...gameState, active_escenario: activeEscenario }, round);
   const [d1, d2] = duelistasDeRonda(round);
   const pct = porcentajesDuelo(counts);
+  const modo = modoDeRonda(round);
+  const bloqueo = modo === "votos" ? voto.bloqueo : toques.bloqueo;
 
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
@@ -135,7 +144,7 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
     );
 
     // El duelista ve el marcador, sin botones: no vota (lo impide el backend).
-    if (soyDuelista || aplausos.bloqueo === "DUELIST_CANNOT_VOTE") {
+    if (soyDuelista || bloqueo === "DUELIST_CANNOT_VOTE") {
       return (
         <div>
           {header}
@@ -165,26 +174,32 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
               </div>
             ))}
           </div>
-          <SplitBar p1={pct.p1} />
+          <SplitBar p1={anchoBarraP1(pct)} />
         </div>
       );
     }
 
-    const cerrada = vencida || aplausos.bloqueo === "CLOSED";
-    const sinSaldo = aplausos.bloqueo === "LIMIT_REACHED" || aplausos.restante <= 0;
-    const deshabilitado = cerrada || sinSaldo || aplausos.bloqueo === "NOT_PRESENT" || aplausos.bloqueo === "ERROR";
+    const cerrada = vencida || bloqueo === "CLOSED";
+    const sinSaldo = modo === "toques" && (bloqueo === "LIMIT_REACHED" || toques.restante === 0);
+    const deshabilitado = cerrada || sinSaldo || bloqueo === "NOT_PRESENT" || bloqueo === "ERROR"
+      || (modo === "votos" && voto.enviando);
 
-    const tap = (slot) => {
-      if (aplausos.tap(slot) && navigator.vibrate) navigator.vibrate(12);
+    // Tocar a un participante: un toque más (Mod 1) o el voto único (Mod 2).
+    const votarA = (slot) => {
+      if (modo === "votos") { voto.votar(slot); if (navigator.vibrate) navigator.vibrate(20); return; }
+      if (toques.tap(slot) && navigator.vibrate) navigator.vibrate(12);
     };
 
     let saldo;
     if (cerrada) saldo = "Se cerró la votación. Esperando el resultado…";
-    else if (aplausos.bloqueo === "NOT_PRESENT") saldo = "Tenés que estar conectado a la sesión para aplaudir.";
-    else if (aplausos.bloqueo === "ERROR") saldo = "No pudimos registrar tus aplausos.";
-    else if (sinSaldo) saldo = "Ya usaste todos tus aplausos 👏";
-    else if (!aplausos.confirmado && aplausos.usados === 0) saldo = `Tenés ${aplausos.limite} aplausos para repartir`;
-    else saldo = `Te quedan ${aplausos.restante} aplauso${aplausos.restante === 1 ? "" : "s"}`;
+    else if (bloqueo === "NOT_PRESENT") saldo = "Tenés que estar conectado a la sesión para votar.";
+    else if (bloqueo === "ERROR") saldo = "No pudimos registrar tu voto.";
+    else if (modo === "votos") saldo = voto.miVoto
+      ? `Votaste a ${voto.miVoto === 1 ? d1?.name : d2?.name} ✓ Podés cambiar tu voto`
+      : "Todavía no votaste";
+    else if (sinSaldo) saldo = "Ya usaste todos tus toques";
+    else if (toques.limite != null) saldo = `Te quedan ${toques.restante} toque${toques.restante === 1 ? "" : "s"}`;
+    else saldo = toques.mios > 0 ? `Llevás ${toques.mios} toque${toques.mios === 1 ? "" : "s"}` : "Toques sin límite";
 
     return (
       <div>
@@ -196,29 +211,38 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
         {reloj}
         {vs}
         <div style={{ textAlign: "center", fontSize: 13, color: "rgba(245,230,192,.6)", marginBottom: 12 }}>
-          Tocá sin parar al que más te guste 👏
+          {TEXTO_MODO[modo].consigna}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          {lados.map(({ slot, s, color, pct: valor }) => (
-            <button key={slot} className="duelo-tap" onClick={() => tap(slot)} disabled={deshabilitado}
-              style={{
-                flex: 1, padding: "20px 8px", borderRadius: 18,
-                cursor: deshabilitado ? "default" : "pointer", opacity: deshabilitado ? 0.55 : 1,
-                border: `2px solid ${color}`, background: `${color}14`,
-                WebkitTapHighlightColor: "transparent", touchAction: "manipulation", userSelect: "none",
-              }}>
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color, marginBottom: 6 }}>PARTICIPANTE {slot}</div>
-              <SlotFace slot={s} color={color} />
-              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color, marginTop: 8 }}>{s?.name}</div>
-              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26, color: "#F0E8FF", marginTop: 4 }}>{valor}%</div>
-              <div style={{ fontSize: 22, marginTop: 4 }}>👏</div>
-            </button>
-          ))}
+          {lados.map(({ slot, s, color, pct: valor }) => {
+            const elegido = modo === "votos" && voto.miVoto === slot;
+            return (
+              <button key={slot} className="duelo-tap" disabled={deshabilitado} onClick={() => votarA(slot)}
+                aria-label={`${modo === "votos" ? "Votar a" : "Tocar a"} ${s?.name || `participante ${slot}`}`}
+                style={{
+                  flex: 1, padding: "20px 8px", borderRadius: 18,
+                  cursor: deshabilitado ? "default" : "pointer", opacity: deshabilitado ? 0.55 : 1,
+                  border: `${elegido ? 3 : 2}px solid ${color}`, background: elegido ? `${color}33` : `${color}14`,
+                  boxShadow: elegido ? `0 0 18px ${color}88` : "none",
+                  WebkitTapHighlightColor: "transparent", touchAction: "manipulation", userSelect: "none",
+                }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color, marginBottom: 6 }}>
+                  {elegido ? "✓ TU VOTO" : `PARTICIPANTE ${slot}`}
+                </div>
+                <SlotFace slot={s} color={color} />
+                <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color, marginTop: 8 }}>{s?.name}</div>
+                <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26, color: "#F0E8FF", marginTop: 4 }}>{valor}%</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color, marginTop: 6 }}>
+                  {modo === "votos" ? (elegido ? "Tu voto" : "Votar") : "¡Tocá!"}
+                </div>
+              </button>
+            );
+          })}
         </div>
-        <SplitBar p1={pct.p1} />
+        <SplitBar p1={anchoBarraP1(pct)} />
         <div style={{
           marginTop: 14, textAlign: "center", fontSize: 14, fontWeight: 700,
-          color: sinSaldo || cerrada ? "rgba(245,230,192,.5)" : "#F0E8FF",
+          color: cerrada || sinSaldo ? "rgba(245,230,192,.5)" : "#F0E8FF",
         }}>
           {saldo}
         </div>
@@ -261,7 +285,8 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   }
 
   // ── Convocatoria ─────────────────────────────────────────────────────────
-  const disponibles = postulaciones.filter((p) => p.status !== "rejected");
+  // Los que están en el escenario ('selected') ya no son postulantes.
+  const disponibles = postulaciones.filter((p) => p.status === "waiting");
   const otros = disponibles.filter((p) => p.user_id !== user?.id);
 
   const handlePostularme = async () => {
@@ -344,7 +369,7 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
         </div>
         <div style={{ fontSize: 12.5, color: "rgba(245,230,192,.5)" }}>
           {misPostulacion.status === "selected"
-            ? "Ya participaste: seguís en la lista por si te vuelven a llamar."
+            ? "¡Te eligieron! Preparate para subir al escenario."
             : "Esperando que el staff elija a los participantes…"}
         </div>
       </div>
