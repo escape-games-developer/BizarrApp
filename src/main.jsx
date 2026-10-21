@@ -13,6 +13,14 @@ if (isClientPreviewPath(window.location.pathname)) {
   // Todas las demás rutas, igual que antes (ver src/appRoutes.jsx).
   import("./appRoutes");
 
+  // El aviso de instalación puede llegar antes de que App monte ModoApp
+  // (mientras carga el estado): se guarda acá y ModoApp lo toma al montar.
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    window.__bizarrAvisoInstalar = e;
+    window.dispatchEvent(new Event("bizarr-instalable"));
+  });
+
   // Registro del Service Worker — habilita las notificaciones push nativas.
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

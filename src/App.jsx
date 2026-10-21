@@ -10,6 +10,7 @@ import { usePresence }          from "./hooks/realtime/usePresence";
 import { PushPermissionBanner } from "./components/PushPermissionBanner";
 import { NotificationBell }     from "./components/NotificationBell";
 import { DueloTeaserBanner }    from "./components/DueloTeaserBanner";
+import ModoApp                  from "./components/ModoApp";
 import ClientShell              from "./client/shell/ClientShell";
 import { clientNavItems, CLIENT_LOGO_URL } from "./client/shell/clientShellData";
 
@@ -269,6 +270,8 @@ export default function BizarrApp() {
               nombreCliente={user?.registered ? user.name : null}/>}
         </ClientShell>
         <PushPermissionBanner user={user} />
+        {/* Vertical fija, pantalla completa e instalación (sólo la app del cliente). */}
+        <ModoApp />
         <DueloTeaserBanner
           activeEscenario={gameState?.active_escenario ?? null}
           currentView={view}
