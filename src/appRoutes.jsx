@@ -21,6 +21,10 @@ else if (path.startsWith("/admin"))    Component = AdminPanel;
 // /tv es el motor de reproducción del módulo Pantalla/Escenario. Va antes que
 // /pantalla porque es otra pantalla física: la gigante de siempre no se toca.
 else if (path.startsWith("/tv"))       Component = PantallaTV;
+// Pantalla Telepronter: espejo mudo de /tv para el participante en escenario.
+else if (path.startsWith("/telepronter")) Component = function PantallaTelepronter() {
+  return <PantallaTV modo="telepronter" />;
+};
 else if (path.startsWith("/pantalla")) Component = PantallaGigante;
 else if (path.startsWith("/designer")) Component = DesignerView;
 else                                   Component = BizarrApp;

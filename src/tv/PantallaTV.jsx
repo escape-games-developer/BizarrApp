@@ -12,7 +12,7 @@ import TomatazoOverlay from "./TomatazoOverlay";
 import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
-import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado } from "../services/pantallaDj";
+import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado, telepronterReport } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig, normalizeTvConfig } from "../designers/lib/persistence";
 import { DEFAULT_TV_CONFIG } from "../designers/defaults";
@@ -28,7 +28,16 @@ import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
  *
  * Entra sin sesión: /tv?code=XXXXXX&key=<token>. El token se valida server-side
  * con `pantalla_resolve_tv`; nunca se expone por REST.
+ *
+ * Con `modo="telepronter"` (/telepronter, mismo link) es la Pantalla
+ * Telepronter: la misma imagen para el participante en el escenario, pero
+ * como ESPEJO — muda, sin reportar progreso y sin avanzar la cola ni cerrar
+ * turnos de Escenario. Sigue a /tv por Realtime. El Admin la puede invertir
+ * horizontalmente (`pantalla_events.telepronter_espejo`).
  */
+
+/** Cada cuánto la Telepronter avisa que está abierta (el Admin la da por viva 20 s). */
+const TELEPRONTER_LATIDO_MS = 8_000;
 
 const C = {
   bg: "#08040F", gold: "#FFD600", cyan: "#00E5FF",
@@ -221,14 +230,17 @@ function TvStatic({ phase, waiting }) {
 }
 
 // ─── Vista principal ─────────────────────────────────────────────────────────
-export default function PantallaTV() {
+export default function PantallaTV({ modo = "tv" }) {
+  const telepronter = modo === "telepronter";
   const params = new URLSearchParams(window.location.search);
   const code   = (params.get("code") || "").trim().toUpperCase();
   const token  = params.get("key") || "";
 
   const [eventId,  setEventId]  = useState(null);
   const [authErr,  setAuthErr]  = useState(null);
-  const [unlocked, setUnlocked] = useState(false);
+  // La Telepronter va muda: el navegador deja arrancar el video sin el toque
+  // de desbloqueo, así que entra directo.
+  const [unlocked, setUnlocked] = useState(telepronter);
   // Respaldo local: sólo se usa si el evento todavía no tiene diseño guardado
   // en la base (el Diseñador TV sube el suyo al primer Guardar).
   const [canvasLocal, setCanvasConfig] = useState(() => loadTvConfig("default"));
@@ -377,7 +389,8 @@ export default function PantallaTV() {
   const turnoTerminadoRef = useRef(null);
   const terminarVideoEscenario = () => {
     const turno = participanteFtl?.turn_id;
-    if (!turno || turnoTerminadoRef.current === turno || !eventId || !token) return;
+    // El turno lo cierra /tv; la Telepronter sólo lo refleja.
+    if (telepronter || !turno || turnoTerminadoRef.current === turno || !eventId || !token) return;
     turnoTerminadoRef.current = turno;
     tvEscenarioVideoTerminado(eventId, token, turno)
       .catch((e) => { turnoTerminadoRef.current = null; console.error("[PantallaTV] fin de video de escenario:", e); });
@@ -391,12 +404,13 @@ export default function PantallaTV() {
   // lo sigue exponiendo para quien lo necesite, pero acá no hay nada que esperar.
   const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
     useContinuousTvPlayers({ current: fuente, eventId, token, unlocked,
-      muted: !screenAudioOn || muteDj,
+      muted: telepronter || !screenAudioOn || muteDj,
       playing: reproduciendo,
       // La performance no es la canción del evento: si la TV pidiera avanzar
       // al terminarla, el servidor archivaría la canción del DJ que está
-      // congelada detrás.
-      autoAdvance: !itemFtl,
+      // congelada detrás. La Telepronter nunca avanza: espera el cambio de /tv.
+      autoAdvance: !telepronter && !itemFtl,
+      reportar: !telepronter,
       // Fin del video del juego: vuelve a la convocatoria, sin transición.
       onFuenteTerminada: (itemId) => { if (itemFtl && itemId === itemFtl.id) terminarVideoEscenario(); },
       captionsEnabled: event?.youtube_captions_enabled === true,
@@ -413,6 +427,17 @@ export default function PantallaTV() {
       })
       .catch((err) => setAuthErr(err.message));
   }, [code, token]);
+
+  // Latido de la Telepronter: es lo que el Admin lee para mostrarla activa.
+  useEffect(() => {
+    if (!telepronter || !eventId || !token) return;
+    const latir = () => telepronterReport(eventId, token)
+      .catch((err) => console.warn("[Telepronter] latido:", err.message));
+    latir();
+    const id = setInterval(latir, TELEPRONTER_LATIDO_MS);
+    return () => clearInterval(id);
+  }, [telepronter, eventId, token]);
+  const espejo = telepronter && event?.telepronter_espejo === true;
 
   useEffect(() => {
     const refreshCanvas = (event) => {
@@ -464,7 +489,7 @@ export default function PantallaTV() {
           Acceso de TV inválido
         </div>
         <div style={{ fontSize: 14, color: "rgba(240,232,255,.45)", maxWidth: 460, lineHeight: 1.6 }}>
-          {authErr} Generá el link desde <strong>Admin › Pantalla/Escenario › DJ</strong>.
+          {authErr} Abrila desde el selector de pantallas del <strong>Admin</strong>.
         </div>
       </div>
     </>
@@ -508,8 +533,14 @@ export default function PantallaTV() {
     </>
   );
 
+  // El espejo envuelve TODO, incluidas las capas `position: fixed` (lluvia,
+  // reacciones): un ancestro con transform pasa a ser su caja contenedora, así
+  // que se invierten junto con el resto sin tocarlas una por una.
   return (
-    <>
+    <div data-telepronter-espejo={espejo || undefined} style={{
+      position: "relative", width: "100vw", height: "100vh", overflow: "hidden",
+      transform: espejo ? "scaleX(-1)" : "none",
+    }}>
       <style>{css}</style>
       <div data-tv-live-stage style={{
         position: "relative", height: "100vh", width: "100vw", overflow: "hidden",
@@ -531,7 +562,7 @@ export default function PantallaTV() {
 
           {archivoFtl && (
             <video key={archivoFtl.url} src={archivoFtl.url} autoPlay playsInline
-              muted={!screenAudioOn}
+              muted={telepronter || !screenAudioOn}
               onEnded={terminarVideoEscenario}
               onError={(e) => console.error("[PantallaTV] video de escenario:", e)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
@@ -690,7 +721,7 @@ export default function PantallaTV() {
       {!soloVideoFtl && !hasLiveLayer && !hasPlaca && (
         <TomatazoOverlay event={event} eventId={eventId} client={supabaseAnon}/>
       )}
-    </>
+    </div>
   );
 }
 

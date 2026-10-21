@@ -98,7 +98,7 @@ export function effectiveEndOf(item, duration) {
   return real;
 }
 
-export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, onFuenteTerminada = null, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0 }) {
+export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, onFuenteTerminada = null, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0, reportar = true }) {
   const [visiblePlayer, setVisiblePlayer] = useState(0);
   const [rainPhase, setRainPhase] = useState("idle");
   // Qué item está realmente en pantalla, no cuál pidió el servidor. Es la señal
@@ -131,6 +131,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
   // Ultimo fallo del RPC de avance por item: evita reintentar 2 veces por segundo.
   const advanceFailRef = useRef(new Map());
   const captionsEnabledRef = useRef(captionsEnabled);
+  // La Telepronter usa este mismo motor como espejo: no informa progreso, o
+  // pisaría `tv_connected_at` y el Admin vería la TV conectada sin estarlo.
+  const reportarRef = useRef(reportar);
+  reportarRef.current = reportar;
 
   latestCurrentRef.current = current;
   // Con `autoAdvance` en false lo que suena NO es la canción del evento —hoy,
@@ -831,7 +835,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       const index  = activeIndexRef.current;
       const player = playersRef.current[index];
       const item   = displayedItemRef.current;
-      if (!player || !item || slotsRef.current[index].itemId !== item.id) return;
+      if (!reportarRef.current || !player || !item || slotsRef.current[index].itemId !== item.id) return;
       tvReport(eventId, token, safeTime(player), effectiveEndOf(item, safeDuration(player))).catch(() => {});
     }, REPORT_MS);
 

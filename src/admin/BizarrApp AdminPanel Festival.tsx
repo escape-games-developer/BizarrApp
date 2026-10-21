@@ -28,7 +28,7 @@ import AdminSidebar from "./AdminSidebar";
 import AjustesPanel from "./AjustesPanel";
 import { useSidebarConfig } from "../hooks/useSidebarConfig";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
-import { getTvLink, tvUrl } from "../services/pantallaDj";
+import SelectorPantallas from "./pantalla/SelectorPantallas";
 import { avanzarDjAlSiguiente } from "../services/escenarioDj";
 import { videoParaEscenario } from "../services/escenarioBiblioteca";
 import BibliotecaEscenario from "./escenario/BibliotecaEscenario";
@@ -6392,16 +6392,6 @@ export default function AdminPanel(){
   const { connectedCount } = usePresence(session?.id, null);
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
   const pantallaActiva = pantallaGlobal.event?.status === "live";
-  const abrirPantallaTv = useCallback(async()=>{
-    const evento = pantallaGlobal.event;
-    if(!evento) return;
-    try{
-      const link = await getTvLink(evento.id);
-      window.open(tvUrl(link.code||evento.code,link.token),"_blank","noopener");
-    }catch(err){
-      showToast({type:"error",title:"Pantalla TV",text:err.message});
-    }
-  },[pantallaGlobal.event]);
   const { pending, approved, approve, reject } = useMessages(session?.id, "admin");
   const {
     pending: vidPending,
@@ -6632,14 +6622,9 @@ export default function AdminPanel(){
                   </div>
                 )}
               </div>
-              <button type="button" onClick={abrirPantallaTv} disabled={!pantallaGlobal.event}
-                style={{display:"flex",alignItems:"center",gap:6,background:"#7A6E8A18",
-                  border:"1px solid #7A6E8A66",borderRadius:20,padding:"5px 14px",minWidth:96,
-                  justifyContent:"center",height:30,boxSizing:"border-box",cursor:pantallaGlobal.event?"pointer":"not-allowed",
-                  color:pantallaGlobal.event?"#F0E8FF":"#7A6E8A",fontSize:11,fontWeight:700,
-                  opacity:pantallaGlobal.event?1:.55,order:1}} title="Abrir la Pantalla TV del evento activo">
-                📺 ABRIR TV
-              </button>
+              <SelectorPantallas event={pantallaGlobal.event}
+                onError={(err)=>showToast({type:"error",title:"Pantallas",
+                  text:err.message==="rls_sin_filas"?"No se pudo guardar el espejo: sin permiso sobre el evento.":err.message})}/>
               <div style={{display:"flex",alignItems:"center",gap:6,
                 background:pantallaActiva?"#00F5A018":"#7A6E8A18",
                 border:`1px solid ${pantallaActiva?"#00F5A0":"#7A6E8A66"}`,

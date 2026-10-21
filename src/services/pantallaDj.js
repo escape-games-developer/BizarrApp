@@ -70,6 +70,9 @@ export const ytThumb  = (id) => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 export const guestUrl = (code) => `${window.location.origin}/?pantallaCode=${code}`;
 export const tvUrl    = (code, token) =>
   `${window.location.origin}/tv?code=${code}&key=${token}`;
+/** Pantalla Telepronter: el espejo de /tv para el participante. Mismo token. */
+export const telepronterUrl = (code, token) =>
+  `${window.location.origin}/telepronter?code=${code}&key=${token}`;
 
 // ── Lectura ─────────────────────────────────────────────────────────────────
 
@@ -354,6 +357,10 @@ export const tvReport = (eventId, token, currentTime, duration) =>
     _event_id: eventId, _token: token,
     _current_time: currentTime ?? null, _duration: duration ?? null,
   }, supabaseAnon);
+
+/** Latido de la Telepronter: sólo marca que está abierta. No toca la reproducción. */
+export const telepronterReport = (eventId, token) =>
+  rpc("pantalla_telepronter_report", { _event_id: eventId, _token: token }, supabaseAnon);
 
 /**
  * Fin de la canción actual según la TV. `_item_id` no es informativo: viaja
