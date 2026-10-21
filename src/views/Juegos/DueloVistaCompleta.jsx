@@ -15,26 +15,6 @@ const DUELO_LOGO = "/placas/Duelo_de_talento-removebg-preview.png";
 const PINK = "#FF2D95";
 const ORANGE = "#FF9500";
 
-// Avatar mini a partir de una fila de duelo_postulaciones.
-function MiniAvatar({ p, highlight = false, size = 44 }) {
-  const base = {
-    width: size, height: size, borderRadius: "50%", flexShrink: 0,
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: size * 0.5, overflow: "hidden",
-    background: "rgba(255,255,255,.06)",
-    border: `2px solid ${highlight ? PINK : "rgba(255,255,255,.12)"}`,
-    boxShadow: highlight ? `0 0 12px ${PINK}` : "none",
-  };
-  if (p.photo_url) {
-    return (
-      <div style={base}>
-        <img src={p.photo_url} alt={p.user_name || ""} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      </div>
-    );
-  }
-  return <div style={base}>{p.avatar_emoji || (p.user_name || "?").slice(0, 1).toUpperCase()}</div>;
-}
-
 // Cara de un duelista de la ronda ({ name, avatar_emoji, photo_url }).
 function SlotFace({ slot, color, size = 68 }) {
   const base = {
@@ -81,7 +61,7 @@ const cajaCentro = {
  *   · mis votos     → applause_add (toques) / duelo_votar (voto único)
  */
 export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack }) {
-  const { postulaciones, misPostulacion, postularme, error } = useDueloPostulaciones(sessionId, user);
+  const { misPostulacion, postularme, error } = useDueloPostulaciones(sessionId, user);
   const { round, counts, now, vencida } = useDueloRound(sessionId, { autoFinish: true });
   const toques = useToquesDuelo(round);
   const voto = useVotoDuelo(round, user?.id || null);
@@ -95,14 +75,27 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
 
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-      <button onClick={onBack} style={{
+      {/* Sin `onBack` el Duelo ocupa Juegos entero: no hay a dónde volver. */}
+      {onBack && <button onClick={onBack} style={{
         background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)",
         borderRadius: 10, padding: "7px 12px", color: "#F0E8FF",
         fontSize: 13, fontWeight: 700, cursor: "pointer", WebkitTapHighlightColor: "transparent",
-      }}>← Volver</button>
+      }}>← Volver</button>}
       <h3 style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 17, color: PINK, margin: 0 }}>
         Duelo de Talentos
       </h3>
+    </div>
+  );
+
+  // Cartel de fin de ronda, debajo del resultado. Cuando el admin vuelve a la
+  // placa, la vista pasa sola a la convocatoria (Postularme).
+  const proximaRonda = (
+    <div style={{
+      marginTop: 14, padding: "14px 16px", borderRadius: 14, textAlign: "center",
+      background: "rgba(255,214,0,.07)", border: "1px solid rgba(255,214,0,.3)",
+      fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15, color: "#FFD600",
+    }}>
+      ⏳ Esperá la próxima ronda
     </div>
   );
 
@@ -280,14 +273,14 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
             </div>
           ))}
         </div>
+        {proximaRonda}
       </div>
     );
   }
 
   // ── Convocatoria ─────────────────────────────────────────────────────────
-  // Los que están en el escenario ('selected') ya no son postulantes.
-  const disponibles = postulaciones.filter((p) => p.status === "waiting");
-  const otros = disponibles.filter((p) => p.user_id !== user?.id);
+  // El cliente NO ve cuántos se postularon ni quiénes: sólo su botón o su
+  // estado. La lista es del Admin.
 
   const handlePostularme = async () => {
     if (enviando) return;
@@ -327,16 +320,6 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
             }}>{error}</div>
           )}
         </div>
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 12, color: "rgba(245,230,192,.4)", marginBottom: 8, textAlign: "center" }}>
-            {disponibles.length} postulado{disponibles.length === 1 ? "" : "s"}
-          </div>
-          {otros.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-              {otros.map((p) => <MiniAvatar key={p.id} p={p} size={38} />)}
-            </div>
-          )}
-        </div>
       </div>
     );
   }
@@ -356,7 +339,9 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
     );
   }
 
-  // waiting o selected (ya participó en una ronda anterior): sigue en la lista.
+  // waiting, o selected justo antes de que arranque la votación. Al terminar
+  // la ronda la base BORRA la postulación de los dos que subieron (migración
+  // 20261020150000), así que vuelven a ver «Postularme».
   return (
     <div>
       {header}
@@ -372,12 +357,6 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
             ? "¡Te eligieron! Preparate para subir al escenario."
             : "Esperando que el staff elija a los participantes…"}
         </div>
-      </div>
-      <div style={{ fontSize: 12, color: "rgba(245,230,192,.4)", marginBottom: 10, textAlign: "center" }}>
-        {disponibles.length} postulado{disponibles.length === 1 ? "" : "s"}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
-        {disponibles.map((p) => <MiniAvatar key={p.id} p={p} highlight={p.user_id === user?.id} />)}
       </div>
     </div>
   );

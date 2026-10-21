@@ -29,6 +29,7 @@ import AjustesPanel from "./AjustesPanel";
 import { useSidebarConfig } from "../hooks/useSidebarConfig";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import SelectorPantallas from "./pantalla/SelectorPantallas";
+import { pushConvocatoria } from "../services/anunciosPush";
 import { avanzarDjAlSiguiente } from "../services/escenarioDj";
 import { videoParaEscenario } from "../services/escenarioBiblioteca";
 import BibliotecaEscenario from "./escenario/BibliotecaEscenario";
@@ -1561,14 +1562,6 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
     }, gameState?.escenario_video || null);
   });
 
-  // Abrir convocatoria = escenario en el aire sin participante. Es también el
-  // reset de ronda: baja al participante anterior de la cola.
-  const abrirConvocatoria = () => correr(async () => {
-    if (active) await oTirar(finish(active.id));
-    await controls?.openEscenario(type);
-    avanceHechoRef.current = false;
-  });
-
   // 🎵 Volver a DJ Democracy. Como la canción del evento nunca dejó de ser la
   // suya, alcanza con soltar el escenario: la TV vuelve sola a esa canción. No
   // hay ningún avance que hacer y por eso no se saltea ningún tema.
@@ -1601,20 +1594,23 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
   });
 
   // ── Barra operativa ──────────────────────────────────────────────────────
-  // Mismo criterio que Rey / Sumate / Arma / Duelo: Anunciar · Lanzar ·
-  // Finalizar, ÚNICA ubicación de las tres acciones.
-  //   · Anunciar: sólo la placa `escenario_<type>` (sendPlaca), con el juego
-  //     fuera del aire — sendPlaca pone active_escenario=null.
-  //   · Convocatoria: escenario en el aire sin participante (se anotan).
+  // Mismo criterio que el Duelo: Anunciar · Lanzar · Finalizar, ÚNICA
+  // ubicación de las tres acciones.
+  //   · Anunciar: convocatoria abierta en un solo paso (escenario en el aire
+  //     sin participante; la TV muestra la pantalla de «anotate») + la ÚNICA
+  //     notificación del juego, que lleva directo a postularse. Ya no hay un
+  //     aviso previo con PRÓXIMAMENTE y sin botón.
   //   · Lanzar: arranca el video del participante preparado (= ▶ Comenzar).
   //   · Finalizar: con el juego al aire es el cierre completo (cerrarJuego);
-  //     con sólo la placa puesta, la retira.
+  //     con una placa suelta puesta desde Placas, la retira.
   const placaId  = `escenario_${type}`;
   const anunciado = gameState?.active_placa === placaId && !enElAire;
   const anunciar = () => correr(async () => {
-    const r = await controls?.sendPlaca(placaId);
-    if (r?.error) throw new Error(r.error.message || String(r.error));
-    setNota(`📢 Placa de ${juego.label} en pantalla. Todavía no hay convocatoria.`);
+    if (active) await oTirar(finish(active.id));
+    await controls?.openEscenario(type);
+    avanceHechoRef.current = false;
+    pushConvocatoria(sessionId, juego);
+    setNota(`📢 ${juego.label} anunciado: convocatoria abierta y notificación enviada.`);
   });
   const finalizarJuego = () => {
     if (enElAire) return cerrarJuego();
@@ -1624,11 +1620,10 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
       setNota(`⏹ Placa de ${juego.label} retirada. La TV volvió a DJ Democracy.`);
     });
   };
-  const puedeAnunciar     = !busy && !enElAire && !anunciado;
-  const puedeConvocatoria = !busy && !enElAire;
+  const puedeAnunciar     = !busy && !enElAire;
   const puedeLanzar       = !busy && enElAire && !!active && !!proyectado && !enVivo && tieneVideo;
   const puedeFinalizar    = !busy && (enElAire || anunciado);
-  const motivoNoLanzar = !enElAire ? "Abrí la convocatoria primero."
+  const motivoNoLanzar = !enElAire ? "Anunciá el juego primero: abre la convocatoria."
     : !active ? "Llamá a un participante al escenario."
     : enVivo ? null
     : !tieneVideo ? "Asignale un video desde la Biblioteca."
@@ -1637,15 +1632,10 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
   const barraOperativa = (
     <div className="card" style={{marginBottom:10, borderColor:`${COL}4D`}}>
       <div style={{display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:6}}>
-        <button className="btn btn-g" style={{padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
+        <button className="btn btn-g" style={{gridColumn:"span 2", padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
           disabled={!puedeAnunciar} onClick={anunciar}
-          title={enElAire ? `${juego.label} ya está al aire` : anunciado ? "La placa ya está en pantalla" : `Mostrar la placa de ${juego.label}`}>
+          title={enElAire ? "La convocatoria ya está abierta" : "Abre la convocatoria y avisa a los clientes para que se postulen"}>
           📢 Anunciar
-        </button>
-        <button className="btn btn-g" style={{padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
-          disabled={!puedeConvocatoria} onClick={abrirConvocatoria}
-          title={enElAire ? "La convocatoria ya está abierta" : "Abrir la convocatoria: el público se puede anotar"}>
-          📣 Abrir convocatoria
         </button>
         <button className="btn btn-p" style={{gridColumn:"span 2", padding:"11px 4px", fontSize:11.5, whiteSpace:"normal", lineHeight:1.25}}
           disabled={!puedeLanzar} onClick={comenzar}

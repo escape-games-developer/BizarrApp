@@ -94,7 +94,7 @@ export async function pushDuelo(sessionId, { title, body, tag }) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     await supabase.functions.invoke("send-push", {
-      body: { session_id: sessionId, title, body, url: "/?view=games&game=duelo", tag },
+      body: { session_id: sessionId, title, body, url: "/?view=escenario", tag },
       headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
     });
   } catch (e) {

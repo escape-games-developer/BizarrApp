@@ -30,6 +30,11 @@ import { RegistroMailView, ElegirRegistroView } from "./views/Auth/RegistroMailV
 
 const VIEWS            = ["novedades", "menu", "pantalla", "games", "escenario", "profile"];
 
+// El Duelo vive en Escenario. Los links viejos (`?view=games&game=duelo`, de
+// notificaciones ya enviadas) se mandan ahí.
+const destinoDeLink = (view, params) =>
+  view === "games" && params.get("game") === "duelo" ? "escenario" : view;
+
 export default function BizarrApp() {
   const { user, regStep, setRegStep, register, requestEmailSignup, completeEmailSignup, login, loginAsGuest,
           updateUser, logout, resendConfirmation, changePassword, deleteAccount,
@@ -39,7 +44,7 @@ export default function BizarrApp() {
     const params    = new URLSearchParams(window.location.search);
     // `view` es el parámetro público (lo usan el push, el QR y la vuelta del
     // mail de confirmación); `designerView` queda para el modo diseñador.
-    const requested = params.get("view") || params.get("designerView");
+    const requested = destinoDeLink(params.get("view") || params.get("designerView"), params);
     return VIEWS.includes(requested) ? requested : "novedades";
   });
 
@@ -63,8 +68,6 @@ export default function BizarrApp() {
     if (params.get("passwordChanged")) return "passwordChanged";
     return null;
   });
-  // Qué juego está abierto adentro de la vista Juegos (ej: 'duelo')
-  const [gameOpen, setGameOpen] = useState(null);
   // Configuración de playlists de YouTube (persiste en localStorage)
   const { config: ytConfig } = useYouTubePlaylistAdmin();
   // "login" | "elegirRegistro" | "register" | "registroMail" | "forgot"
@@ -98,13 +101,8 @@ export default function BizarrApp() {
   // logueado: cuenta registrada o invitado.
   const isRestricted = general.geoObligatoria ? (!user?.geoOk && !isGuest) : !isLoggedIn;
 
-  // Deep-link desde push: /?view=games&game=duelo abre el duelo directo (una sola vez).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("view") === "games" && params.get("game") === "duelo") {
-      setView("games");
-      setGameOpen("duelo");
-    }
     // Deep-link del QR de Pantalla/Escenario: /?pantallaCode=XXXXXX
     if (params.get("pantallaCode")) setView("pantalla");
 
@@ -138,9 +136,8 @@ export default function BizarrApp() {
     const onMessage = (event) => {
       if (event.data?.type !== "bizarren-navigate" || typeof event.data.url !== "string") return;
       const params = new URL(event.data.url, window.location.origin).searchParams;
-      const destino = params.get("view");
+      const destino = destinoDeLink(params.get("view"), params);
       if (!VIEWS.includes(destino)) return;
-      setGameOpen(destino === "games" && params.get("game") === "duelo" ? "duelo" : null);
       setView(destino);
     };
     sw.addEventListener("message", onMessage);
@@ -180,13 +177,12 @@ export default function BizarrApp() {
       case "novedades":  return <NovedadesView banners={banners} loading={bannersLoading} design={novedadesDesign} />;
       case "games":
         return <JuegosView user={user} activeGame={gameState?.active_game ?? null}
-                 activeEscenario={gameState?.active_escenario ?? null}
                  isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
-                 gameState={gameState} gameOpen={gameOpen} setGameOpen={setGameOpen}/>;
+                 gameState={gameState} mostrarCatalogo={general.catalogoJuegos}/>;
       case "escenario":
         return <EscenarioView user={user} activeEscenario={gameState?.active_escenario ?? null}
                  isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
-                 ytConfig={ytConfig} gameState={gameState}/>;
+                 ytConfig={ytConfig} gameState={gameState} mostrarCatalogo={general.catalogoJuegos}/>;
       case "pantalla":   return null; // PantallaView vive fuera del switch, ver abajo
       case "profile":
         // Registro con mail primero: el mail ya está validado, falta el formulario.
@@ -276,7 +272,7 @@ export default function BizarrApp() {
         <DueloTeaserBanner
           activeEscenario={gameState?.active_escenario ?? null}
           currentView={view}
-          onGoDuelo={() => { setGameOpen("duelo"); setView("games"); }}
+          onGoDuelo={() => setView("escenario")}
           sessionId={session?.id}
         />
       </div>

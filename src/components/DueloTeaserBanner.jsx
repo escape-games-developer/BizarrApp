@@ -3,7 +3,8 @@ import React, { useState, useEffect } from "react";
 /**
  * DueloTeaserBanner
  * Barra flotante top-center que avisa que empezó el Duelo.
- * Aparece sólo si el duelo está activo y el usuario NO está ya en Juegos.
+ * Aparece sólo si el duelo está activo y el usuario NO está ya en Escenario,
+ * que es donde vive el Duelo.
  * El botón "X" lo silencia por la sesión (sessionStorage) para no molestar.
  */
 export function DueloTeaserBanner({ activeEscenario, currentView, onGoDuelo, sessionId }) {
@@ -16,7 +17,7 @@ export function DueloTeaserBanner({ activeEscenario, currentView, onGoDuelo, ses
     catch { setDismissed(false); }
   }, [dismissKey]);
 
-  const shouldShow = activeEscenario === "duelo" && currentView !== "games" && !dismissed;
+  const shouldShow = activeEscenario === "duelo" && currentView !== "escenario" && !dismissed;
   if (!shouldShow) return null;
 
   const handleDismiss = () => {

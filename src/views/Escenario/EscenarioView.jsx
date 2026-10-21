@@ -7,6 +7,8 @@ import { useFollowLeaderVotes }            from "../../hooks/realtime/useFollowL
 import { useVotacionEscenario }            from "../../hooks/useVotacionEscenario";
 import FtlBarometro                       from "../../components/FtlBarometro";
 import { ESCENARIO_JUEGOS }                from "../../constants/escenarioJuegos";
+import CatalogoJuegos, { ESCENARIO_CATALOGO } from "../../components/CatalogoJuegos";
+import DueloVistaCompleta                  from "../Juegos/DueloVistaCompleta";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
 function EscenarioStandby() {
@@ -88,36 +90,6 @@ function CostumeStrip({ items, color, bg, border }) {
       {items.map((c, i) => (
         <div key={i} style={{ fontSize: 12, color: "rgba(245,230,192,.7)", marginBottom: 2 }}>{c}</div>
       ))}
-    </div>
-  );
-}
-
-// ─── Duelo de Talentos ───────────────────────────────────────────────────────
-// El Duelo se juega desde la pestaña Juegos (postulación + aplausómetro sobre
-// applause_sessions). Acá había una segunda votación que escribía directo
-// game_state.duelo_votes_a/b desde el cliente: contaba distinto que la pantalla,
-// pisaba el contador con read-modify-write y hoy RLS la rechaza — el usuario
-// veía "✓ Voto enviado" sin que se registrara nada. Queda sólo el cartel que
-// manda al flujo real.
-function DueloView() {
-  return (
-    <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>⚔️</span><h3>Duelo de Talentos</h3></div>
-      <div style={{
-        textAlign: "center", padding: "34px 20px", borderRadius: 16,
-        background: "rgba(255,45,120,.08)", border: "1px solid rgba(255,45,120,.28)",
-      }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>🎤</div>
-        <div style={{
-          fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 15,
-          color: "#FF2D95", marginBottom: 6,
-        }}>
-          El Duelo está en la pestaña Juegos
-        </div>
-        <div style={{ fontSize: 12.5, color: "rgba(245,230,192,.5)", lineHeight: 1.5 }}>
-          Entrá a 🎮 <strong>Juegos</strong> para postularte y para aplaudir a tu favorito.
-        </div>
-      </div>
     </div>
   );
 }
@@ -465,7 +437,7 @@ function KaraokeView({ user, sessionId, ytConfig }) {
 }
 
 // ─── EscenarioView (router) ──────────────────────────────────────────────────
-export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState }) {
+export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState, mostrarCatalogo = false }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -477,8 +449,21 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
     );
   }
 
+  // Sin nada activo: las cards de los juegos de escenario (Ajustes → General →
+  // Cards de juegos) o la espera vacía de siempre.
+  const standby = mostrarCatalogo
+    ? <CatalogoJuegos juegos={ESCENARIO_CATALOGO}/>
+    : <EscenarioStandby />;
+
   // Karaoke queda congelado sin borrar su vista ni su case de enrutamiento.
-  if (!activeEscenario || activeEscenario === "karaoke") return <EscenarioStandby />;
+  if (!activeEscenario || activeEscenario === "karaoke") return standby;
+
+  // Duelo de Talentos: vive acá. Con la convocatoria abierta ofrece postularse
+  // de entrada, sin cards ni pasos intermedios.
+  if (activeEscenario === "duelo") return (
+    <DueloVistaCompleta sessionId={sessionId} user={user} gameState={gameState}
+      activeEscenario={activeEscenario}/>
+  );
 
   // FTL y Personal Trainer corren el MISMO contrato (postulación → el operador
   // llama → elige video → comenzar), así que comparten vista: lo único que
@@ -491,8 +476,7 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   );
 
   switch (activeEscenario) {
-    case "duelo":   return <DueloView />;
     case "karaoke": return <KaraokeView user={user} sessionId={sessionId} ytConfig={ytConfig} />;
-    default:        return <EscenarioStandby />;
+    default:        return standby;
   }
 }

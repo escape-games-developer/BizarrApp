@@ -29,7 +29,7 @@ const card = {
 const CATEGORIAS = [
   {
     id: "general", icon: "⚙️", label: "General",
-    descripcion: "Reglas de acceso de los clientes: ubicación obligatoria y entrada como invitado.",
+    descripcion: "Reglas de acceso de los clientes y qué ven en Juegos y Escenario cuando no hay nada activo.",
     Componente: General,
   },
   {

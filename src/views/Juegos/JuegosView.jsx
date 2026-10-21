@@ -2,8 +2,7 @@ import { useRaffle }         from "../../hooks/useRaffle";
 import { useTriviaQuestion, useTriviaVoter } from "../../hooks/realtime/useTriviaVotes";
 import { BlockedView }       from "../../components/UI";
 import { TEAMS }             from "../../constants/theme";
-import DueloCard             from "./DueloCard";
-import DueloVistaCompleta    from "./DueloVistaCompleta";
+import CatalogoJuegos, { JUEGOS_CATALOGO } from "../../components/CatalogoJuegos";
 import { useSumateRound }    from "../../hooks/realtime/useSumateRound";
 import { useArmaPalabraRound } from "../../hooks/realtime/useArmaPalabraRound";
 
@@ -519,7 +518,7 @@ function FormaLaPalabra({ user, sessionId }) {
  * columnas ni push nuevos. Anunciar NO es jugar: mientras `active_game` no
  * sea 'trivia' esto es sólo un aviso, sin nada que tocar.
  *
- * Mismo patrón visual que DueloCard en su estado apagado: logo en gris y CTA
+ * Patrón visual de card apagada: logo en gris y CTA
  * deshabilitado, para que se lea distinto de un juego en curso.
  */
 function TriviaProximamenteCard() {
@@ -681,7 +680,7 @@ function ProximamenteCard({ placa }) {
 }
 
 // ─── JuegosView (router) ──────────────────────────────────────────────────
-export default function JuegosView({ user, activeGame, activeEscenario, isRestricted, onGoProfile, sessionId, gameState, gameOpen, setGameOpen }) {
+export default function JuegosView({ user, activeGame, isRestricted, onGoProfile, sessionId, gameState, mostrarCatalogo = false }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -693,19 +692,7 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
     );
   }
 
-  // Navegación interna: si el usuario abrió el duelo, toma la pantalla completa.
-  if (gameOpen === "duelo") {
-    return (
-      <DueloVistaCompleta
-        sessionId={sessionId} user={user} gameState={gameState}
-        activeEscenario={activeEscenario} onBack={() => setGameOpen?.(null)}
-      />
-    );
-  }
-
-  const dueloCard = activeEscenario === "duelo"
-    ? <DueloCard activeEscenario={activeEscenario} onOpen={() => setGameOpen?.("duelo")} />
-    : null;
+  // El Duelo de Talentos vive en Escenario (EscenarioView): Juegos no lo muestra.
 
   // Anuncio del Desafío: la placa está en la pantalla gigante pero el juego
   // todavía no arrancó. Si `activeGame` ya es 'trivia', manda el juego real y
@@ -714,12 +701,11 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
   // Mismo criterio para Arma la Palabra. Son excluyentes en la práctica:
   // `active_placa` guarda una sola placa a la vez.
   const palabraAnunciada = gameState?.active_placa === "game_palabra" && activeGame !== "palabra";
-  // Rey del Orto, Sumate y el Duelo: misma idea. El Duelo se considera en vivo
-  // con su convocatoria (`active_escenario='duelo'`), que ya dibuja su card.
+  // Rey del Orto y Sumate: misma idea. El Duelo NO tiene aviso previo: o está
+  // en el escenario (y Juegos es su postulación) o no se muestra nada.
   const otroAnunciado =
     (gameState?.active_placa === "game_rey"  && activeGame !== "rey del orto") ? "game_rey"
     : (gameState?.active_placa === "game_suma" && activeGame !== "suma")         ? "game_suma"
-    : (gameState?.active_placa === "duelo"     && activeEscenario !== "duelo")   ? "duelo"
     : null;
   const hayAnuncio = triviaAnunciada || palabraAnunciada || !!otroAnunciado;
 
@@ -730,21 +716,23 @@ export default function JuegosView({ user, activeGame, activeEscenario, isRestri
     case "trivia":       gameContent = <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} />; break;
     case "suma":         gameContent = <SumaElNumero user={user} sessionId={sessionId} />; break;
     case "palabra":      gameContent = <FormaLaPalabra user={user} sessionId={sessionId} />; break;
-    default:             gameContent = hayAnuncio ? null : <GameStandby />;
+    // Sin juego: las cards de los juegos (Ajustes → General → Cards de juegos)
+    // o la espera vacía de siempre.
+    default:             gameContent = hayAnuncio ? null : mostrarCatalogo
+      ? <CatalogoJuegos juegos={JUEGOS_CATALOGO}/>
+      : <GameStandby />;
   }
 
-  // La card del duelo depende del estado realtime: no se muestra si el admin
-  // no activó active_escenario="duelo".
+  // Sin anuncio, el contenido va directo: las cards necesitan el alto completo
+  // de la sección y un div envolvente sin alto se lo cortaría.
+  if (!activeGame && !hayAnuncio) return gameContent;
   if (!activeGame) return (
     <div>
-      {dueloCard}
       {triviaAnunciada  && <TriviaProximamenteCard />}
       {palabraAnunciada && <PalabraProximamenteCard />}
       {otroAnunciado    && <ProximamenteCard placa={otroAnunciado} />}
       {gameContent}
     </div>
   );
-  return activeEscenario === "duelo"
-    ? <div>{dueloCard}{gameContent}</div>
-    : gameContent;
+  return gameContent;
 }

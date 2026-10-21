@@ -17,7 +17,8 @@ import { anuncioDe, urlDeAnuncio } from "../client/anuncios/anunciosCatalog";
  */
 export async function pushAnuncio(sessionId, placa) {
   const a = anuncioDe(placa);
-  if (!a || !sessionId) return;
+  // Los juegos con postulación avisan recién con la convocatoria abierta.
+  if (!a || a.postulacion || !sessionId) return;
   try {
     const { data: fila, error } = await supabase
       .from("client_announcements")
@@ -44,5 +45,29 @@ export async function pushAnuncio(sessionId, placa) {
     });
   } catch (e) {
     console.warn("[pushAnuncio]", e?.message || e);
+  }
+}
+
+/**
+ * Convocatoria abierta de un juego de Escenario (FTL / PT): la ÚNICA
+ * notificación del juego, y lleva directo a la pantalla de postularse.
+ * El tag cambia en cada apertura para que el navegador vuelva a avisar.
+ */
+export async function pushConvocatoria(sessionId, juego) {
+  if (!sessionId || !juego) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.functions.invoke("send-push", {
+      body: {
+        session_id: sessionId,
+        title: `${juego.icon} ${juego.label}`,
+        body:  "¡Postulate para subir al escenario!",
+        url:   "/?view=escenario",
+        tag:   `convocatoria-${juego.type}-${Date.now()}`,
+      },
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+    });
+  } catch (e) {
+    console.warn("[pushConvocatoria]", e?.message || e);
   }
 }

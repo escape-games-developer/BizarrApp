@@ -18,6 +18,11 @@ const OPCIONES = [
     activo:   "La pantalla de ingreso muestra el botón «Entrar como invitado», para participar sin crear cuenta.",
     inactivo: "El botón «Entrar como invitado» no aparece: para participar hay que tener cuenta.",
   },
+  {
+    id: "catalogoJuegos", icon: "🃏", titulo: "Cards de juegos",
+    activo:   "Sin nada activo, Juegos y Escenario muestran las cards con el logo de cada juego, para que el cliente sepa qué hay.",
+    inactivo: "Sin nada activo, Juegos y Escenario quedan con la pantalla de espera, sin cards.",
+  },
 ];
 
 export default function General({ puedeEditar }) {

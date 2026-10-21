@@ -9,16 +9,21 @@
  * navegador y a dónde lleva al tocarla. Los textos no se guardan en la base.
  *
  * `url` reutiliza el deep-link público de la WebApp (`?view=`), el mismo que ya
- * usa el push del Duelo. El Duelo vive en Juegos.
+ * usa el push del Duelo. El Duelo vive en Escenario.
+ *
+ * `postulacion`: juegos donde el cliente se postula (Duelo, FTL, PT). Su placa
+ * NO avisa ni muestra PRÓXIMAMENTE: la única notificación es la de la
+ * convocatoria abierta, que lleva directo a postularse (pushDuelo /
+ * pushConvocatoria). Un aviso previo sólo agregaba un paso sin botón.
  */
 export const ANUNCIOS = Object.freeze({
   game_rey:      { emoji: "🎰", nombre: "Rey del Orto",       vista: "games",     cuerpo: "¡Se viene el sorteo!" },
   game_trivia:   { emoji: "🧠", nombre: "Desafío Demente",    vista: "games",     cuerpo: "¡Se viene el juego!" },
   game_suma:     { emoji: "🔢", nombre: "Sumate que sumamos", vista: "games",     cuerpo: "¡Se viene el juego!" },
   game_palabra:  { emoji: "🔤", nombre: "Arma la palabra",    vista: "games",     cuerpo: "¡Se viene el juego!" },
-  duelo:         { emoji: "🎤", nombre: "Duelo de Talentos",  vista: "games",     cuerpo: "¡Se viene el Duelo!" },
-  escenario_ftl: { emoji: "💃", nombre: "Follow the Leader",  vista: "escenario", cuerpo: "¡Se viene en el escenario!" },
-  escenario_pt:  { emoji: "🏋️", nombre: "Personal Trainer",   vista: "escenario", cuerpo: "¡Se viene en el escenario!" },
+  duelo:         { emoji: "🎤", nombre: "Duelo de Talentos",  vista: "escenario", cuerpo: "¡Se viene el Duelo!",        postulacion: true },
+  escenario_ftl: { emoji: "💃", nombre: "Follow the Leader",  vista: "escenario", cuerpo: "¡Se viene en el escenario!", postulacion: true },
+  escenario_pt:  { emoji: "🏋️", nombre: "Personal Trainer",   vista: "escenario", cuerpo: "¡Se viene en el escenario!", postulacion: true },
   escenario:     { emoji: "🎤", nombre: "Escenario Bizarren", vista: "escenario", cuerpo: "¡El protagonista sos vos!" },
 });
 
@@ -35,5 +40,5 @@ export const urlDeAnuncio = (placa) => `/?view=${anuncioDe(placa)?.vista ?? "nov
 export function escenarioAnunciado(gameState) {
   const placa = gameState?.active_placa;
   const a = anuncioDe(placa);
-  return a?.vista === "escenario" && !gameState?.active_escenario ? placa : null;
+  return a?.vista === "escenario" && !a.postulacion && !gameState?.active_escenario ? placa : null;
 }

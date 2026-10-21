@@ -5,10 +5,12 @@ import { supabase } from "../lib/supabase";
  * Ajustes → General — `admin_ui_config` fila `key='general'`
  * (migración 20261021150000_ajustes_general).
  *
- * `value = { version: 1, geoObligatoria: bool, modoInvitado: bool }`:
+ * `value = { version: 1, geoObligatoria: bool, modoInvitado: bool, catalogoJuegos: bool }`:
  *   geoObligatoria → Juegos / Escenario / Pantalla piden la ubicación
  *                    verificada. Apagada, alcanza con estar logueado.
  *   modoInvitado   → el login muestra «Entrar como invitado».
+ *   catalogoJuegos → sin nada activo, Juegos y Escenario muestran las cards de
+ *                    sus juegos (migración 20261021170000).
  *
  * Mismo contrato que useRegistroConfig: el cliente lee por RPC pública y el
  * Admin guarda con control de concurrencia sobre el `updated_at` crudo.
@@ -19,11 +21,15 @@ const CLAVE = "general";
 const VERSION = 1;
 
 /** Lo que había antes de que existiera la configuración. */
-export const GENERAL_POR_DEFECTO = Object.freeze({ geoObligatoria: true, modoInvitado: true });
+export const GENERAL_POR_DEFECTO = Object.freeze({ geoObligatoria: true, modoInvitado: true, catalogoJuegos: true });
 
 function normalizar(value) {
   if (!value || typeof value.geoObligatoria !== "boolean" || typeof value.modoInvitado !== "boolean") return null;
-  return { geoObligatoria: value.geoObligatoria, modoInvitado: value.modoInvitado };
+  return {
+    geoObligatoria: value.geoObligatoria,
+    modoInvitado:   value.modoInvitado,
+    catalogoJuegos: typeof value.catalogoJuegos === "boolean" ? value.catalogoJuegos : GENERAL_POR_DEFECTO.catalogoJuegos,
+  };
 }
 
 /** Cliente: ajustes vigentes. Mientras carga, o si falla, usa el comportamiento de siempre. */
@@ -68,7 +74,8 @@ export function useGeneralConfigAdmin() {
 
   /** Guarda la configuración entera. Tira con un mensaje legible si no se guardó. */
   const guardar = useCallback(async (nueva) => {
-    const value = { version: VERSION, geoObligatoria: !!nueva.geoObligatoria, modoInvitado: !!nueva.modoInvitado };
+    const value = { version: VERSION, geoObligatoria: !!nueva.geoObligatoria,
+      modoInvitado: !!nueva.modoInvitado, catalogoJuegos: !!nueva.catalogoJuegos };
     const { data, error: e } = await supabase
       .from(TABLA).update({ value }).eq("key", CLAVE).eq("updated_at", updatedAt)
       .select("value, updated_at");
