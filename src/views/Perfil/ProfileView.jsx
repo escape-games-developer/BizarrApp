@@ -20,9 +20,9 @@ export function LoginView({ onLogin, onGoRegister, onGoForgot, onGuestLogin }) {
 
   const { resendConfirmation } = useAuth();
 
-  // Acceso de invitado: se renderiza solo si la variable está definida en el
-  // build. Es de build time, así que Vite elimina el bloque cuando no aplica.
-  const guestEnabled = import.meta.env.VITE_GUEST_LOGIN === "true";
+  // Acceso de invitado: lo prende y apaga Admin → Ajustes → General → Modo
+  // invitado. Apagado, App no pasa `onGuestLogin` y el botón no se dibuja.
+  const guestEnabled = !!onGuestLogin;
 
   // onLogin es async: hay que esperar el resultado. Leerlo de la promesa sin
   // await deja `result.ok === undefined` y el error nunca se muestra.

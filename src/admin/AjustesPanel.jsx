@@ -1,4 +1,5 @@
 import { useState } from "react";
+import General from "./ajustes/General";
 import VistaPanelOpciones from "./ajustes/VistaPanelOpciones";
 import RegistroClientes from "./ajustes/RegistroClientes";
 import CartaMenu from "./ajustes/CartaMenu";
@@ -20,12 +21,17 @@ const card = {
  * solapas va pegada a la hoja y la activa se funde con ella. Todas reciben
  * las mismas props que AjustesPanel (`contexto`).
  *
- * Futuras: General, Juegos, Reglas y comportamientos, Pantalla, Otras. Las
+ * Futuras: Juegos, Reglas y comportamientos, Pantalla, Otras. Las
  * reglas de cada juego siguen viviendo en su panel (p. ej. Arma la Palabra y
  * `participantes_minimos`) hasta que se diseñe el sistema general de reglas;
  * esta pantalla no las duplica ni las lee.
  */
 const CATEGORIAS = [
+  {
+    id: "general", icon: "⚙️", label: "General",
+    descripcion: "Reglas de acceso de los clientes: ubicación obligatoria y entrada como invitado.",
+    Componente: General,
+  },
   {
     id: "vistaPanel", icon: "🧭", label: "Vista del panel de opciones",
     descripcion: "Configurá qué opciones aparecen en el panel de administración y en qué orden.",

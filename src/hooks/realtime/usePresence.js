@@ -25,13 +25,14 @@ const INACTIVE_THRESHOLD = 120;    // 2 minutos en segundos
  * No afecta al kick: el umbral lo calcula `pantalla__active_count` sobre
  * `pantalla_participants`, donde el invitado ya entra por su propia vía.
  */
-export function usePresence(sessionId, user, isGuest = false) {
+export function usePresence(sessionId, user, isGuest = false, sinGeo = false) {
   const [isCheckedIn,   setIsCheckedIn]   = useState(false);
   const [connectedCount, setConnectedCount] = useState(0);
   const heartbeatRef = useRef(null);
 
   const checkIn = useCallback(async () => {
-    if (!sessionId || !user?.id || (!user?.geoOk && !isGuest)) return;
+    // `sinGeo`: Ajustes → General con la ubicación no obligatoria.
+    if (!sessionId || !user?.id || (!user?.geoOk && !isGuest && !sinGeo)) return;
 
     const { error } = await supabase
       .from("connected_users")
@@ -51,7 +52,7 @@ export function usePresence(sessionId, user, isGuest = false) {
 
     if (!error) setIsCheckedIn(true);
     else console.error("[usePresence] Check-in error:", error);
-  }, [sessionId, user, isGuest]);
+  }, [sessionId, user, isGuest, sinGeo]);
 
   const heartbeat = useCallback(async () => {
     if (!sessionId || !user?.id) return;

@@ -572,10 +572,11 @@ export function useAuth() {
   /**
    * Sesión anónima para probar juegos y secciones sin registro ni GPS.
    *
-   * Detrás de VITE_GUEST_LOGIN, que es de build time: si la variable no está
-   * definida en el entorno, el botón no se renderiza y esta función tampoco
-   * hace nada. El chequeo va duplicado acá a propósito — la UI puede cambiar,
-   * pero el bypass no debería poder dispararse desde ningún otro lado.
+   * Lo prende Admin → Ajustes → General → Modo invitado (`general_config()`).
+   * Apagado, el botón no se renderiza y esta función tampoco hace nada. El
+   * chequeo va duplicado acá a propósito, contra el valor vigente en la base y
+   * no el que cargó la pantalla: la UI puede cambiar, pero el bypass no
+   * debería poder dispararse desde ningún otro lado.
    *
    * El perfil se manda en `options.data` y lo crea el trigger `handle_new_user`
    * del lado del server, igual que en el signUp normal: no insertamos en
@@ -583,11 +584,12 @@ export function useAuth() {
    * de Supabase (ver supabase/AUTH_SETUP.md); si no lo está, devuelve 422.
    */
   const loginAsGuest = useCallback(async () => {
-    if (import.meta.env.VITE_GUEST_LOGIN !== "true")
-      return { ok: false, error: "El acceso de invitado no está habilitado." };
-
     setLoading(true);
     try {
+      const { data: general } = await supabase.rpc("general_config");
+      if (general?.modoInvitado !== true)
+        return { ok: false, error: "El acceso de invitado no está habilitado." };
+
       const { data, error } = await supabase.auth.signInAnonymously({
         options: { data: { name: "Invitado", team: null } },
       });

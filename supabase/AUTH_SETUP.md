@@ -228,12 +228,16 @@ Pide la actual a propósito: el celular suele quedar abierto sobre la mesa.
 ## Acceso de invitado (provisorio)
 
 Sesión anónima para probar juegos y secciones sin registrarse ni estar
-físicamente en el bar. Está apagado salvo que se defina `VITE_GUEST_LOGIN=true`
-en el build.
+físicamente en el bar. Se prende y apaga desde **Admin → Ajustes → General →
+Modo invitado** (`admin_ui_config` key `general`, migración
+`20261021150000_ajustes_general`). Reemplazó a la variable de build
+`VITE_GUEST_LOGIN`, que ya no se lee.
 
-**Es un bypass real del gate de geo y del de registro.** Definir la variable
-sólo en local y en entornos de Preview. Si queda en `true` en el entorno de
-producción de Vercel, cualquiera entra sin estar en el bar y sin cuenta.
+**Es un bypass real del gate de geo y del de registro.** Dejarlo apagado en
+las noches en que la participación tenga que ser sólo en el bar.
+
+En la misma sección, **Localización obligatoria** apagada abre Juegos,
+Escenario y Pantalla a cualquier cliente logueado, sin verificar ubicación.
 
 ### Habilitarlo
 
@@ -241,13 +245,12 @@ producción de Vercel, cualquiera entra sin estar en el bar y sin cuenta.
    sign-ins** → activar. Sin esto el botón aparece pero `signInAnonymously()`
    devuelve 422 y la app muestra "El modo invitado no está habilitado en el
    servidor".
-2. **En el build** — `VITE_GUEST_LOGIN=true` en `.env` (o en las variables de
-   entorno del Preview de Vercel).
+2. **En el Admin** — Ajustes → General → Modo invitado: activo.
 
 ### Cómo funciona
 
 1. En el login aparece el botón secundario **"Entrar como invitado"**, separado
-   del alta por una línea. Sólo se renderiza si la variable está en `"true"`;
+   del alta por una línea. Sólo se renderiza con el modo invitado activo;
    `loginAsGuest()` repite el chequeo, así que el bypass no se puede disparar
    desde otro lado aunque cambie la UI.
 2. `supabase.auth.signInAnonymously()` con

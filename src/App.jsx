@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import globalCss                from "./constants/styles";
 import { useAuth }              from "./hooks/useAuth";
 import { useRegistroConfig }    from "./hooks/useRegistroConfig";
+import { useGeneralConfig }     from "./hooks/useGeneralConfig";
 import { useGameState }         from "./hooks/realtime/useGameState";
 import { useBanners }           from "./hooks/realtime/useBanners";
 import { usePresence }          from "./hooks/realtime/usePresence";
@@ -74,13 +75,16 @@ export default function BizarrApp() {
     : registro.mailPrimero ? "registroMail"
     : registro.completo ? "register"
     : null;   // registro cerrado
+  // Ajustes → General: ubicación obligatoria y modo invitado.
+  const { config: general } = useGeneralConfig();
   const [forgotEmail, setForgotEmail] = useState("");
 
   // Estado global del juego — sincronizado via Supabase Realtime
   const { session, gameState, loading: stateLoading } = useGameState();
 
-  // Presencia: check-in del usuario en la sesión activa
-  usePresence(session?.id, user, isGuest);
+  // Presencia: check-in del usuario en la sesión activa. Sin ubicación
+  // obligatoria, cualquier cliente logueado entra al conteo y al sorteo.
+  usePresence(session?.id, user, isGuest, !general.geoObligatoria && isLoggedIn);
 
   // Novedades publicadas por el staff (cards 1440x600)
   const { banners, loading: bannersLoading } = useBanners(session?.id);
@@ -90,7 +94,9 @@ export default function BizarrApp() {
   // El gate real de Juegos/Escenario/Pantalla es el `geo_ok` guardado en el
   // perfil, no `useGeoGate` — ese hook solo corre dentro del wizard de registro.
   // Por eso el invitado se destraba acá y no allá.
-  const isRestricted = !user?.geoOk && !isGuest;
+  // Con la ubicación no obligatoria (Ajustes → General) alcanza con estar
+  // logueado: cuenta registrada o invitado.
+  const isRestricted = general.geoObligatoria ? (!user?.geoOk && !isGuest) : !isLoggedIn;
 
   // Deep-link desde push: /?view=games&game=duelo abre el duelo directo (una sola vez).
   useEffect(() => {
@@ -196,7 +202,7 @@ export default function BizarrApp() {
                      onBack={() => setAuthMode("login")}/>;
           return authMode === "login"
             ? <LoginView onLogin={login} onGoRegister={modoRegistro ? () => setAuthMode(modoRegistro) : null}
-                onGuestLogin={loginAsGuest}
+                onGuestLogin={general.modoInvitado ? loginAsGuest : null}
                 onGoForgot={(email) => { setForgotEmail(email || ""); setAuthMode("forgot"); }}/>
             : <ProfileView {...profileProps}/>;
         }
