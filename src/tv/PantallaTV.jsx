@@ -12,6 +12,7 @@ import TomatazoOverlay from "./TomatazoOverlay";
 import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
+import { useEscenarioListo } from "../hooks/useEscenarioListo";
 import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado, telepronterReport, tvLatido } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig, normalizeTvConfig } from "../designers/lib/persistence";
@@ -309,6 +310,8 @@ export default function PantallaTV({ modo = "tv" }) {
     : participanteFtl ? "candidato"
     : "convocatoria";
   const votacionCfg = useVotacionEscenario({ anonimo: true });
+  // Pantalla «participante listo» (texto/imagen, efecto, y si se muestra o no).
+  const listoCfg = useEscenarioListo();
   const ftlPerformance  = modoFtl === "performance";
   const ftlCandidato    = modoFtl === "candidato";
   const ftlConvocatoria = modoFtl === "convocatoria";
@@ -688,8 +691,10 @@ export default function PantallaTV({ modo = "tv" }) {
             votación) los porcentajes. Transparente y sin reproductor propio —
             el video de abajo es el del DJ, con su recorte de inicio/fin. */}
         {(ftlConvocatoria || ftlCandidato) && !hasLiveLayer && !hasPlaca && (
+          // Pantalla previa apagada (Ajustes → General): al llamar al
+          // participante la TV sigue en la convocatoria hasta que arranca el video.
           <FtlStandby juego={juegoEsc} webappUrl={window.location.origin}
-            participante={ftlCandidato ? participanteFtl : null}/>
+            participante={ftlCandidato && listoCfg[juegoEsc.type]?.previa !== false ? participanteFtl : null}/>
         )}
 
         {ftlPerformance && !hasLiveLayer && !hasPlaca && (
@@ -698,7 +703,8 @@ export default function PantallaTV({ modo = "tv" }) {
               : modoVotacion === "votos" ? (votosFtl.up_pct ?? 0)
               : modoVotacion === "pelea" ? peleaFtl.pct
               : null}
-            decae={modoVotacion === "toques"}/>
+            decae={modoVotacion === "toques"}
+            barometro={listoCfg[juegoEsc.type]?.barometro}/>
         )}
       </div>
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useGeneralConfigAdmin } from "../../hooks/useGeneralConfig";
+import { useEscenarioListoAdmin } from "../../hooks/useEscenarioListo";
 import { Interruptor } from "./RegistroClientes";
 
 /**
@@ -95,6 +96,8 @@ export default function General({ puedeEditar }) {
         </div>
       ))}
 
+      <PantallaPrevia puedeEditar={puedeEditar}/>
+
       {!puedeEditar && (
         <div style={{ fontSize: 11.5, color: "rgba(240,232,255,.45)" }}>Tu usuario no puede cambiar esta configuración.</div>
       )}
@@ -105,5 +108,74 @@ export default function General({ puedeEditar }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Pantalla previa al llamar al participante (FTL / PT), en la TV. Vive en otra
+ * fila (`escenario_listo`, ver hooks/useEscenarioListo.js) porque la TV la lee
+ * en vivo; el cartel en sí se edita en el panel de cada juego.
+ */
+const PREVIAS = [
+  { tipo: "ftl", icon: "💃", nombre: "Follow the Leader" },
+  { tipo: "pt",  icon: "🏋️", nombre: "Personal Trainer" },
+];
+
+function PantallaPrevia({ puedeEditar }) {
+  const { config, error, guardar } = useEscenarioListoAdmin();
+  const [guardando, setGuardando] = useState(null);
+  const [aviso, setAviso] = useState(null);
+
+  if (error) return <div role="alert" style={{ fontSize: 12, color: "#FCA5A5" }}>{error}</div>;
+  if (!config) return null;
+
+  const cambiar = async (tipo, valor) => {
+    setGuardando(tipo); setAviso(null);
+    try {
+      await guardar(tipo, { previa: valor });
+      setAviso({ tono: "ok", texto: "Guardado. La TV lo toma en unos segundos." });
+    } catch (e) {
+      setAviso({ tono: "error", texto: e.message });
+    } finally {
+      setGuardando(null);
+    }
+  };
+
+  return (
+    <>
+      {PREVIAS.map(({ tipo, icon, nombre }) => {
+        const on = config[tipo].previa;
+        return (
+          <div key={tipo} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px", borderRadius: 14,
+            background: on ? "rgba(155,47,255,.08)" : "rgba(240,232,255,.03)",
+            border: `1px solid ${on ? "rgba(155,47,255,.4)" : "rgba(240,232,255,.1)"}` }}>
+            <div style={{ fontSize: 22, lineHeight: 1 }} aria-hidden="true">{icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 14 }}>Pantalla previa — {nombre}</strong>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: .6, textTransform: "uppercase",
+                  color: on ? "#00F5A0" : "rgba(240,232,255,.4)" }}>
+                  {guardando === tipo ? "Guardando…" : on ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: 12, lineHeight: 1.6, color: "rgba(240,232,255,.55)" }}>
+                {on
+                  ? "Al llamar al participante, la TV muestra su avatar, su nombre y el cartel «listo» hasta que arranca el video."
+                  : "Al llamar al participante, la TV sigue en la convocatoria hasta que arranca el video (lo presenta el conductor)."}
+              </p>
+            </div>
+            <Interruptor encendido={on} etiqueta={`Pantalla previa — ${nombre}`}
+              deshabilitado={!puedeEditar || guardando !== null}
+              onCambiar={(v) => cambiar(tipo, v)}/>
+          </div>
+        );
+      })}
+      {aviso && (
+        <div role={aviso.tono === "error" ? "alert" : "status"}
+          style={{ fontSize: 11.5, color: aviso.tono === "error" ? "#FCA5A5" : "#00F5A0" }}>
+          {aviso.texto}
+        </div>
+      )}
+    </>
   );
 }

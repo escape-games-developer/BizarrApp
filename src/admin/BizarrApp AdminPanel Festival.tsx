@@ -8,6 +8,7 @@ import { useDueloRound } from "../hooks/realtime/useDueloRound";
 import { useReglasDuelo, motivoDuracionInvalida, motivoAplausosInvalido } from "../hooks/useReglasDuelo";
 import { useDueloPantallaAdmin, TEXTO_MAX, EFECTOS_DUELO, EFECTOS_CSS, ZOOM_MIN, ZOOM_MAX, RANGOS, POSICIONES_LOGO } from "../hooks/useDueloPantalla";
 import MediaLibraryModal from "../components/media/MediaLibraryModal";
+import { useEscenarioListoAdmin, TEXTO_LISTO_MAX, FUENTES_LISTO, POSICIONES_LISTO, RANGOS_BARO } from "../hooks/useEscenarioListo";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
@@ -1077,6 +1078,192 @@ function DueloPantallaCard({col}){
   );
 }
 
+// ── Pantalla «participante listo» de FTL / PT (admin_ui_config 'escenario_listo') ──
+// La TV la muestra al llamar al participante, antes de que arranque el video:
+// avatar + nombre + «LISTO PARA …». Ese cartel se edita acá: texto o imagen
+// PNG/WEBP, tamaño, ubicación, efecto, tipografía y color. Si se muestra o no
+// se decide en Ajustes → General. La TV lo toma en ≤ 3 s.
+function EscenarioListoCard({tipo, col}){
+  const { config, error, guardar } = useEscenarioListoAdmin();
+  const [texto, setTexto] = useState("");
+  const [libOpen, setLibOpen] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [aviso, setAviso] = useState(null); // {ok, text}
+  const j = config?.[tipo];
+
+  useEffect(() => { if (j) setTexto(j.texto); }, [j?.texto]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [color, setColor] = useState("#FFD600");
+  const colorTimer = useRef(null);
+  useEffect(() => { if (j) setColor(j.color.toUpperCase()); }, [j?.color]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => clearTimeout(colorTimer.current), []);
+
+  const aplicar = async (cambios, okText) => {
+    if (guardando || !j) return;
+    setGuardando(true); setAviso(null);
+    try { await guardar(tipo, cambios); setAviso({ok:true, text:okText}); }
+    catch (e) { setAviso({ok:false, text:e?.message || String(e)}); }
+    finally { setGuardando(false); }
+  };
+
+  if (error) return <div className="card" style={{marginBottom:10,fontSize:11,color:"#FCA5A5"}}>{error}</div>;
+  if (!j) return null;
+
+  const textoLimpio = texto.trim();
+  const elegirImagen = (asset) => {
+    setLibOpen(false);
+    if (!asset?.file_url) return;
+    if (!["image/png","image/webp"].includes(asset.mime_type)) {
+      setAviso({ok:false, text:"Elegí un PNG o WEBP (con fondo transparente)."}); return;
+    }
+    aplicar({ centro:"imagen", imagen: asset.file_url }, "Imagen puesta en la pantalla del participante.");
+  };
+  const tab = (activo) => ({flex:1,padding:"7px 8px",fontSize:11,fontWeight:700,borderRadius:9,cursor:"pointer",
+    background:activo?`${col}26`:"rgba(240,232,255,.04)",color:activo?col:"rgba(240,232,255,.5)",
+    border:`1px solid ${activo?col:"rgba(240,232,255,.12)"}`});
+  const etiqueta = {fontSize:10.5,color:"rgba(240,232,255,.6)",marginTop:10,marginBottom:4};
+
+  return (
+    <div className="card" style={{marginBottom:10}}>
+      <div className="ctitle" style={{marginTop:0}}>🖥️ Pantalla en la TV</div>
+      <div style={{fontSize:11.5,fontWeight:700,marginBottom:2}}>🙋 Participante listo</div>
+      <div style={{fontSize:10,color:"rgba(240,232,255,.4)",marginBottom:8,lineHeight:1.5}}>
+        La TV la muestra al llamar al participante, antes de que arranque el video.
+        {!j.previa && <b style={{color:"#FFD600"}}> Ahora está apagada en Ajustes → General: la TV la saltea.</b>}
+      </div>
+
+      <div style={{display:"flex",gap:6,marginBottom:8}}>
+        <button type="button" style={tab(j.centro==="texto")} disabled={guardando}
+          onClick={()=>j.centro!=="texto" && aplicar({centro:"texto"}, "Ahora se muestra el texto.")}>Aa Texto</button>
+        <button type="button" style={tab(j.centro==="imagen")} disabled={guardando}
+          onClick={()=> j.imagen ? (j.centro!=="imagen" && aplicar({centro:"imagen"}, "Ahora se muestra la imagen.")) : setLibOpen(true)}>🖼️ Imagen</button>
+      </div>
+
+      {j.centro==="texto" ? (
+        <>
+          <div style={{display:"flex",gap:6}}>
+            <input value={texto} maxLength={TEXTO_LISTO_MAX} onChange={(e)=>setTexto(e.target.value)}
+              style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:9,fontSize:12.5,fontWeight:700,
+                background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.14)",color:"#F0E8FF",outline:"none"}}/>
+            <button className="btn btn-g" style={{padding:"7px 12px",fontSize:11}}
+              disabled={guardando || !textoLimpio || textoLimpio===j.texto}
+              onClick={()=>aplicar({texto:textoLimpio}, `Texto guardado: «${textoLimpio}».`)}>
+              {guardando ? "…" : "Guardar"}
+            </button>
+          </div>
+          <div style={etiqueta}>Tipografía</div>
+          <div style={{display:"flex",gap:6}}>
+            {FUENTES_LISTO.map((f)=>(
+              <button key={f.id} type="button" disabled={guardando}
+                style={{...tab(j.fuente===f.id), fontFamily:f.css}}
+                onClick={()=>j.fuente!==f.id && aplicar({fuente:f.id}, `Tipografía: ${f.nombre}.`)}>{f.nombre}</button>
+            ))}
+          </div>
+          <div style={{...etiqueta,display:"flex",alignItems:"center",gap:10}}>
+            <span>Color del texto</span>
+            {/* Se guarda 0,6 s después del último movimiento, no con cada uno. */}
+            <input type="color" value={color} disabled={guardando}
+              onChange={(e)=>{
+                const c = e.target.value.toUpperCase();
+                setColor(c);
+                clearTimeout(colorTimer.current);
+                colorTimer.current = setTimeout(() => {
+                  if (c !== j.color.toUpperCase()) aplicar({color:c}, `Color: ${c}.`);
+                }, 600);
+              }}
+              style={{width:40,height:26,border:"none",background:"none",padding:0,cursor:"pointer"}}/>
+            <span style={{color,fontWeight:700}}>{color}</span>
+          </div>
+        </>
+      ) : (
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:96,height:54,borderRadius:9,background:"rgba(240,232,255,.05)",
+            border:"1px solid rgba(240,232,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+            {j.imagen && <img src={j.imagen} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <button className="btn btn-g" style={{padding:"6px 12px",fontSize:11}} disabled={guardando}
+              onClick={()=>setLibOpen(true)}>Cambiar imagen</button>
+            <button className="btn" style={{padding:"6px 12px",fontSize:11,background:"rgba(255,45,120,.08)",
+              border:"1px solid rgba(255,45,120,.3)",color:"#FF8FB8"}} disabled={guardando}
+              onClick={()=>aplicar({centro:"texto", imagen:null}, "Imagen quitada: vuelve el texto.")}>🗑 Quitar imagen</button>
+          </div>
+        </div>
+      )}
+
+      <SliderPantalla label="🔍 Tamaño (zoom)" valor={j.zoom} signo col={col} min={-100} max={100} disabled={guardando}
+        onGuardar={(n)=>aplicar({zoom:n}, `Tamaño: ${n > 0 ? `+${n}` : n}.`)}/>
+
+      <div style={etiqueta}>Ubicación</div>
+      <div style={{display:"flex",gap:6}}>
+        {POSICIONES_LISTO.map((p)=>(
+          <button key={p.id} type="button" style={tab(j.posicion===p.id)} disabled={guardando}
+            onClick={()=>j.posicion!==p.id && aplicar({posicion:p.id}, `Ubicación: ${p.nombre.toLowerCase()}.`)}>{p.nombre}</button>
+        ))}
+      </div>
+
+      <div style={etiqueta}>✨ Efecto</div>
+      <style>{EFECTOS_CSS}</style>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:5}}>
+        {EFECTOS_DUELO.map((e)=>{
+          const activo = j.efecto === e.id;
+          return (
+            <button key={e.id} type="button" disabled={guardando} title={e.nombre}
+              onClick={()=>!activo && aplicar({efecto:e.id}, `Efecto: ${e.nombre}.`)}
+              style={{padding:"7px 3px",borderRadius:9,cursor:activo?"default":"pointer",
+                display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+                background:activo?`${col}26`:"rgba(240,232,255,.04)",
+                border:`1px solid ${activo?col:"rgba(240,232,255,.12)"}`,
+                color:activo?col:"rgba(240,232,255,.6)",fontSize:9.5,fontWeight:700}}>
+              <span style={{display:"inline-block",fontSize:18,animation:e.anim,
+                transformOrigin:e.origen||"50% 50%"}}>{e.icono}</span>
+              {e.nombre}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Barómetro durante la performance: mismos controles que el del Duelo,
+          medidos sobre la pantalla entera (acá no hay paneles laterales). */}
+      <div style={{fontSize:11.5,fontWeight:700,marginTop:16,marginBottom:2}}>📊 Barómetro</div>
+      <div style={{fontSize:9.5,color:"rgba(240,232,255,.38)",lineHeight:1.45}}>
+        Se ve durante la performance, si el juego tiene votación (Ajustes → Votación Escenario).
+      </div>
+      <SliderPantalla label="Ancho (% del tamaño base)" valor={j.barometro.ancho} sufijo="%" col={col}
+        min={RANGOS_BARO.ancho[0]} max={RANGOS_BARO.ancho[1]} disabled={guardando}
+        onGuardar={(n)=>aplicar({barometro:{...j.barometro, ancho:n}}, `Barómetro: ancho ${n}%.`)}/>
+      <SliderPantalla label="Alto (% de la pantalla)" valor={j.barometro.alto} sufijo="%" col={col}
+        min={RANGOS_BARO.alto[0]} max={RANGOS_BARO.alto[1]} disabled={guardando}
+        onGuardar={(n)=>aplicar({barometro:{...j.barometro, alto:n}}, `Barómetro: alto ${n}%.`)}/>
+      <SliderPantalla label="Ubicación vertical (0 % arriba · 100 % abajo)" valor={j.barometro.y} sufijo="%" col={col}
+        min={RANGOS_BARO.y[0]} max={RANGOS_BARO.y[1]} disabled={guardando}
+        onGuardar={(n)=>aplicar({barometro:{...j.barometro, y:n}}, `Barómetro: vertical ${n}%.`)}/>
+      <SliderPantalla label="Ubicación horizontal (0 % izquierda · 100 % derecha)" valor={j.barometro.x} sufijo="%" col={col}
+        min={RANGOS_BARO.x[0]} max={RANGOS_BARO.x[1]} disabled={guardando}
+        onGuardar={(n)=>aplicar({barometro:{...j.barometro, x:n}}, `Barómetro: horizontal ${n}%.`)}/>
+      <div style={{display:"flex",gap:6,marginTop:6}}>
+        <button className="btn btn-g" style={{padding:"5px 10px",fontSize:10.5}}
+          disabled={guardando || j.barometro.x===50}
+          onClick={()=>aplicar({barometro:{...j.barometro, x:50}}, "Barómetro centrado en la pantalla.")}>
+          ⇔ Centrar
+        </button>
+        <button className="btn btn-g" style={{padding:"5px 10px",fontSize:10.5}}
+          disabled={guardando || (j.barometro.x===8 && j.barometro.y===61 && j.barometro.alto===70 && j.barometro.ancho===100)}
+          onClick={()=>aplicar({barometro:{ancho:100, alto:70, x:8, y:61}}, "Barómetro en su lugar de siempre.")}>
+          ↺ Como estaba
+        </button>
+      </div>
+
+      {aviso && (
+        <div style={{fontSize:10.5,color:aviso.ok?"#00F5A0":"#FCA5A5",marginTop:8}}>
+          {aviso.ok ? "✓ " : "✕ "}{aviso.text}
+        </div>
+      )}
+      <MediaLibraryModal open={libOpen} title="Cartel «listo» (PNG o WEBP)"
+        onClose={()=>setLibOpen(false)} onSelect={elegirImagen}/>
+    </div>
+  );
+}
+
 // ── Reglas del Duelo (duelo_reglas_config) ─────────────────────────────────
 function DueloReglasCard({col, enJuego}){
   const { loading, error: reglasError, reglaPorKey, actualizarRegla } = useReglasDuelo();
@@ -2123,9 +2310,11 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
           <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
             {juego.subAdmin} La música sigue saliendo por DJ Democracy: la TV no
             corta el audio durante este juego.
-            {!enElAire && " Tocá 🚀 Lanzar para abrir la convocatoria."}
+            {!enElAire && " Tocá 📢 Anunciar para abrir la convocatoria."}
           </p>
         </div>
+
+        <EscenarioListoCard tipo={type} col={COL}/>
 
         {/* Biblioteca — links de YouTube, archivos de la PC y playlists. Con
             un participante preparado, cada video tiene «Asignar». Elegir NO

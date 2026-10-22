@@ -42,7 +42,6 @@ export const ESCENARIO_JUEGOS = {
 
     // TV
     placa:   "/placas/Follow_de_leader-removebg-preview.png",
-    tvListo: "LISTO PARA FOLLOW THE LEADER",
   },
 
   pt: {
@@ -64,7 +63,6 @@ export const ESCENARIO_JUEGOS = {
     botonPostular: "🏋️ QUIERO PARTICIPAR",
 
     placa:   "/placas/Personal_Trainer-removebg-preview.png",
-    tvListo: "LISTO PARA PERSONAL TRAINER",
   },
 };
 

@@ -13,7 +13,8 @@ import FtlBarometro from "../components/FtlBarometro";
  *
  * Diseño, todo sobre el margen izquierdo:
  *   · esquina superior izquierda: avatar + nombre del participante
- *   · debajo: el barómetro VERTICAL y rectangular, con las divisiones de los
+ *   · el barómetro VERTICAL (por defecto debajo del avatar; ancho, alto y
+ *     ubicación se editan en el Admin) y rectangular, con las divisiones de los
  *     cuatro tramos y sin número ni rótulo. Es el mismo en los dos modos de
  *     Ajustes → Votación Escenario; sólo cambia de dónde sale `pct`:
  *       Mod 1 → energía de toques (ftl_energia_pct)
@@ -23,7 +24,10 @@ import FtlBarometro from "../components/FtlBarometro";
 
 const C = { gold: "#FFD600", white: "#F0E8FF" };
 
-export default function FtlOverlay({ participante, pct = null, decae = true }) {
+// Ubicación de hoy, si no llega configuración.
+const BARO_BASE = { ancho: 100, alto: 70, x: 8, y: 61 };
+
+export default function FtlOverlay({ participante, pct = null, decae = true, barometro = BARO_BASE }) {
   if (!participante) return null;
 
   const emoji = participante.avatar_emoji || "🎤";
@@ -53,14 +57,20 @@ export default function FtlOverlay({ participante, pct = null, decae = true }) {
           maxWidth: "12vw", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0,
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
         }}>{nombre}</div>
-
-        {/* Barómetro vertical: ocupa el resto del margen hacia abajo */}
-        {pct !== null && (
-          <div style={{ flex: 1, minHeight: 0, width: "3.1vw", marginTop: "1.5vh" }}>
-            <FtlBarometro pct={pct} tamano="tv" decae={decae}/>
-          </div>
-        )}
       </div>
+
+      {/* Barómetro vertical, editable desde el Admin (panel del juego →
+          Barómetro en pantalla): ancho, alto y ubicación sobre la pantalla
+          entera, como el del Duelo. x / y son su centro. */}
+      {pct !== null && (
+        <div style={{
+          position: "absolute", left: `${barometro.x}%`, top: `${barometro.y}%`,
+          transform: "translate(-50%, -50%)",
+          width: `calc(3.1vw * ${barometro.ancho / 100})`, height: `${barometro.alto}vh`,
+        }}>
+          <FtlBarometro pct={pct} tamano="tv" decae={decae}/>
+        </div>
+      )}
     </div>
   );
 }

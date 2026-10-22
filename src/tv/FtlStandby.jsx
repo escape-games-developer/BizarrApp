@@ -2,6 +2,8 @@ import LogoCampana from "../components/LogoCampana";
 import LogoJuego from "../components/LogoJuego";
 import QrEsquina from "../components/QrEsquina";
 import { usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
+import { useEscenarioListo, fuenteListo, ESCENARIO_LISTO_POR_DEFECTO } from "../hooks/useEscenarioListo";
+import { efectoDuelo, escalaDeZoom, EFECTOS_CSS } from "../hooks/useDueloPantalla";
 
 /**
  * Pantalla de convocatoria de Follow the Leader.
@@ -27,11 +29,37 @@ export default function FtlStandby({ juego, webappUrl, participante = null }) {
   // Ajustes → QR y logo (por juego: 'ftl' | 'pt').
   const mostrarQr   = usePantallaQr()[juego.type] !== false;
   const mostrarLogo = usePantallaLogo()[juego.type] !== false;
+  // Respaldo por juego: si la config no llega, cada uno con su propio cartel.
+  const listo = useEscenarioListo()[juego.type]
+    || ESCENARIO_LISTO_POR_DEFECTO[juego.type] || ESCENARIO_LISTO_POR_DEFECTO.ftl;
 
   // Candidato preparado: la TV ya muestra quién va a jugar, pero el video
   // todavía no arranca. El QR sale de escena — el turno de este ya está
   // resuelto y el cartel tiene que ser sobre él.
   if (participante) {
+    // «LISTO PARA …» editable (Admin → FTL/PT → Pantalla del participante
+    // listo): texto o imagen, con efecto, tamaño, ubicación, fuente y color.
+    // Tres capas como en el Duelo: zoom → efecto → contenido.
+    const ef = efectoDuelo(listo.efecto);
+    const fuente = fuenteListo(listo.fuente);
+    const cartelListo = (
+      <div style={{ transform: `scale(${escalaDeZoom(listo.zoom)})`, transition: "transform .3s ease",
+        transformOrigin: listo.posicion === "arriba" ? "50% 100%" : "50% 0" }}>
+        <div style={{ animation: ef.anim, transformOrigin: ef.origen || "50% 50%" }}>
+          {listo.centro === "imagen" && listo.imagen ? (
+            <img src={listo.imagen} alt="" style={{ display: "block", height: "16vh", maxWidth: "80vw",
+              objectFit: "contain", filter: "drop-shadow(0 6px 24px rgba(0,0,0,.6))" }}/>
+          ) : (
+            <div style={{
+              fontFamily: fuente.css, fontWeight: fuente.peso,
+              fontSize: "clamp(13px, 1.7vw, 30px)", letterSpacing: ".16em",
+              color: listo.color, textAlign: "center", maxWidth: "86vw",
+              textShadow: "0 3px 16px rgba(0,0,0,.7)",
+            }}>{listo.texto}</div>
+          )}
+        </div>
+      </div>
+    );
     return (
       <div data-tv-ftl-candidato style={{
         position: "absolute", inset: 0, zIndex: 50,
@@ -39,6 +67,8 @@ export default function FtlStandby({ juego, webappUrl, participante = null }) {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         gap: "3vh", padding: "4vh 4vw", overflow: "hidden",
       }}>
+        <style>{EFECTOS_CSS}</style>
+        {listo.posicion === "arriba" && cartelListo}
         <div style={{
           width: "16vh", height: "16vh", borderRadius: "50%",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -53,11 +83,7 @@ export default function FtlStandby({ juego, webappUrl, participante = null }) {
           maxWidth: "80vw", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>{participante.name || "Participante"}</div>
 
-        <div style={{
-          fontFamily: "Syne, sans-serif", fontWeight: 800,
-          fontSize: "clamp(13px, 1.7vw, 30px)", letterSpacing: ".16em",
-          color: C.gold, textAlign: "center",
-        }}>{juego.tvListo}</div>
+        {listo.posicion === "abajo" && cartelListo}
       </div>
     );
   }
