@@ -25,6 +25,8 @@ export const DUELO_APLAUSOS_MAX = 1000;
 export const REGLA_DUELO_DURACION = "duracion_votacion";
 export const REGLA_DUELO_APLAUSOS = "max_aplausos_usuario";
 export const REGLA_DUELO_MODO = "modo_votacion";
+/** ON: video detrás del duelo. OFF: sin video, la pantalla dice DUELO. */
+export const REGLA_DUELO_VIDEO = "video_fondo";
 
 /**
  * Modos de votación (regla `modo_votacion`). En los dos, los barómetros se

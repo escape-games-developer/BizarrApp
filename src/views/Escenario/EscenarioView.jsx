@@ -8,6 +8,7 @@ import { useVotacionEscenario }            from "../../hooks/useVotacionEscenari
 import FtlBarometro                       from "../../components/FtlBarometro";
 import { ESCENARIO_JUEGOS }                from "../../constants/escenarioJuegos";
 import CatalogoJuegos, { ESCENARIO_CATALOGO } from "../../components/CatalogoJuegos";
+import ContenedorPostulacion           from "../../components/ContenedorPostulacion";
 import DueloVistaCompleta                  from "../Juegos/DueloVistaCompleta";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
@@ -283,7 +284,7 @@ function ToquesFtl({ turnId, enVivo }) {
 // La inscripción vive en `escenario_queue`, no en un useState: por eso el hook
 // recibe el user id. Un F5 acá tiene que devolver la misma pantalla, y la
 // llamada al escenario tiene que llegar sola por Realtime.
-function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido }) {
+function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido, mostrarVestuario = true, estiloCards = true }) {
   const { myEntry, isEnrolled, enroll, leave, loading, error } =
     useEscenarioQueue(sessionId, juego.type, user?.id ?? null);
   const modoVotacion = useVotacionEscenario()[juego.type] || "off";
@@ -368,34 +369,26 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
 
   // Postulación pura: sin catálogo, sin thumbnails, sin buscador. El desafío
   // lo define el operador cuando llama al participante.
+  // Ocupa toda la sección; el botón va adentro del contenedor (ContenedorPostulacion).
   return (
-    <div>
-      <div className="sec-hdr"><span style={{ fontSize: 20 }}>{juego.icon}</span><h3>{juego.label}</h3></div>
-      <CostumeStrip
-        items={juego.vestuario}
-        color={juego.textoCliente} bg={juego.bgCliente} border={juego.bordeCliente}
-      />
-      <div style={{
-        textAlign: "center", padding: "22px 16px", borderRadius: 16, marginBottom: 14,
-        background: juego.bgCliente, border: `1px solid ${juego.bordeCliente}`,
-      }}>
-        <div style={{ fontSize: 38, marginBottom: 10 }}>{juego.icon}</div>
-        <div style={{
-          fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 16,
-          color: juego.textoCliente, marginBottom: 6,
-        }}>
-          {juego.titulo}
+    <ContenedorPostulacion
+      id={juego.type} logo={juego.placa} alt={juego.label} titulo={juego.titulo}
+      textoBoton={juego.botonPostular} cargando={loading} onPostular={() => enroll(user)}
+      estiloCards={estiloCards} error={error}
+      propio={{ bg: juego.bgCliente, borde: juego.bordeCliente, texto: juego.textoCliente, boton: juego.gradCliente }}
+      arriba={<>
+        <div className="sec-hdr" style={{ marginBottom: 0 }}>
+          <span style={{ fontSize: 20 }}>{juego.icon}</span><h3>{juego.label}</h3>
         </div>
-        <div style={{ fontSize: 12, color: "rgba(245,230,192,.5)", lineHeight: 1.5 }}>
-          {juego.bajada}
-        </div>
-      </div>
-      <button className="btn-primary" style={{ background: juego.gradCliente }}
-        disabled={loading} onClick={() => enroll(user)}>
-        {loading ? "Anotándote…" : juego.botonPostular}
-      </button>
-      {error && <ErrorNota texto={error}/>}
-    </div>
+        {/* Ajustes → General → Vestuario de cada juego. */}
+        {mostrarVestuario && (
+          <CostumeStrip
+            items={juego.vestuario}
+            color={juego.textoCliente} bg={juego.bgCliente} border={juego.bordeCliente}
+          />
+        )}
+      </>}
+    />
   );
 }
 
@@ -437,7 +430,7 @@ function KaraokeView({ user, sessionId, ytConfig }) {
 }
 
 // ─── EscenarioView (router) ──────────────────────────────────────────────────
-export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState, mostrarCatalogo = false }) {
+export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState, mostrarCatalogo = false, vestuario = {}, estiloCards = true }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -462,7 +455,7 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   // de entrada, sin cards ni pasos intermedios.
   if (activeEscenario === "duelo") return (
     <DueloVistaCompleta sessionId={sessionId} user={user} gameState={gameState}
-      activeEscenario={activeEscenario}/>
+      activeEscenario={activeEscenario} estiloCards={estiloCards}/>
   );
 
   // FTL y Personal Trainer corren el MISMO contrato (postulación → el operador
@@ -471,6 +464,7 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   const juego = ESCENARIO_JUEGOS[activeEscenario];
   if (juego) return (
     <JuegoEscenarioView juego={juego} user={user} sessionId={sessionId}
+      mostrarVestuario={vestuario[juego.type] !== false} estiloCards={estiloCards}
       participante={gameState?.escenario_participant || null}
       videoElegido={gameState?.escenario_video || null} />
   );

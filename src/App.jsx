@@ -183,7 +183,9 @@ export default function BizarrApp() {
       case "escenario":
         return <EscenarioView user={user} activeEscenario={gameState?.active_escenario ?? null}
                  isRestricted={isRestricted} onGoProfile={goProfile} sessionId={session?.id}
-                 ytConfig={ytConfig} gameState={gameState} mostrarCatalogo={general.catalogoJuegos}/>;
+                 ytConfig={ytConfig} gameState={gameState} mostrarCatalogo={general.catalogoJuegos}
+                 vestuario={{ ftl: general.vestuarioFtl, pt: general.vestuarioPt }}
+                 estiloCards={general.estiloCards}/>;
       case "pantalla":   return null; // PantallaView vive fuera del switch, ver abajo
       case "profile":
         // Registro con mail primero: el mail ya está validado, falta el formulario.
@@ -226,7 +228,8 @@ export default function BizarrApp() {
   return (
     <>
       <style>{globalCss}</style>
-      <div className="app-root">
+      {/* sin-titulos: Ajustes → General → títulos de juegos y secciones apagado. */}
+      <div className={general.titulos ? "app-root" : "app-root sin-titulos"}>
         <ClientShell logoSrc={CLIENT_LOGO_URL}notificationSlot={<NotificationBell user={user}/>}
           navItems={navItems} activeNavId={view} onNavigate={navigate} onNavIntent={navIntent}>
             {authNotice && (

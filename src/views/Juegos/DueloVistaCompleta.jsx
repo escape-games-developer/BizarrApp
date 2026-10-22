@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
 import { useDueloRound, useToquesDuelo, useVotoDuelo } from "../../hooks/realtime/useDueloRound";
+import ContenedorPostulacion from "../../components/ContenedorPostulacion";
 import {
   faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, modoDeRonda, anchoBarraP1,
 } from "../../services/duelo";
@@ -60,7 +61,7 @@ const cajaCentro = {
  *   · resultado     → applause_sessions.result (lo decide el servidor)
  *   · mis votos     → applause_add (toques) / duelo_votar (voto único)
  */
-export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack }) {
+export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack, estiloCards = true }) {
   const { misPostulacion, postularme, error } = useDueloPostulaciones(sessionId, user);
   const { round, counts, now, vencida } = useDueloRound(sessionId, { autoFinish: true });
   const toques = useToquesDuelo(round);
@@ -74,7 +75,8 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   const bloqueo = modo === "votos" ? voto.bloqueo : toques.bloqueo;
 
   const header = (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+    // data-titulo-seccion: se oculta con Ajustes → General → títulos apagado.
+    <div data-titulo-seccion style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
       {/* Sin `onBack` el Duelo ocupa Juegos entero: no hay a dónde volver. */}
       {onBack && <button onClick={onBack} style={{
         background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)",
@@ -290,37 +292,17 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   };
 
   if (!misPostulacion) {
+    // Mismo contenedor que FTL y PT: toda la sección, botón adentro.
     return (
-      <div>
-        {header}
-        <div style={{
-          textAlign: "center", padding: "22px 16px", borderRadius: 18,
-          background: "linear-gradient(135deg, rgba(255,45,149,.12), rgba(255,149,0,.08))",
-          border: "1px solid rgba(255,45,149,.4)",
-        }}>
-          <img src={DUELO_LOGO} alt="Duelo" style={{ width: 140, height: 140, objectFit: "contain", margin: "0 auto 10px" }}
-            onError={(e) => { e.target.style.display = "none"; }} />
-          <div style={{ fontSize: 13, color: "rgba(245,230,192,.6)", marginBottom: 16, lineHeight: 1.5 }}>
-            ¿Te animás a subir al escenario? Postulate y esperá que el staff te elija.
-          </div>
-          <button onClick={handlePostularme} disabled={enviando} style={{
-            width: "100%", padding: "15px", borderRadius: 12, border: "none",
-            background: "linear-gradient(135deg, #FF2D95, #FF9500)", color: "#fff",
-            fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 15,
-            cursor: enviando ? "default" : "pointer", opacity: enviando ? 0.6 : 1,
-            WebkitTapHighlightColor: "transparent",
-          }}>
-            {enviando ? "Enviando…" : "🎤 Postularme"}
-          </button>
-          {error && (
-            <div style={{
-              marginTop: 12, padding: "10px 12px", borderRadius: 12, textAlign: "center",
-              background: "rgba(255,45,120,.1)", border: "1px solid rgba(255,45,120,.35)",
-              fontSize: 12, color: "#FF8FB8",
-            }}>{error}</div>
-          )}
-        </div>
-      </div>
+      <ContenedorPostulacion
+        id="duelo" logo={DUELO_LOGO} alt="Duelo de Talentos"
+        titulo="¿Te animás a subir al escenario? Postulate y esperá que el staff te elija."
+        textoBoton="🎤 Postularme" cargando={enviando} onPostular={handlePostularme}
+        estiloCards={estiloCards} error={error} arriba={header}
+        propio={{ bg: "linear-gradient(135deg, rgba(255,45,149,.12), rgba(255,149,0,.08))",
+          borde: "rgba(255,45,149,.4)", texto: "rgba(245,230,192,.75)",
+          boton: "linear-gradient(135deg, #FF2D95, #FF9500)" }}
+      />
     );
   }
 

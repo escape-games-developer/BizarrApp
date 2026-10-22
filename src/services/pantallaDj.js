@@ -358,6 +358,14 @@ export const tvReport = (eventId, token, currentTime, duration) =>
     _current_time: currentTime ?? null, _duration: duration ?? null,
   }, supabaseAnon);
 
+/**
+ * Latido de la TV: sólo marca que está abierta (`tv_connected_at`). Va aparte
+ * del reporte de progreso, que se corta cuando no suena una canción del DJ
+ * (juegos, escenario, placas) y dejaba la TV como inactiva en el Admin.
+ */
+export const tvLatido = (eventId, token) =>
+  rpc("pantalla_tv_latido", { _event_id: eventId, _token: token }, supabaseAnon);
+
 /** Latido de la Telepronter: sólo marca que está abierta. No toca la reproducción. */
 export const telepronterReport = (eventId, token) =>
   rpc("pantalla_telepronter_report", { _event_id: eventId, _token: token }, supabaseAnon);

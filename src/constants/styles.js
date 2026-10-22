@@ -135,6 +135,9 @@ const globalCss = `
   .nav-btn .nav-label { font-size: 9px; font-weight: 500; white-space:nowrap; }
 
   /* ── Section header ── */
+  /* Ajustes → General → «Títulos de juegos y secciones» apagado: App pone
+     .sin-titulos en .app-root y se ocultan todos los títulos de sección. */
+  .sin-titulos .sec-hdr, .sin-titulos [data-titulo-seccion] { display: none !important; }
   .sec-hdr {
     display: flex;
     align-items: center;

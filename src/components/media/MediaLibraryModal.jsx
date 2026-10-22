@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMediaAssets } from "../../hooks/useMediaAssets";
 import { filterAssets } from "../../services/mediaAssets";
 import MediaAssetCard from "./MediaAssetCard";
@@ -82,7 +83,10 @@ export default function MediaLibraryModal({
 
   if (!open) return null;
 
-  return (
+  // Portal a <body>: si el modal se monta dentro de una card con transform o
+  // filtro (las del Admin), su `position: fixed` queda atrapado en la card y
+  // se ve recortado, sin buscador, sin «Subir» y sin los botones de abajo.
+  return createPortal(
     <>
       <style>{mediaCss}</style>
       <div className="ml-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
@@ -196,6 +200,7 @@ export default function MediaLibraryModal({
 
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

@@ -11,6 +11,11 @@ import { supabase } from "../lib/supabase";
  *   modoInvitado   → el login muestra «Entrar como invitado».
  *   catalogoJuegos → sin nada activo, Juegos y Escenario muestran las cards de
  *                    sus juegos (migración 20261021170000).
+ *   titulos        → títulos de juegos y secciones (`.sec-hdr`) en la app.
+ *   vestuarioFtl / vestuarioPt → cuadro «Vestuario especial requerido» de
+ *                    Follow the Leader / Personal Trainer (migración 20261022080000).
+ *   estiloCards    → el contenedor de postulación (FTL, PT, Duelo) usa el estilo
+ *                    de las cards del catálogo (migración 20261022100000).
  *
  * Mismo contrato que useRegistroConfig: el cliente lee por RPC pública y el
  * Admin guarda con control de concurrencia sobre el `updated_at` crudo.
@@ -21,14 +26,19 @@ const CLAVE = "general";
 const VERSION = 1;
 
 /** Lo que había antes de que existiera la configuración. */
-export const GENERAL_POR_DEFECTO = Object.freeze({ geoObligatoria: true, modoInvitado: true, catalogoJuegos: true });
+export const GENERAL_POR_DEFECTO = Object.freeze({
+  geoObligatoria: true, modoInvitado: true, catalogoJuegos: true,
+  titulos: true, vestuarioFtl: true, vestuarioPt: true, estiloCards: true,
+});
+const OPCIONALES = ["catalogoJuegos", "titulos", "vestuarioFtl", "vestuarioPt", "estiloCards"];
 
 function normalizar(value) {
   if (!value || typeof value.geoObligatoria !== "boolean" || typeof value.modoInvitado !== "boolean") return null;
   return {
     geoObligatoria: value.geoObligatoria,
     modoInvitado:   value.modoInvitado,
-    catalogoJuegos: typeof value.catalogoJuegos === "boolean" ? value.catalogoJuegos : GENERAL_POR_DEFECTO.catalogoJuegos,
+    ...Object.fromEntries(OPCIONALES.map((k) =>
+      [k, typeof value[k] === "boolean" ? value[k] : GENERAL_POR_DEFECTO[k]])),
   };
 }
 
@@ -75,7 +85,8 @@ export function useGeneralConfigAdmin() {
   /** Guarda la configuración entera. Tira con un mensaje legible si no se guardó. */
   const guardar = useCallback(async (nueva) => {
     const value = { version: VERSION, geoObligatoria: !!nueva.geoObligatoria,
-      modoInvitado: !!nueva.modoInvitado, catalogoJuegos: !!nueva.catalogoJuegos };
+      modoInvitado: !!nueva.modoInvitado,
+      ...Object.fromEntries(OPCIONALES.map((k) => [k, !!nueva[k]])) };
     const { data, error: e } = await supabase
       .from(TABLA).update({ value }).eq("key", CLAVE).eq("updated_at", updatedAt)
       .select("value, updated_at");

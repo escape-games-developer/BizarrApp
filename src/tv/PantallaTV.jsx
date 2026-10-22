@@ -12,7 +12,7 @@ import TomatazoOverlay from "./TomatazoOverlay";
 import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
-import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado, telepronterReport } from "../services/pantallaDj";
+import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado, telepronterReport, tvLatido } from "../services/pantallaDj";
 import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
 import { loadTvConfig, normalizeTvConfig } from "../designers/lib/persistence";
 import { DEFAULT_TV_CONFIG } from "../designers/defaults";
@@ -36,8 +36,8 @@ import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
  * horizontalmente (`pantalla_events.telepronter_espejo`).
  */
 
-/** Cada cuánto la Telepronter avisa que está abierta (el Admin la da por viva 20 s). */
-const TELEPRONTER_LATIDO_MS = 8_000;
+/** Cada cuánto la TV y la Telepronter avisan que están abiertas (el Admin las da por vivas 20 s). */
+const LATIDO_MS = 8_000;
 
 const C = {
   bg: "#08040F", gold: "#FFD600", cyan: "#00E5FF",
@@ -428,13 +428,15 @@ export default function PantallaTV({ modo = "tv" }) {
       .catch((err) => setAuthErr(err.message));
   }, [code, token]);
 
-  // Latido de la Telepronter: es lo que el Admin lee para mostrarla activa.
+  // Latido: es lo que el Admin lee para mostrar ACTIVA la pantalla. La TV late
+  // siempre, esté mostrando la canción del DJ, un juego, el escenario o una
+  // placa (el reporte de progreso sólo corre con canción al aire).
   useEffect(() => {
-    if (!telepronter || !eventId || !token) return;
-    const latir = () => telepronterReport(eventId, token)
-      .catch((err) => console.warn("[Telepronter] latido:", err.message));
+    if (!eventId || !token) return;
+    const latir = () => (telepronter ? telepronterReport(eventId, token) : tvLatido(eventId, token))
+      .catch((err) => console.warn(telepronter ? "[Telepronter] latido:" : "[TV] latido:", err.message));
     latir();
-    const id = setInterval(latir, TELEPRONTER_LATIDO_MS);
+    const id = setInterval(latir, LATIDO_MS);
     return () => clearInterval(id);
   }, [telepronter, eventId, token]);
   const espejo = telepronter && event?.telepronter_espejo === true;

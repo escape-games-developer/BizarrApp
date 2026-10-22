@@ -29,7 +29,7 @@ const card = {
 const CATEGORIAS = [
   {
     id: "general", icon: "⚙️", label: "General",
-    descripcion: "Reglas de acceso de los clientes y qué ven en Juegos y Escenario cuando no hay nada activo.",
+    descripcion: "Reglas de acceso de los clientes y qué partes de la app se muestran: cards de juegos, estilo de los juegos, títulos de sección y vestuario.",
     Componente: General,
   },
   {

@@ -23,6 +23,26 @@ const OPCIONES = [
     activo:   "Sin nada activo, Juegos y Escenario muestran las cards con el logo de cada juego, para que el cliente sepa qué hay.",
     inactivo: "Sin nada activo, Juegos y Escenario quedan con la pantalla de espera, sin cards.",
   },
+  {
+    id: "estiloCards", icon: "🎨", titulo: "Estilo de cards en los juegos",
+    activo:   "El contenedor de postulación de Follow the Leader, Personal Trainer y el Duelo usa el estilo de las cards: borde neón con el color del juego y fondo casi transparente.",
+    inactivo: "El contenedor de postulación usa los colores propios de cada juego. Sigue ocupando toda la pantalla con el botón adentro.",
+  },
+  {
+    id: "titulos", icon: "🔤", titulo: "Títulos de juegos y secciones",
+    activo:   "Arriba de cada juego y sección se ve su título (por ejemplo «💃 Follow the Leader», «Mi Perfil», «Carta del Bar»).",
+    inactivo: "Los juegos y secciones se muestran sin título: va directo el contenido.",
+  },
+  {
+    id: "vestuarioFtl", icon: "💃", titulo: "Vestuario — Follow the Leader",
+    activo:   "En la postulación de Follow the Leader se ve el cuadro «Vestuario especial requerido».",
+    inactivo: "La postulación de Follow the Leader no muestra el cuadro de vestuario.",
+  },
+  {
+    id: "vestuarioPt", icon: "🏋️", titulo: "Vestuario — Personal Trainer",
+    activo:   "En la postulación de Personal Trainer se ve el cuadro «Vestuario especial requerido».",
+    inactivo: "La postulación de Personal Trainer no muestra el cuadro de vestuario.",
+  },
 ];
 
 export default function General({ puedeEditar }) {

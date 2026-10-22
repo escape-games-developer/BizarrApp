@@ -38,7 +38,6 @@ export const ESCENARIO_JUEGOS = {
     textoCliente:  "#F9A8D4",
     vestuario: ["🧢 Gorra de béisbol", "🕺 Chaleco brillante", "🥿 Sneakers blancos", "🕶️ Lentes de sol"],
     titulo:    "¿Querés ser el próximo líder?",
-    bajada:    "Anotate. El staff te llama al escenario y te dice qué tenés que hacer. ¡El bar te sigue!",
     botonPostular: "💃 QUIERO PARTICIPAR",
 
     // TV
@@ -62,7 +61,6 @@ export const ESCENARIO_JUEGOS = {
     textoCliente:  "#86EFAC",
     vestuario: ["🏋️ Polaina de colores", "🤸 Muñequeras flúo", "🎗️ Bandana en la cabeza", "🩱 Body aeróbico"],
     titulo:    "¿Te animás a dirigir la clase?",
-    bajada:    "Anotate. El staff te llama al escenario y te dice qué tenés que hacer. ¡Toda la sala te sigue!",
     botonPostular: "🏋️ QUIERO PARTICIPAR",
 
     placa:   "/placas/Personal_Trainer-removebg-preview.png",

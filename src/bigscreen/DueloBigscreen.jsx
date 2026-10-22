@@ -5,15 +5,15 @@ import LogoJuego from "../components/LogoJuego";
 import FtlBarometro from "../components/FtlBarometro";
 import { usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
 import { useDueloRound } from "../hooks/realtime/useDueloRound";
+import { useDueloPantalla, efectoDuelo, escalaDeZoom, EFECTOS_CSS } from "../hooks/useDueloPantalla";
 import {
-  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, anchoBarraP1,
+  faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
 } from "../services/duelo";
 
 const P1_COLOR = "#ff1688"; // Participante 1 — fucsia
 const P2_COLOR = "#ff8a00"; // Participante 2 — naranja
 const PLACA    = "/placas/Duelo_de_talento-removebg-preview.png";
 const LOGO_APP  = "/logo.png";
-const LOGO_DUELO = "/logos/duelo_horizontal.png";
 const MAX_ACTIVE_PER_SLOT = 20;
 
 // ── YouTubeVideoPlayer (memoizado) ────────────────────────────────────────────
@@ -25,15 +25,14 @@ const YouTubeVideoPlayer = memo(function YouTubeVideoPlayer({ video }) {
       <iframe
         title="duelo-video"
         src={`https://www.youtube.com/embed/${video.yt_id}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0&rel=0&loop=1&playlist=${video.yt_id}`}
-        style={{ width: "100%", height: "100%", border: "none" }}
+        className="duel-fondo-video"
         allow="autoplay; encrypted-media"
       />
     );
   }
   if (video?.source === "url" && video?.video_url) {
     return (
-      <video src={video.video_url} autoPlay muted loop
-        style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      <video src={video.video_url} autoPlay muted loop playsInline className="duel-fondo-video" />
     );
   }
   return null;
@@ -55,15 +54,14 @@ function Face({ emoji, photo, size, borderColor }) {
   return <div style={base}>{emoji || "🎤"}</div>;
 }
 
-// ── DuelHeader — logos centrales posicionados independientes (dentro del área central) ──
-// BizarrApp: chico, hacia el participante 1 (izq). Duelo: grande, centrado sobre el video.
+// ── DuelHeader — logo de BizarrApp centrado arriba del área central ──
+// El logo «Duelo de Talentos» ya no va: lo que identifica al juego es el centro
+// (texto o imagen configurable desde el Admin).
 function DuelHeader({ conLogoApp = true }) {
   return (
     <div className="center-header">
       {conLogoApp && <img className="bizarrapp-logo" src={LOGO_APP} alt="BizarrApp"
         onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-      <img className="duel-logo" src={LOGO_DUELO} alt="Duelo de Talentos"
-        onError={(e) => { e.currentTarget.style.display = "none"; }} />
     </div>
   );
 }
@@ -136,7 +134,7 @@ function LikeCounter({ percent, color, numberColor }) {
 }
 
 // ── ContestantInfo — avatar + nombre + contador, SIN tarjeta (por encima de partículas) ──
-function ContestantInfo({ name, color, avatar, percent, side, leader, avatarRef, pulse, popups }) {
+function ContestantInfo({ name, color, avatar, percent, side, leader, avatarRef, pulse, popups, conPorcentaje = true }) {
   const isLeft = side === "left";
   return (
     <div className="contestant-info">
@@ -160,7 +158,8 @@ function ContestantInfo({ name, color, avatar, percent, side, leader, avatarRef,
         fontSize: "clamp(24px, 1.8vw, 33px)", fontWeight: 700, color: "#fff",
         textTransform: "uppercase", letterSpacing: 0.5, textShadow: "0 2px 10px rgba(0,0,0,.7)",
       }}>{name}</div>
-      <LikeCounter percent={percent} color={color} numberColor={isLeft ? "#ff258e" : "#ff9100"} />
+      {/* 👍 + % activable desde el Admin (Duelo → Pantalla del duelo). */}
+      {conPorcentaje && <LikeCounter percent={percent} color={color} numberColor={isLeft ? "#ff258e" : "#ff9100"} />}
     </div>
   );
 }
@@ -322,7 +321,7 @@ function makeAmbient() {
 }
 
 // ── ContestantColumn — columna lateral por capas (fondo · energía · ambient · votos · info · glow) ──
-function ContestantColumn({ side, name, color, avatar, percent, leader, avatarRef, pulse, popups, particles, onParticleDone }) {
+function ContestantColumn({ side, name, color, avatar, percent, leader, avatarRef, pulse, popups, particles, onParticleDone, conPorcentaje = true }) {
   const [ambient] = useState(makeAmbient); // generadas una sola vez al montar
   const glowRef = useRef(null);
 
@@ -371,7 +370,7 @@ function ContestantColumn({ side, name, color, avatar, percent, leader, avatarRe
       </div>
       <VoteParticleLayer particles={particles} avatarRef={avatarRef} color={color} onDone={onParticleDone} />
       <ContestantInfo name={name} color={color} avatar={avatar} percent={percent} side={side}
-        leader={leader} avatarRef={avatarRef} pulse={pulse} popups={popups} />
+        leader={leader} avatarRef={avatarRef} pulse={pulse} popups={popups} conPorcentaje={conPorcentaje} />
       {/* Barómetro vertical de Follow the Leader con el % de este participante.
           No decae: en el Duelo el % sólo cambia cuando el público vota. */}
       <div className="column-barometro">
@@ -390,18 +389,32 @@ const duelStyles = (
       --left-color: #ff087f;  --left-bright: #ff3ca2;  --left-dark: #260016;
       --right-color: #ff8a00; --right-bright: #ffb000; --right-dark: #291300;
       --header-height: clamp(108px, 13vh, 145px);
+      /* Layout editable (Admin → Duelo → Pantalla del duelo). Los pone el
+         componente con style; acá, los valores de siempre. */
+      --izq-ancho: 15vw; --izq-alto: 100%;
+      --der-ancho: 15vw; --der-alto: 100%;
+      --baro-escala: 1; --baro-alto: 60%; --baro-y: 64%; --baro-x: 50%;
       position: absolute; inset: 0; height: 100%;
-      display: grid;
-      grid-template-columns: clamp(190px, 15vw, 285px) minmax(0, 1fr) clamp(190px, 15vw, 285px);
-      grid-template-rows: 100%;
       overflow: hidden; background: #050308;
     }
 
-    /* ── Área central: video + logos ── */
+    /* ── FONDO: video a pantalla completa, o imagen de fondo, o negro ── */
+    .duel-fondo {
+      position: absolute; inset: 0; z-index: 0; overflow: hidden;
+      container-type: size; background: #050308 center / cover no-repeat;
+    }
+    /* El video cubre todo (como background-size: cover), sin franjas negras. */
+    .duel-fondo-video {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: max(100cqw, 177.78cqh); height: max(100cqh, 56.25cqw);
+      border: 0; object-fit: cover; pointer-events: none;
+    }
+
+    /* ── MÁSCARA, área central entre los paneles: logos + reloj ── */
     .video-zone {
-      position: relative; min-width: 0; height: 100%;
-      display: flex; flex-direction: column; align-items: stretch;
-      gap: clamp(2px, 0.5vh, 8px); overflow: hidden;
+      position: absolute; top: 0; bottom: 0; z-index: 12;
+      left: var(--izq-ancho); right: var(--der-ancho);
+      min-width: 0; overflow: hidden; pointer-events: none;
     }
     .center-header {
       position: relative; width: 100%;
@@ -409,30 +422,17 @@ const duelStyles = (
       z-index: 20; pointer-events: none;
     }
     .bizarrapp-logo {
-      position: absolute; left: clamp(8px, 1.5vw, 30px); top: 50%; transform: translateY(-50%);
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
       height: clamp(103px, 9vw, 165px); width: auto; object-fit: contain;
       filter: drop-shadow(0 4px 8px rgba(0,0,0,.85)) drop-shadow(0 0 12px rgba(255,190,0,.18));
     }
-    .duel-logo {
-      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      height: clamp(140px, 12vw, 220px); max-width: min(48vw, 780px); width: auto; object-fit: contain;
-      mix-blend-mode: screen; /* el PNG sigue sin alfa (RGB) → screen elimina el rectángulo negro */
-      filter: drop-shadow(0 4px 10px rgba(0,0,0,.9)) drop-shadow(0 0 16px rgba(255,170,0,.32));
+    /* ── MÁSCARA, paneles laterales: ancho y alto por lado, centrados en vertical ── */
+    .contestant-column {
+      position: absolute; top: 50%; transform: translateY(-50%); z-index: 10;
+      overflow: hidden; isolation: isolate;
     }
-    .video-wrapper {
-      position: relative; flex: 1; min-height: 0;
-      display: flex; align-items: center; justify-content: center;
-      margin-top: clamp(12px, 1.5vh, 24px); /* baja el video para separarlo del header */
-      padding: 0 0 clamp(8px, 1vh, 16px);   /* sin padding horizontal → el video pega contra las columnas */
-    }
-    .youtube-player-container {
-      width: 100%;
-      height: min(82vh, calc(100vh - var(--header-height) - clamp(12px, 1.5vh, 24px)));
-      max-width: 100%; background: #000; overflow: hidden;
-    }
-
-    /* ── Columnas laterales ── */
-    .contestant-column { position: relative; height: 100%; overflow: hidden; isolation: isolate; }
+    .contestant-column--left  { left: 0;  width: var(--izq-ancho); height: var(--izq-alto); }
+    .contestant-column--right { right: 0; width: var(--der-ancho); height: var(--der-alto); }
 
     .contestant-column--left {
       background:
@@ -570,32 +570,20 @@ const duelStyles = (
     .vote-spark--right { background: radial-gradient(circle, #fff 0%, #ffd65a 70%); box-shadow: 0 0 6px #ffd65a, 0 0 12px rgba(255,130,0,0.9); }
 
     /* ── Info del participante (por encima de las partículas) ── */
+    /* Barómetro: ancho, alto y ubicación editables. La horizontal se espeja:
+       --baro-x se mide desde el borde EXTERIOR de cada panel (izquierda en el
+       panel izquierdo, derecha en el derecho), así los dos quedan simétricos. */
     .column-barometro {
-      position: absolute; z-index: 14; left: 50%; transform: translateX(-50%);
-      top: clamp(250px, 33vh, 380px); bottom: clamp(22px, 5vh, 56px);
-      width: clamp(34px, 3.1vw, 60px); pointer-events: none;
+      position: absolute; z-index: 14; transform: translate(-50%, -50%);
+      top: var(--baro-y); height: var(--baro-alto);
+      width: calc(clamp(34px, 3.1vw, 60px) * var(--baro-escala)); pointer-events: none;
     }
+    .contestant-column--left  .column-barometro { left: var(--baro-x); }
+    .contestant-column--right .column-barometro { left: calc(100% - var(--baro-x)); }
     .contestant-info {
       position: relative; z-index: 15;
       display: flex; flex-direction: column; align-items: center; gap: 6px;
       padding-top: clamp(18px, 2vh, 32px); pointer-events: none;
-    }
-
-    /* ── Barra del reparto 100% ──
-       Absoluta sobre el grid (no es una celda más): no toca las 3 columnas ni
-       el área del video. Fucsia = P1, naranja = P2; la división se mueve en
-       realtime y la transition la lleva suave en los dos sentidos. */
-    .duel-split {
-      position: absolute; left: 0; right: 0; bottom: 0; z-index: 30;
-      height: clamp(8px, 1.1vh, 14px);
-      background: var(--right-color);
-      box-shadow: 0 -2px 14px rgba(0,0,0,.55);
-      pointer-events: none;
-    }
-    .duel-split-fill {
-      height: 100%; background: var(--left-color);
-      box-shadow: 2px 0 10px rgba(0,0,0,.5);
-      transition: width .45s cubic-bezier(.4, 0, .2, 1);
     }
   `}</style>
 );
@@ -623,6 +611,11 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
   // Ajustes → QR en pantalla: el QR de la convocatoria se puede ocultar.
   const mostrarQr   = usePantallaQr().duelo !== false;
   const mostrarLogo = usePantallaLogo().duelo !== false;
+  // Admin → Duelo → Pantalla del duelo: centro (texto/imagen) y 👍 + %.
+  const pantalla = useDueloPantalla();
+  const efecto = efectoDuelo(pantalla.efecto);
+  const estiloEfecto = { animation: efecto.anim, transformOrigin: efecto.origen || "50% 50%",
+    willChange: efecto.id === "ninguno" ? "auto" : "transform" };
   const currentRound = demo ? demo.round : live.round;
   const counts = demo ? (demo.counts || { p1: 0, p2: 0 }) : live.counts;
   const nowMs = demo ? Date.now() : live.now;
@@ -821,38 +814,74 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
     );
   }
 
-  // ── VOTACIÓN (3 columnas: P1 · video + VS + reloj · P2) ────────────────────
-  // El video y los participantes salen de la ronda / game_state de ESTA ronda.
+  // ── VOTACIÓN: FONDO + MÁSCARA ──────────────────────────────────────────────
+  // Fondo: el video de ESTA ronda a pantalla completa; sin video, la imagen de
+  // fondo del Admin; sin imagen, negro. Máscara (siempre encima): paneles,
+  // barómetros, avatares, logo de BizarrApp, logo de duelo y reloj.
   const video = gameState?.duelo_video;
   const hasVideo = (video?.source === "youtube" && !!video?.yt_id)
                 || (video?.source === "url"     && !!video?.video_url);
 
+  // Layout del Admin → variables CSS de .duel-screen.
+  const layout = {
+    "--izq-ancho": `${pantalla.panelIzq.ancho}vw`, "--izq-alto": `${pantalla.panelIzq.alto}%`,
+    "--der-ancho": `${pantalla.panelDer.ancho}vw`, "--der-alto": `${pantalla.panelDer.alto}%`,
+    "--baro-escala": pantalla.barometro.ancho / 100,
+    "--baro-alto": `${pantalla.barometro.alto}%`, "--baro-y": `${pantalla.barometro.y}%`,
+    "--baro-x": `${pantalla.barometro.x}%`,
+  };
+  // Logo de duelo: arriba / centro / abajo del área central, con su zoom.
+  const alinear = { arriba: "flex-start", centro: "center", abajo: "flex-end" }[pantalla.logoPos];
+  const altoLogo = pantalla.logoPos === "centro" ? "100%" : "45%";
+  const escala = escalaDeZoom(pantalla.zoom);
+
   return (
-    <div className="duel-screen">
+    <div className="duel-screen" style={layout}>
       {keyframes}
       {duelStyles}
+      <style>{EFECTOS_CSS}</style>
+
+      <div className="duel-fondo"
+        style={!hasVideo && pantalla.fondo ? { backgroundImage: `url("${pantalla.fondo}")` } : undefined}>
+        {hasVideo && <YouTubeVideoPlayer video={video} />}
+      </div>
 
       <ContestantColumn side="left" name={s1?.name || "—"} color={P1_COLOR} avatar={s1} percent={pct.p1}
+        conPorcentaje={pantalla.porcentajes}
         leader={c1 > c2} avatarRef={avatarRefs[1]} pulse={pulse1}
         popups={popups.filter((p) => p.slot === 1)}
         particles={particles.filter((p) => p.slot === 1)} onParticleDone={onParticleDone} />
 
       <main className="video-zone">
         <DuelHeader conLogoApp={mostrarLogo} />
-        {hasVideo ? (
-          <div className="video-wrapper">
-            <div className="youtube-player-container">
-              <YouTubeVideoPlayer video={video} />
+        {/* Logo de duelo (texto o imagen): siempre en la máscara, también con
+            video. Tres capas: posición → zoom → efecto, para que el efecto
+            no pise el zoom ni el drop-shadow. */}
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+          justifyContent: alinear, alignItems: "center",
+          padding: "var(--header-height) 3vw 13vh", boxSizing: "border-box", pointerEvents: "none",
+        }}>
+          <div style={{ width: "100%", height: altoLogo, display: "flex", alignItems: "center",
+            justifyContent: "center", transform: `scale(${escala})`, transition: "transform .3s ease" }}>
+            <div style={{ ...estiloEfecto, width: "100%", height: "100%",
+              display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {pantalla.centro === "imagen" && pantalla.imagen ? (
+                <img src={pantalla.imagen} alt="" style={{
+                  maxWidth: "100%", maxHeight: "100%", objectFit: "contain",
+                  filter: `drop-shadow(0 0 24px ${P1_COLOR}88) drop-shadow(0 0 40px ${P2_COLOR}66)`,
+                }}/>
+              ) : (
+                <div style={{
+                  fontFamily: "Syne, sans-serif", fontWeight: 900, textAlign: "center", lineHeight: 1.05,
+                  fontSize: pantalla.texto.length > 10 ? "clamp(44px,5.4vw,120px)" : "clamp(60px,8vw,170px)",
+                  letterSpacing: ".04em", color: "#F0E8FF", opacity: .92,
+                  textShadow: `0 0 30px ${P1_COLOR}, 0 0 60px ${P2_COLOR}`,
+                }}>{pantalla.texto}</div>
+              )}
             </div>
           </div>
-        ) : (
-          <div style={{
-            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "clamp(80px,11vw,200px)",
-            color: "#F0E8FF", opacity: .9, textShadow: `0 0 30px ${P1_COLOR}, 0 0 60px ${P2_COLOR}`,
-            pointerEvents: "none",
-          }}>VS</div>
-        )}
+        </div>
         {seg != null && (
           <div style={{
             position: "absolute", left: "50%", bottom: "4vh", transform: "translateX(-50%)", zIndex: 20,
@@ -867,13 +896,10 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
       </main>
 
       <ContestantColumn side="right" name={s2?.name || "—"} color={P2_COLOR} avatar={s2} percent={pct.p2}
+        conPorcentaje={pantalla.porcentajes}
         leader={c2 > c1} avatarRef={avatarRefs[2]} pulse={pulse2}
         popups={popups.filter((p) => p.slot === 2)}
         particles={particles.filter((p) => p.slot === 2)} onParticleDone={onParticleDone} />
-
-      <div className="duel-split">
-        <div className="duel-split-fill" style={{ width: `${anchoBarraP1(pct)}%` }} />
-      </div>
     </div>
   );
 }

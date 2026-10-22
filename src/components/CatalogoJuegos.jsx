@@ -27,6 +27,27 @@ export const ESCENARIO_CATALOGO = [
 // Rosa chicle, verde pastel, azul eléctrico.
 const PALETA = ["#FF4FB8", "#7DF9B5", "#1F6BFF"];
 
+/**
+ * Color de fiesta de un juego: el que tiene su card en el catálogo. Lo usa
+ * también el contenedor de postulación (Ajustes → General → Estilo de cards),
+ * así card y juego quedan del mismo color.
+ */
+export function colorDeJuego(id) {
+  for (const lista of [JUEGOS_CATALOGO, ESCENARIO_CATALOGO]) {
+    const i = lista.findIndex((j) => j.id === id);
+    if (i >= 0) return PALETA[i % PALETA.length];
+  }
+  return PALETA[0];
+}
+
+/** Fondo casi transparente + borde neón: el look de las cards. */
+export const estiloCard = (color) => ({
+  borderRadius: 20,
+  background: `radial-gradient(circle at 50% 45%, ${color}1F, ${color}08 75%)`,
+  border: `2px solid ${color}`,
+  boxShadow: `0 0 22px ${color}88, inset 0 0 18px ${color}22`,
+});
+
 export default function CatalogoJuegos({ juegos }) {
   return (
     <div style={{
@@ -37,12 +58,10 @@ export default function CatalogoJuegos({ juegos }) {
         const color = PALETA[i % PALETA.length];
         return (
           <div key={j.id} role="img" aria-label={j.nombre} style={{
-            minHeight: 0, borderRadius: 20, padding: "10px 14px", boxSizing: "border-box",
+            minHeight: 0, padding: "10px 14px", boxSizing: "border-box",
             display: "flex", alignItems: "center", justifyContent: "center",
             // Fondo casi transparente: el color lo llevan el borde y el brillo.
-            background: `radial-gradient(circle at 50% 45%, ${color}1F, ${color}08 75%)`,
-            border: `2px solid ${color}`,
-            boxShadow: `0 0 22px ${color}88, inset 0 0 18px ${color}22`,
+            ...estiloCard(color),
           }}>
             <img src={j.logo} alt="" draggable={false}
               style={{ width: "100%", height: "100%", objectFit: "contain",
