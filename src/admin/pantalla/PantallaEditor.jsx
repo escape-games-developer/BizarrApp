@@ -3,7 +3,7 @@ import { guestUrl } from "../../services/pantallaDj";
 import PlaylistPanel from "./playlist/PlaylistPanel";
 import SeccionContenido from "./sections/SeccionContenido";
 import SeccionVotacion from "./sections/SeccionVotacion";
-import SeccionCiclo from "./sections/SeccionCiclo";
+import EventoFueraDeVivo from "./sections/EventoFueraDeVivo";
 
 function AccesoEvento({ event }) {
   const url = guestUrl(event.code);
@@ -25,9 +25,9 @@ function AccesoEvento({ event }) {
  * playlist a la izquierda y, a la derecha, acceso fijo + dos selectores fijos
  * (contenido / votación) y luego los acordeones de configuración.
  *
- * El ciclo de vida del evento (Iniciar / Finalizar / Duplicar, SeccionCiclo)
- * va arriba de todo, acá y en la consola en vivo: sin él no había forma de
- * poner un evento en vivo ni de cerrarlo desde el Admin.
+ * BizarrApp tiene un único evento, siempre en vivo: no hay ciclo de vida que
+ * administrar. Arriba de todo sólo aparece, si hiciera falta, el aviso para
+ * volver a ponerlo en vivo (EventoFueraDeVivo), acá y en la consola en vivo.
  */
 export default function PantallaEditor({ shared, secciones }) {
   const { event } = shared;
@@ -40,7 +40,7 @@ export default function PantallaEditor({ shared, secciones }) {
         </div>
 
         <aside className="pdj-shell-side">
-          <SeccionCiclo {...shared} />
+          <EventoFueraDeVivo {...shared} />
           <AccesoEvento event={event} />
           <SeccionContenido {...shared} />
           <SeccionVotacion {...shared} />

@@ -1,7 +1,4 @@
 import SeccionReglas from "./SeccionReglas";
-import SeccionKick from "./SeccionKick";
-import SeccionSubtitulos from "./SeccionSubtitulos";
-import SeccionLimpieza from "./SeccionLimpieza";
 import SeccionIngreso from "./SeccionIngreso";
 import SeccionPoderes from "./SeccionPoderes";
 import SeccionEmojis from "./SeccionEmojis";
@@ -15,14 +12,14 @@ import SeccionRecompensas from "./SeccionRecompensas";
 import SeccionPresets from "./SeccionPresets";
 import SeccionReset from "./SeccionReset";
 
-/** Orden observado en el editor original. */
+/**
+ * Orden observado en el editor original. «Reglas de votación» incluye Sacar
+ * Tema, subtítulos, sonido y limpieza de invitados, como en el original.
+ */
 export default function SeccionesConfig(shared) {
   return (
     <>
       <SeccionReglas {...shared} />
-      <SeccionKick {...shared} />
-      <SeccionSubtitulos {...shared} />
-      <SeccionLimpieza {...shared} />
       <SeccionIngreso {...shared} />
       <SeccionPoderes {...shared} />
       <SeccionEmojis {...shared} />

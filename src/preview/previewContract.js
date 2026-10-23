@@ -30,8 +30,7 @@ export const PREVIEW_PROTOCOL_VERSION = 2;
 export const PREVIEW_ACTION_DISABLED = "Vista previa: esta acción está deshabilitada.";
 
 /**
- * Coincidencia exacta (con o sin "/" final): `/designer-preview/client/home`
- * es otra ruta (ClientHomePreview del Designer existente) y no entra acá.
+ * Coincidencia exacta (con o sin "/" final).
  */
 export function isClientPreviewPath(pathname) {
   return pathname === CLIENT_PREVIEW_PATH || pathname === CLIENT_PREVIEW_PATH + "/";

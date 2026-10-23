@@ -16,7 +16,7 @@ import FtlBarometro from "../components/FtlBarometro";
  *   · el barómetro VERTICAL (por defecto debajo del avatar; ancho, alto y
  *     ubicación se editan en el Admin) y rectangular, con las divisiones de los
  *     cuatro tramos y sin número ni rótulo. Es el mismo en los dos modos de
- *     Ajustes → Votación Escenario; sólo cambia de dónde sale `pct`:
+ *     🗳️ Votación del público del panel del juego (Admin); sólo cambia de dónde sale `pct`:
  *       Mod 1 → energía de toques (ftl_energia_pct)
  *       Mod 2 → % de 👍 (follow_leader_vote_totals.up_pct)
  *     null = juego sin votación, sin barómetro.

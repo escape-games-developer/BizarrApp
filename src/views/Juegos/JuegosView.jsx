@@ -130,16 +130,20 @@ function ReyDelOrto({ user, gameState }) {
 }
 
 // ─── Desafío Demente ──────────────────────────────────────────────────────────
-function DesafioDemente({ user, sessionId, gameState }) {
+// `demo` (sólo vista previa del Diseñador): { question, myVote } de muestra.
+// Con él los hooks no consultan nada; en producción llega siempre null.
+function DesafioDemente({ user, sessionId, gameState, demo = null }) {
   const t = user?.team ? TEAMS[user.team] : null;
   const questionIdx = gameState?.trivia_question ?? 0;
   const triviaState = gameState?.trivia_state ?? "idle";
   const roundId = gameState?.trivia_round_id ?? null;
-  const question = useTriviaQuestion(sessionId, roundId, questionIdx, triviaState);
-
-  const { myVote, vote, hasVoted, sending, error } = useTriviaVoter(
-    sessionId, roundId, questionIdx, user?.id, user?.team
-  );
+  const sesion = demo ? null : sessionId;
+  const questionVivo = useTriviaQuestion(sesion, roundId, questionIdx, triviaState);
+  const voter = useTriviaVoter(sesion, roundId, questionIdx, user?.id, user?.team);
+  const question = demo ? demo.question : questionVivo;
+  const { myVote, vote, hasVoted, sending, error } = demo
+    ? { myVote: demo.myVote ?? null, vote: () => {}, hasVoted: demo.myVote != null, sending: false, error: null }
+    : voter;
 
   if (triviaState === "idle" || !question) return (
     <div>
@@ -259,7 +263,8 @@ function DesafioDemente({ user, sessionId, gameState }) {
 }
 
 // ─── Sumate que sumamos ────────────────────────────────────────────────────
-function SumaElNumero({ user, sessionId }) {
+// `demo` (sólo vista previa del Diseñador): { round, miNumero } de muestra.
+function SumaElNumero({ user, sessionId, demo = null }) {
   // La ronda y el número vienen de la base, no de game_state: antes el número
   // salía de `minijuego_payload.assigned_number`, que es UNO para toda la
   // sesión — todos los celulares mostraban el mismo. Ahora es por persona.
@@ -268,8 +273,8 @@ function SumaElNumero({ user, sessionId }) {
   // es idempotente, así que un F5, dos pestañas o una reconexión devuelven
   // SIEMPRE el mismo número (`already_assigned: true`). El frontend no genera
   // ningún número: sólo muestra el que dio el servidor.
-  const { round, miNumero, miNumeroRes, loading } =
-    useSumateRound(sessionId, { userId: user?.id ?? null });
+  const vivo = useSumateRound(demo ? null : sessionId, { userId: user?.id ?? null });
+  const { round, miNumero, miNumeroRes, loading } = demo ? { loading: false, miNumeroRes: null, ...demo } : vivo;
 
   const header = (
     <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔢</span><h3>Sumate que sumamos</h3></div>
@@ -398,7 +403,8 @@ function SumaElNumero({ user, sessionId }) {
 }
 
 // ─── Formá la Palabra ──────────────────────────────────────────────────────
-function FormaLaPalabra({ user, sessionId }) {
+// `demo` (sólo vista previa del Diseñador): { round, miLetra } de muestra.
+function FormaLaPalabra({ user, sessionId, demo = null }) {
   // La ronda y la letra vienen de la base, no de game_state: antes la letra
   // salía de `minijuego_payload.assigned_letter`, que es UNA para toda la
   // sesión — todos los celulares mostraban la misma. Ahora es por persona.
@@ -406,7 +412,8 @@ function FormaLaPalabra({ user, sessionId }) {
   // La letra se asigna SOLA: no hay ningún botón que tocar. El que entra con la
   // ronda ya empezada recibe un señuelo, sin alterar la palabra ni las letras
   // que ya están repartidas.
-  const { round, miLetra, loading } = useArmaPalabraRound(sessionId, { userId: user?.id ?? null });
+  const vivo = useArmaPalabraRound(demo ? null : sessionId, { userId: user?.id ?? null });
+  const { round, miLetra, loading } = demo ? { loading: false, ...demo } : vivo;
 
   const header = (
     <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Arma la palabra</h3></div>
@@ -680,7 +687,9 @@ function ProximamenteCard({ placa }) {
 }
 
 // ─── JuegosView (router) ──────────────────────────────────────────────────
-export default function JuegosView({ user, activeGame, isRestricted, onGoProfile, sessionId, gameState, mostrarCatalogo = false }) {
+// `demo`: datos de muestra del juego activo, sólo para la vista previa del
+// Diseñador (ver preview/celularDemo.js). En la app llega siempre null.
+export default function JuegosView({ user, activeGame, isRestricted, onGoProfile, sessionId, gameState, mostrarCatalogo = false, demo = null }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -713,9 +722,9 @@ export default function JuegosView({ user, activeGame, isRestricted, onGoProfile
   let gameContent;
   switch (activeGame) {
     case "rey del orto": gameContent = <ReyDelOrto user={user} gameState={gameState} />; break;
-    case "trivia":       gameContent = <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} />; break;
-    case "suma":         gameContent = <SumaElNumero user={user} sessionId={sessionId} />; break;
-    case "palabra":      gameContent = <FormaLaPalabra user={user} sessionId={sessionId} />; break;
+    case "trivia":       gameContent = <DesafioDemente user={user} sessionId={sessionId} gameState={gameState} demo={demo} />; break;
+    case "suma":         gameContent = <SumaElNumero user={user} sessionId={sessionId} demo={demo} />; break;
+    case "palabra":      gameContent = <FormaLaPalabra user={user} sessionId={sessionId} demo={demo} />; break;
     // Sin juego: las cards de los juegos (Ajustes → General → Cards de juegos)
     // o la espera vacía de siempre.
     default:             gameContent = hayAnuncio ? null : mostrarCatalogo

@@ -65,19 +65,20 @@ const DEV = import.meta.env.DEV;
 const debug = (...args) => { if (DEV) console.info("[TV]", ...args); };
 
 /**
- * Los items sintéticos de los juegos de escenario llevan el prefijo del juego
- * en el id — 'ftl:' (Follow the Leader) y 'pt:' (Personal Trainer). Los arma
- * PantallaTV, y el prefijo existe justamente para que no puedan confundirse con
- * una fila real de pantalla_playlist_items.
+ * Los items sintéticos llevan un prefijo en el id — 'ftl:' / 'pt:' (video de
+ * un juego de escenario) y 'tanda:' (tanda publicitaria). Los arma PantallaTV,
+ * y el prefijo existe justamente para que no puedan confundirse con una fila
+ * real de pantalla_playlist_items.
  *
- * Entrar o salir de uno es un CORTE SECO, no un cruce de canciones: estos
- * juegos no llevan lluvia ni crossfade. Se pausa el saliente, se carga el
- * entrante y se muestra. Los cambios entre canciones propias del DJ no pasan
- * por acá y conservan su transición de siempre.
+ * Entrar o salir de uno sin una transición en curso es un CORTE SECO, no un
+ * cruce de canciones: no llevan GIF de transición ni fundido. Se pausa el
+ * saliente, se carga el entrante y se muestra. (Una tanda que entra cuando el
+ * tema anterior ya está en su transición la aprovecha: el GIF la tapa igual.)
+ * Los cambios entre canciones propias del DJ no pasan por acá.
  */
-const PREFIJOS_ESCENARIO = ["ftl:", "pt:"];
-const esItemDeEscenario = (id) =>
-  typeof id === "string" && PREFIJOS_ESCENARIO.some((p) => id.startsWith(p));
+const PREFIJOS_TEMPORALES = ["ftl:", "pt:", "tanda:"];
+const esItemTemporal = (id) =>
+  typeof id === "string" && PREFIJOS_TEMPORALES.some((p) => id.startsWith(p));
 
 const emptySlot = () => ({ itemId: null, item: null, role: "idle", timeout: null, started: false, retried: false });
 
@@ -98,11 +99,31 @@ export function effectiveEndOf(item, duration) {
   return real;
 }
 
-export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, onFuenteTerminada = null, captionsEnabled = false, rainAnticipationSeconds = 6, rainTailSeconds = 0, reportar = true }) {
+/**
+ * Transición entre canciones del DJ (DJ Democracy → Editor → «Transición entre
+ * canciones»). La arma PantallaTV con los campos del evento:
+ *
+ *   activa        → hay GIF de transición. Apagada: corte directo al terminar.
+ *   fadeInMs      → el GIF aparece
+ *   holdMs        → el GIF se mantiene; el cambio de canción ocurre debajo
+ *   fadeOutMs     → el GIF se desvanece y revela el tema nuevo
+ *   fundidoAudio  → el tema actual baja a silencio durante el fade in y el
+ *                   nuevo sube durante el fade out. Sin él, el audio no se toca.
+ *
+ * El cruce arranca `fadeInMs + holdMs` antes del final del tema: el GIF termina
+ * de aparecer y se mantiene hasta que el tema termina y el nuevo ya suena.
+ */
+export const TRANSICION_APAGADA = Object.freeze({ activa: false, fadeInMs: 0, holdMs: 0, fadeOutMs: 0, fundidoAudio: false });
+
+export function useContinuousTvPlayers({ current, eventId, token, unlocked, muted = false, playing = true, autoAdvance = true, onFuenteTerminada = null, captionsEnabled = false, transicion = TRANSICION_APAGADA, reportar = true, sinTransicion = false }) {
   const [visiblePlayer, setVisiblePlayer] = useState(0);
-  const [rainPhase, setRainPhase] = useState("idle");
+  // Fase del GIF de transición: 'idle' | 'entering' | 'static' | 'leaving'.
+  const [transitionPhase, setTransitionPhase] = useState("idle");
+  // Tapa lisa mientras la TV carga sin nada que mostrar (arranque en frío, un
+  // video que falló, el evento sin canción). No es una transición: no lleva GIF.
+  const [cargando, setCargando] = useState(false);
   // Qué item está realmente en pantalla, no cuál pidió el servidor. Es la señal
-  // que necesita quien tape la TV durante un cambio: la lluvia se levanta
+  // que necesita quien tape la TV durante un cambio: el GIF se levanta
   // cuando el video del destino ya está puesto, no cuando cambió la fila en la
   // base ni cuando venció un timeout a ciegas.
   const [displayedId, setDisplayedId] = useState(null);
@@ -148,12 +169,17 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
   onFuenteTerminadaRef.current = onFuenteTerminada;
   const terminadosRef = useRef(new Set());   // items sin auto-avance ya avisados
   captionsEnabledRef.current = captionsEnabled;
-  const rainAnticipationRef = useRef(rainAnticipationSeconds);
-  const rainTailRef = useRef(rainTailSeconds);
-  rainAnticipationRef.current = rainAnticipationSeconds;
-  rainTailRef.current = rainTailSeconds;
+  const transicionRef = useRef(transicion);
+  transicionRef.current = transicion;
+  // Con un juego en pantalla (o recién salido) todo cambio de canción es un
+  // CORTE SECO: sin GIF ni fundido. Lo decide PantallaTV; los cambios entre
+  // canciones del DJ, con la TV mostrando al DJ, usan la transición configurada.
+  const sinTransicionRef = useRef(sinTransicion);
+  sinTransicionRef.current = sinTransicion;
+  /** ¿Este cambio va sin GIF ni fundido? */
+  const esCorteSeco = () => sinTransicionRef.current || !transicionRef.current.activa;
   // Ventana real del cruce en curso, ya acotada al largo del tema (ver `ventanaDeCruce`).
-  const crossfadeMsRef = useRef(rainAnticipationSeconds * 1000);
+  const crossfadeMsRef = useRef(0);
 
   useEffect(() => {
     for (const player of playersRef.current) {
@@ -188,7 +214,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
   // este efecto también corre cuando cambia `current.id`, un final natural
   // terminaba relanzando el tema recién terminado — el saliente volvía a sonar
   // desde el segundo cero por debajo del entrante durante todo el cruce, con la
-  // lluvia tapando la imagen. Ese era el doble audio de la transición.
+  // transición tapando la imagen. Ese era el doble audio de la transición.
   useEffect(() => {
     const player = playersRef.current[activeIndexRef.current];
     if (!player || !current) return;
@@ -339,7 +365,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         //
         // Pero la marca de idempotencia se pone ANTES del await, y si no se
         // revierte el item queda quemado: ni el reloj ni ENDED pueden volver a
-        // pedir el avance, y la canción se muere ahí, muda y sin lluvia. Se
+        // pedir el avance, y la canción se muere ahí, muda y sin transición. Se
         // revierte y se anota el fallo para no reintentar en bucle.
         advancedRef.current.delete(itemId);
         advanceFailRef.current.set(itemId, Date.now());
@@ -352,49 +378,44 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
 
     // ── Transiciones ────────────────────────────────────────────────────────
     /**
-     * Lluvia + rampa de bajada del player activo. No decide nada por sí sola.
+     * Ventana real del cruce, en ms: lo que tarda el GIF en aparecer y
+     * mantenerse (`fadeInMs + holdMs`). El cruce arranca esa ventana antes del
+     * final del tema, así el cambio de canción ocurre con el GIF tapando.
      *
-     * La bajada dura TODA la ventana de transición y el saliente NO se pausa
-     * acá: antes bajaba en 1 s y se pausaba, pero el swap recién ocurre al final
-     * de la ventana, así que quedaban segundos de silencio bajo la lluvia. El
-     * saliente ahora sigue sonando hasta que el entrante está audible; lo pausa
-     * `finishSwap`, recién cuando ya hay con qué reemplazarlo.
-     *
-     * La ventana es la anticipación de lluvia configurada en el evento: la
-     * rampa dura exactamente lo que dura la lluvia, no una constante aparte.
-     */
-    /**
-     * Ventana real del cruce, en ms.
-     *
-     * La anticipación configurada es un TECHO, no un valor fijo. Si el tema dura
-     * menos que esa ventana, el cruce arrancaría apenas empieza a sonar y la TV
-     * pasaría de canción sola a los pocos segundos de abrirla — el bug que ya
-     * tuvimos. Con `effectiveEnd` conocido se limita al 40% del tema; sin él
-     * (final natural, avance del servidor) se usa la configuración tal cual.
-     *
-     * Con los valores normales no cambia nada: 6 s de anticipación en un tema de
-     * 3 minutos siguen siendo 6 s. Sólo muerde en el caso patológico — un short
-     * de 20 s con la anticipación en 30.
+     * La ventana es un TECHO, no un valor fijo. Si el tema dura menos que eso,
+     * el cruce arrancaría apenas empieza a sonar y la TV pasaría de canción sola
+     * a los pocos segundos de abrirla — el bug que ya tuvimos. Con
+     * `effectiveEnd` conocido se limita al 40% del tema; sin él (final natural,
+     * avance del servidor) se usa la configuración tal cual.
      */
     const ventanaDeCruce = (effectiveEnd) => {
-      const techo = Math.max(1, rainAnticipationRef.current) * 1000;
-      if (!(effectiveEnd > 0)) return techo;
+      const { fadeInMs, holdMs } = transicionRef.current;
+      const techo = Math.max(0, fadeInMs + holdMs);
+      if (!techo || !(effectiveEnd > 0)) return techo;
       return Math.max(1000, Math.min(techo, effectiveEnd * 400));
     };
 
+    /**
+     * El GIF aparece (fade in) y queda puesto hasta el cambio. Con fundido de
+     * audio, el tema actual baja a silencio durante el fade in; sin él, sigue
+     * sonando entero hasta el cambio (el audio nunca se corta). El saliente NO
+     * se pausa acá: lo pausa `finishSwap`, cuando ya hay con qué reemplazarlo.
+     */
     const runOutro = (sourceItem) => {
-      setRainPhase("entering");
-      later(() => setRainPhase("static"), 450);
+      const { fadeInMs, fundidoAudio } = transicionRef.current;
+      setTransitionPhase("entering");
+      later(() => setTransitionPhase("static"), fadeInMs);
+      if (!fundidoAudio) return;
       const index = activeIndexRef.current;
       const volume = sourceItem?.youtube_volume ?? 100;
-      debug(`Crossfade out — player ${index === 0 ? "A" : "B"} ${volume} → 0 en ${crossfadeMsRef.current}ms`);
-      fadeVolume(index, playersRef.current[index], volume, 0, crossfadeMsRef.current);
+      debug(`Fundido de audio — player ${index === 0 ? "A" : "B"} ${volume} → 0 en ${fadeInMs}ms`);
+      fadeVolume(index, playersRef.current[index], volume, 0, Math.max(1, fadeInMs));
     };
 
     /**
      * La transición no prosperó (el servidor rechazó el avance). Se devuelve el
      * saliente a su volumen y se lo asegura sonando: sin esto quedaba pausado y
-     * mudo con la lluvia ya apagada, que es una pantalla congelada en silencio.
+     * mudo con el GIF ya apagado, que es una pantalla congelada en silencio.
      */
     const undoOutro = (sourceItem) => {
       const index  = activeIndexRef.current;
@@ -405,11 +426,12 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         player?.setVolume(volume);
         if (safeState(player) !== YT_STATE.PLAYING) player?.playVideo();
       } catch { /* noop */ }
-      debug(`Crossfade abortado — player ${index === 0 ? "A" : "B"} vuelve a ${volume}`);
+      setTransitionPhase("idle");
+      debug(`Transición abortada — player ${index === 0 ? "A" : "B"} vuelve a ${volume}`);
     };
 
     /**
-     * Fin de la canción actual pedido POR LA TV (final natural o crossfade).
+     * Fin de la canción actual pedido POR LA TV (final natural o anticipado).
      * Idempotente: para un item sólo puede correr una vez.
      */
     const startTransition = async (itemId, reason, extra = {}) => {
@@ -418,34 +440,37 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       if (itemId !== displayedItemRef.current?.id) { logBlocked(reason, itemId, activeIndexRef.current, "not-displayed-item", extra); return; }
 
       const sourceItem = displayedItemRef.current;
+      // Sin transición configurada, o con un juego en pantalla (el DJ suena
+      // mudo debajo): corte seco, sin GIF ni fundido.
+      const corteSeco = esCorteSeco();
       const transition = {
-        sourceId: itemId, targetId: null, targetIndex: null, startedAt: Date.now(), reason,
+        sourceId: itemId, targetId: null, targetIndex: null, startedAt: Date.now(), reason, corteSeco,
       };
       transitionRef.current = transition;
       setPhase("TRANSITIONING");
-      // La ventana se fija ACÁ y no se vuelve a leer: si el DJ cambia la
-      // anticipación en mitad de un cruce, este cruce termina con la que empezó.
-      crossfadeMsRef.current = ventanaDeCruce(extra.effectiveEnd);
-      runOutro(sourceItem);
+      // La ventana se fija ACÁ y no se vuelve a leer: si el DJ cambia los
+      // tiempos en mitad de un cruce, este cruce termina con los que empezó.
+      crossfadeMsRef.current = corteSeco ? 0 : ventanaDeCruce(extra.effectiveEnd);
+      if (corteSeco) debug("Corte seco — sin GIF ni fundido", itemId);
+      else runOutro(sourceItem);
 
       const ok = await requestAdvance(reason, itemId, activeIndexRef.current, extra);
       if (!ok && transitionRef.current === transition && !transition.targetId) {
         // No se pudo avanzar: se deshace la transición y sigue mandando el realtime.
         transitionRef.current = null;
         undoOutro(sourceItem);
-        setRainPhase("idle");
         setPhase(displayedItemRef.current ? "PLAYING" : "WAITING_NEXT");
       }
     };
 
     /**
-     * El servidor ya cambió de canción (skip del DJ o kick). Sólo acompañamos.
+     * El servidor ya cambió de canción (skip del DJ o kick). Sólo acompañamos:
+     * con transición, el GIF aparece y el cambio ocurre al terminar su fade in
+     * + hold.
      *
-     * `corteSeco` es el caso de Follow the Leader: entrar o salir del video del
-     * juego no es un cruce de canciones. Se pausa el saliente en el acto, sin
-     * lluvia ni fundido, y el entrante aparece apenas carga. Sin esto, cerrar
-     * FTL mostraba la lluvia del motor entre el video del juego y la canción
-     * siguiente del DJ.
+     * `corteSeco`: entrar o salir del video de un juego de escenario, un juego
+     * en pantalla o la transición apagada. Se pausa el saliente en el acto, sin
+     * GIF ni fundido, y el entrante aparece apenas carga.
      */
     const beginExternalTransition = (sourceItemId, corteSeco = false) => {
       transitionRef.current = {
@@ -458,16 +483,22 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         source: "servidor (manual-admin | kick-threshold)", corteSeco,
       });
       if (corteSeco) {
-        // Callar YA al saliente: sin fade y sin lluvia que lo tape.
+        // Callar YA al saliente: sin fade y sin GIF que lo tape.
         const index = activeIndexRef.current;
         cancelFade(index);
         try { playersRef.current[index]?.pauseVideo(); } catch { /* noop */ }
-        debug("Corte seco (escenario) — sin lluvia ni crossfade", sourceItemId);
+        debug("Corte seco — sin GIF ni fundido", sourceItemId);
         return;
       }
       runOutro(displayedItemRef.current);
     };
 
+    /**
+     * El entrante ya suena (mudo, en el player de atrás). Se espera a que el GIF
+     * termine su fade in + hold y ahí se hace el cambio: se muestra el entrante,
+     * se pausa el saliente y el GIF se desvanece (fade out). Con fundido de
+     * audio el tema nuevo sube durante ese fade out; sin él, entra entero.
+     */
     const finishSwap = (index) => {
       const transition = transitionRef.current;
       const slot = slotsRef.current[index];
@@ -479,18 +510,6 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       const remaining = Math.max(0, crossfadeMsRef.current - elapsed);
       const volume    = item.youtube_volume ?? 100;
 
-      // El entrante sube YA, en paralelo con la bajada del saliente: eso es lo
-      // que hace que sea un crossfade y no dos fades con un hueco en el medio.
-      // Antes esta rampa esperaba a que terminara la ventana entera.
-      // En un corte seco no hay rampa: el volumen se pone entero de una.
-      if (transition.corteSeco) {
-        cancelFade(index);
-        try { playersRef.current[index]?.setVolume(volume); } catch { /* noop */ }
-      } else {
-        debug(`Crossfade in — player ${index === 0 ? "A" : "B"} 0 → ${volume} en ${Math.max(800, remaining)}ms`);
-        fadeVolume(index, playersRef.current[index], 0, volume, Math.max(800, remaining));
-      }
-
       later(() => {
         if (transitionRef.current !== transition) return;
         const previousIndex = activeIndexRef.current;
@@ -500,16 +519,26 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         slotsRef.current[index].role     = "current";
         slotsRef.current[1 - index].role = "idle";
         setVisiblePlayer(index);
-        // El saliente ya llegó a 0 con su propia rampa: recién ahora se pausa.
-        // Esto NO se demora con la cola de lluvia: dejar el video anterior
-        // corriendo detrás de la lluvia sería un segundo audio en silencio.
+        // Recién ahora se calla el saliente: hasta acá sonó (o bajó con el
+        // fundido de audio), así el audio no se corta antes del cambio.
         cancelFade(previousIndex);
         try { playersRef.current[previousIndex]?.pauseVideo(); } catch { /* noop */ }
-        // En un corte seco la lluvia nunca entró: dispararle la salida la haría
+
+        const { fadeOutMs, fundidoAudio } = transicionRef.current;
+        cancelFade(index);
+        if (!transition.corteSeco && fundidoAudio) {
+          debug(`Fundido de audio — player ${index === 0 ? "A" : "B"} 0 → ${volume} en ${fadeOutMs}ms`);
+          fadeVolume(index, playersRef.current[index], 0, volume, Math.max(1, fadeOutMs));
+        } else {
+          try { playersRef.current[index]?.setVolume(volume); } catch { /* noop */ }
+        }
+        // En un corte seco el GIF nunca entró: dispararle la salida lo haría
         // aparecer justo en el cambio que se quería sin transición.
         if (!transition.corteSeco) {
-          later(() => { setRainPhase("leaving"); later(() => setRainPhase("idle"), 700); }, rainTailRef.current * 1000);
+          setTransitionPhase("leaving");
+          later(() => setTransitionPhase("idle"), fadeOutMs);
         }
+        setCargando(false);
         transitionRef.current = null;
         skipStreakRef.current = 0;
         watchTicksRef.current = { itemId: null, hits: 0 };
@@ -570,13 +599,13 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       skipStreakRef.current += 1;
       if (skipStreakRef.current > MAX_SKIPS_IN_A_ROW) {
         setPhase("ERROR");
-        setRainPhase("static");
+        setCargando(true);
         setPlayerError({ code: kind, message: "No se encontraron videos reproducibles después de varios intentos." });
         logBlocked(REASON.CURRENT_LOAD, itemId, index, "max-skips-reached", { kind });
         return;
       }
 
-      setRainPhase("static");
+      setCargando(true);
       const reason = kind === "load-timeout"   ? REASON.CURRENT_TIMEOUT
                    : kind === "playback-error" ? REASON.CURRENT_PLAY
                    : REASON.CURRENT_LOAD;
@@ -627,7 +656,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         skipStreakRef.current = 0;
         setPlayerError(null);
         setPhase("PLAYING");
-        later(() => { setRainPhase("leaving"); later(() => setRainPhase("idle"), 700); }, rainTailRef.current * 1000);
+        setCargando(false);
       }
     };
 
@@ -660,7 +689,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         logBlocked(REASON.STALE_ENDED, itemId, index, "player-item-is-not-current"); return;
       }
       // Sin auto-avance (video de un juego de Escenario) el final no es un cruce
-      // de canciones: nada de lluvia ni de pedir avance —que lo rechazaría y
+      // de canciones: nada de transición ni de pedir avance —que lo rechazaría y
       // relanzaría el mismo video—. Se avisa y la pantalla corta directo.
       if (!autoAdvanceRef.current) { terminarSinCruce(index, itemId); return; }
       startTransition(itemId, REASON.NATURAL_ENDED);
@@ -697,7 +726,10 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       setDisplayedId(item.id);
       watchTicksRef.current = { itemId: null, hits: 0 };
       setVisiblePlayer(index);
-      setRainPhase("static");
+      // Arranque en frío: tapa lisa hasta que suene; una transición que hubiera
+      // quedado a medias (p. ej. la TV se quedó sin tema en pleno cruce) se suelta.
+      setTransitionPhase("idle");
+      setCargando(true);
       setPhase("LOADING_CURRENT");
       debug("Playing initial item", item.id, item.youtube_id);
       loadIntoSlot(index, item, true);
@@ -732,7 +764,8 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
         displayedItemRef.current = null;
         setDisplayedId(null);
         transitionRef.current = null;
-        setRainPhase("static");
+        setTransitionPhase("idle");
+        setCargando(true);
         setPhase("WAITING_NEXT");
         return;
       }
@@ -744,9 +777,11 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       // El servidor cambió de canción: la anterior ya no puede pedir nada más.
       advancedRef.current.add(displayed.id);
       abrirRonda(item);
-      // Entrar o salir del video de un juego de escenario es un corte directo;
-      // entre dos canciones del DJ se conserva la transición de siempre.
-      const corteSeco = esItemDeEscenario(displayed.id) || esItemDeEscenario(item.id);
+      // Entrar o salir del video de un juego de escenario es un corte directo,
+      // igual que cualquier cambio con un juego en pantalla (p. ej. el avance
+      // del DJ al cerrar FTL / PT). Entre dos canciones del DJ, con la TV
+      // mostrando al DJ, se conserva la transición de siempre.
+      const corteSeco = esItemTemporal(displayed.id) || esItemTemporal(item.id) || esCorteSeco();
       if (!transitionRef.current) beginExternalTransition(displayed.id, corteSeco);
       prepareNext(item);
     };
@@ -807,7 +842,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       const remaining = effectiveEnd - time;
 
       // Video de un juego de Escenario (sin auto-avance): no hay cruce ni
-      // lluvia anticipada. Sólo se detecta el final —incluido un recorte de
+      // transición anticipada. Sólo se detecta el final —incluido un recorte de
       // fin antes del final real del video— y se corta directo.
       if (!autoAdvanceRef.current) {
         if (remaining <= 0.35) terminarSinCruce(index, item.id);
@@ -862,5 +897,5 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
 
   useEffect(() => { controllerRef.current?.handleCurrent(current); }, [current]);
 
-  return { playerIds: TV_PLAYER_IDS, visiblePlayer, rainPhase, displayedId, playerError, readyCount };
+  return { playerIds: TV_PLAYER_IDS, visiblePlayer, transitionPhase, cargando, displayedId, playerError, readyCount };
 }

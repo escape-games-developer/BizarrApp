@@ -1,122 +1,183 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { saveEventFields } from "../../../services/pantallaDj";
 import { uploadMediaAsset } from "../../../services/mediaAssets";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
-import { BotonGuardar, useBorrador, useGuardado } from "../panelControls";
 
-const CAMPOS = ["accent_color", "text_color", "background_color", "logo_url", "background_image_url"];
+/**
+ * Personalización visual del evento: color de acento, de texto y de fondo,
+ * logo e imagen de fondo (`pantalla_events`). Vacío = el estilo por defecto.
+ * La consumen /tv y la votación del cliente (ver constants/marcaEvento.js).
+ *
+ * Todo se guarda solo (sin botón Guardar), como Tandas: el selector de color a
+ * los 0,6 s del último movimiento, el código hex al salir del campo (si es
+ * válido), «Restablecer» y «Quitar» al tocarlos y las imágenes al subirse.
+ */
+
 const DEFECTOS = { accent_color: "#f5ce42", text_color: "#ffe6cc", background_color: "#000000" };
 const esHex = (v) => /^#[0-9a-fA-F]{6}$/.test(v || "");
 
-function ColorOriginal({ label, campo, valor, defecto, onChange }) {
-  const efectivo = esHex(valor) ? valor : defecto;
+const css = `
+  .vs-caja{padding:18px 20px;border-radius:16px;background:rgba(240,232,255,.02);border:1px solid rgba(240,232,255,.1);}
+  .vs-cab{font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:rgba(240,232,255,.75);}
+  .vs-desc{font-size:10.5px;line-height:1.5;color:rgba(240,232,255,.55);margin-top:3px;}
+  .vs-campo{margin-top:16px;}
+  .vs-fila{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:7px;}
+  .vs-lbl{font-size:10.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:rgba(240,232,255,.62);}
+  .vs-link{border:0;background:transparent;color:rgba(240,232,255,.5);cursor:pointer;font:inherit;font-size:10px;padding:0;}
+  .vs-link:hover{color:${P.texto};}
+  .vs-color{width:46px;height:32px;padding:3px;border-radius:5px;cursor:pointer;flex-shrink:0;
+    background:#09090c;border:1px solid rgba(240,232,255,.25);}
+  .vs-hex{flex:1;min-width:0;font-family:ui-monospace,Consolas,monospace;font-size:12px;}
+  .vs-tile{width:48px;height:48px;border-radius:10px;overflow:hidden;flex-shrink:0;display:grid;place-items:center;
+    border:1px solid rgba(240,232,255,.15);color:rgba(240,232,255,.45);font-size:16px;}
+  .vs-btn{padding:7px 13px;border-radius:999px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;
+    border:1px solid rgba(240,232,255,.18);background:transparent;color:${P.texto};}
+  .vs-btn:disabled{opacity:.45;cursor:default;}
+  .vs-prev{position:relative;overflow:hidden;border-radius:14px;padding:16px;border:1px solid rgba(240,232,255,.12);}
+`;
+
+/** Color: selector + código hex, con «Restablecer». */
+function Color({ label, valor, defecto, onGuardar, ocupado }) {
+  const [hex, setHex] = useState(valor || "");
+  const timer = useRef(null);
+  useEffect(() => { setHex(valor || ""); }, [valor]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const efectivo = esHex(hex) ? hex : defecto;
+  const guardarHex = () => {
+    const v = hex.trim();
+    if (v === (valor || "")) return;
+    if (v && !esHex(v)) { setHex(valor || ""); return; }
+    onGuardar(v || null);
+  };
+
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-        <span className="pdj-campo-lbl">{label}</span>
-        <button type="button" onClick={() => onChange(campo, "")}
-          style={{ border: 0, background: "transparent", color: P.tenue2, cursor: "pointer", fontSize: 9.5 }}>
+    <div className="vs-campo">
+      <div className="vs-fila">
+        <span className="vs-lbl">{label}</span>
+        <button type="button" className="vs-link" disabled={ocupado || !valor} onClick={() => onGuardar(null)}>
           Restablecer
         </button>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="color" value={efectivo} onChange={(e) => onChange(campo, e.target.value)}
-          style={{ width: 45, height: 34, padding: 2, borderRadius: 4, background: "#09090c", border: "1px solid rgba(240,232,255,.25)" }} />
-        <input className="pdj-input" value={valor || ""} placeholder={defecto}
-          onChange={(e) => onChange(campo, e.target.value)} style={{ flex: 1, fontFamily: "monospace" }} />
+        <input type="color" className="vs-color" value={efectivo} disabled={ocupado} aria-label={label}
+          onChange={(e) => {
+            const c = e.target.value;
+            setHex(c);
+            clearTimeout(timer.current);
+            timer.current = setTimeout(() => { if (c !== valor) onGuardar(c); }, 600);
+          }}/>
+        <input className="pdj-input vs-hex" value={hex} placeholder={defecto} disabled={ocupado}
+          aria-label={`${label} (hex)`}
+          onChange={(e) => setHex(e.target.value)} onBlur={guardarHex}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}/>
       </div>
+      {hex && !esHex(hex) && (
+        <div className="vs-desc" style={{ color: P.amarillo }}>Usá un hexadecimal de 6 dígitos, por ejemplo {defecto}.</div>
+      )}
     </div>
   );
 }
 
-function ImagenOriginal({ label, valor, emptyIcon = "×", uploadText, onSubido, onQuitar, onError }) {
+/** Imagen: miniatura + «Subir / Reemplazar», con «Quitar». */
+function Imagen({ label, valor, onGuardar, onError, ocupado }) {
   const ref = useRef(null);
-  const [busy, setBusy] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
   const subir = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    setBusy(true);
+    setSubiendo(true);
     try {
       const asset = await uploadMediaAsset(file, { category: "dj-branding" });
-      if (asset?.file_url) onSubido(asset.file_url);
+      if (asset?.file_url) await onGuardar(asset.file_url);
     } catch (err) { onError?.(err); }
-    finally { setBusy(false); }
+    finally { setSubiendo(false); }
   };
 
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-        <span className="pdj-campo-lbl">{label}</span>
-        {valor && <button type="button" onClick={onQuitar}
-          style={{ border: 0, background: "transparent", color: P.tenue2, cursor: "pointer", fontSize: 9.5 }}>Quitar</button>}
+    <div className="vs-campo">
+      <div className="vs-fila">
+        <span className="vs-lbl">{label}</span>
+        {valor && <button type="button" className="vs-link" disabled={ocupado} onClick={() => onGuardar(null)}>Quitar</button>}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ width: 48, height: 48, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(240,232,255,.13)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {valor ? <img src={valor} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <span style={{ color: P.tenue2 }}>{emptyIcon}</span>}
+        <div className="vs-tile">
+          {valor ? <img src={valor} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }}/> : "×"}
         </div>
-        <button type="button" className="pdj-mini" disabled={busy} onClick={() => ref.current?.click()}>
-          {busy ? "Subiendo…" : uploadText}
+        <button type="button" className="vs-btn" disabled={ocupado || subiendo} onClick={() => ref.current?.click()}>
+          {subiendo ? "Subiendo…" : valor ? "⤒ Reemplazar" : "⤒ Subir"}
         </button>
-        <input ref={ref} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={subir} />
+        <input ref={ref} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={subir}/>
       </div>
     </div>
   );
 }
 
 export default function SeccionVisual({ event, refresh, onError }) {
-  const [b, set] = useBorrador(
-    Object.fromEntries(CAMPOS.map((c) => [c, event[c] ?? ""])),
-    [event.id, ...CAMPOS.map((c) => event[c])],
-  );
+  const [ocupado, setOcupado] = useState(false);
 
-  const { estado, mensaje, guardar } = useGuardado(async () => {
-    await saveEventFields(event.id, Object.fromEntries(CAMPOS.map((c) => [c, String(b[c] || "").trim() || null])));
-    await refresh();
-  });
+  const guardar = (campo) => async (valor) => {
+    setOcupado(true); onError?.(null);
+    try {
+      await saveEventFields(event.id, { [campo]: valor });
+      await refresh();
+    } catch (err) { onError?.(err); }
+    finally { setOcupado(false); }
+  };
 
-  const cambiado = CAMPOS.some((c) => String(b[c] || "") !== String(event[c] || ""));
-  const hexMalo = ["accent_color", "text_color", "background_color"].some((c) => b[c] && !esHex(b[c]));
-  const acento = esHex(b.accent_color) ? b.accent_color : DEFECTOS.accent_color;
-  const texto = esHex(b.text_color) ? b.text_color : DEFECTOS.text_color;
-  const fondo = esHex(b.background_color) ? b.background_color : DEFECTOS.background_color;
+  const acento = esHex(event.accent_color) ? event.accent_color : DEFECTOS.accent_color;
+  const texto  = esHex(event.text_color) ? event.text_color : DEFECTOS.text_color;
+  const fondo  = esHex(event.background_color) ? event.background_color : DEFECTOS.background_color;
 
   return (
-    <PanelSection id="visual" title="Personalización visual"
-      status="pendiente"
-      aviso="La edición y persistencia ya están disponibles; falta que TV y cliente consuman estos valores en todos sus layouts.">
-      <div style={{ padding: 10, borderRadius: 14, background: "rgba(240,232,255,.02)", border: "1px solid rgba(240,232,255,.08)" }}>
-        <div className="pdj-overview-label" style={{ textAlign: "left", marginBottom: 4 }}>PERSONALIZACIÓN VISUAL</div>
-        <div className="pdj-campo-hint" style={{ marginTop: 0, marginBottom: 15 }}>Dejá cualquier campo vacío para usar el estilo por defecto.</div>
+    <PanelSection id="visual" title="Personalización visual">
+      <style>{css}</style>
+      <div className="vs-caja">
+        <div className="vs-cab">Personalización visual</div>
+        <div className="vs-desc">Dejá cualquier campo vacío para usar el estilo por defecto.</div>
+        <div className="vs-desc">
+          Se aplica en la TV y en la votación del celular. Acento: nombre del evento, QR y «Sonando ahora».
+          Texto: los títulos de los temas. Fondo e imagen: detrás de todo. Logo: el bloque Logo de la TV y la
+          tarjeta «Sonando ahora». Lo que fijes a mano en el Diseñador DJ Democracy o en un tema del Diseñador
+          Cliente tiene prioridad.
+        </div>
 
-        <ColorOriginal label="COLOR DE ACENTO" campo="accent_color" valor={b.accent_color} defecto={DEFECTOS.accent_color} onChange={set} />
-        <ColorOriginal label="COLOR DE TEXTO" campo="text_color" valor={b.text_color} defecto={DEFECTOS.text_color} onChange={set} />
-        <ColorOriginal label="COLOR DE FONDO" campo="background_color" valor={b.background_color} defecto={DEFECTOS.background_color} onChange={set} />
+        <Color label="Color de acento" valor={event.accent_color} defecto={DEFECTOS.accent_color}
+          ocupado={ocupado} onGuardar={guardar("accent_color")}/>
+        <Color label="Color de texto" valor={event.text_color} defecto={DEFECTOS.text_color}
+          ocupado={ocupado} onGuardar={guardar("text_color")}/>
+        <Color label="Color de fondo" valor={event.background_color} defecto={DEFECTOS.background_color}
+          ocupado={ocupado} onGuardar={guardar("background_color")}/>
 
-        <ImagenOriginal label="LOGO" valor={b.logo_url} uploadText={b.logo_url ? "↥ Reemplazar" : "↥ Subir"}
-          onSubido={(url) => set("logo_url", url)} onQuitar={() => set("logo_url", "")} onError={onError} />
-        <ImagenOriginal label="IMAGEN DE FONDO" valor={b.background_image_url} uploadText="↥ Subir"
-          onSubido={(url) => set("background_image_url", url)} onQuitar={() => set("background_image_url", "")} onError={onError} />
+        <Imagen label="Logo" valor={event.logo_url} ocupado={ocupado}
+          onGuardar={guardar("logo_url")} onError={onError}/>
+        <Imagen label="Imagen de fondo" valor={event.background_image_url} ocupado={ocupado}
+          onGuardar={guardar("background_image_url")} onError={onError}/>
 
-        <div className="pdj-campo-lbl" style={{ marginBottom: 6 }}>VISTA PREVIA</div>
-        <div style={{ position: "relative", overflow: "hidden", borderRadius: 14, padding: 14, background: fondo, border: "1px solid rgba(240,232,255,.12)" }}>
-          {b.background_image_url && <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${b.background_image_url})`, backgroundSize: "cover", backgroundPosition: "center", opacity: .28 }} />}
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10 }}>
-            {b.logo_url && <img src={b.logo_url} alt="" style={{ width: 48, height: 48, objectFit: "contain" }} />}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: acento, fontSize: 9.5, fontWeight: 800 }}>MI EVENTO</div>
-              <div style={{ color: texto, fontSize: 13, fontWeight: 900, marginTop: 2 }}>Título de canción</div>
-              <div style={{ height: 6, borderRadius: 999, background: "rgba(240,232,255,.15)", marginTop: 7, overflow: "hidden" }}>
-                <div style={{ width: "50%", height: "100%", background: acento }} />
+        <div className="vs-campo">
+          <div className="vs-fila"><span className="vs-lbl" style={{ fontWeight: 600 }}>Vista previa</span></div>
+          <div className="vs-prev" style={{ background: fondo }}>
+            {event.background_image_url && (
+              <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${event.background_image_url})`,
+                backgroundSize: "cover", backgroundPosition: "center", opacity: .28 }}/>
+            )}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+              {event.logo_url && <img src={event.logo_url} alt="" style={{ width: 52, height: 52, objectFit: "contain" }}/>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: acento, fontSize: 10, fontWeight: 800, letterSpacing: .4 }}>
+                  {(event.name || "Mi evento").toUpperCase()}
+                </div>
+                <div style={{ color: texto, fontSize: 14, fontWeight: 900, marginTop: 2 }}>Título de canción</div>
+                <div style={{ height: 6, borderRadius: 999, background: "rgba(240,232,255,.15)", marginTop: 8, overflow: "hidden" }}>
+                  <div style={{ width: "50%", height: "100%", background: acento }}/>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      {hexMalo && <div className="pdj-campo-hint" style={{ color: P.amarillo }}>Los colores deben ser hexadecimales de 6 dígitos, por ejemplo #f5ce42.</div>}
-      <BotonGuardar estado={estado} mensaje={mensaje} disabled={!cambiado || hexMalo} onClick={guardar} />
     </PanelSection>
   );
 }

@@ -11,7 +11,7 @@ import SeccionSorteos from "./sections/SeccionSorteos";
 import SeccionesPendientesVivo from "./sections/SeccionesPendientesVivo";
 import HistorialTab from "./HistorialTab";
 import PanelSection from "./PanelSection";
-import SeccionCiclo from "./sections/SeccionCiclo";
+import EventoFueraDeVivo from "./sections/EventoFueraDeVivo";
 import CorreccionRapida from "./CorreccionRapida";
 
 /**
@@ -224,8 +224,8 @@ export default function PantallaConsola({ shared }) {
       <aside className="pdj-shell-side">
         <div className="pdj-shell-side-tit">Cabina</div>
 
-        {/* Iniciar / Finalizar / Duplicar: el único lugar del ciclo de vida. */}
-        <SeccionCiclo {...shared} />
+        {/* Sólo si el evento quedara fuera de vivo: el botón para volver a ponerlo. */}
+        <EventoFueraDeVivo {...shared} />
         <SeccionQr {...shared} />
         <SeccionesPendientesVivo event={event} onlyRoles />
         <SeccionEstadisticas stats={stats} />

@@ -10,7 +10,8 @@ import VideoRequestOverlay from "./VideoRequestOverlay";
 import DueloBigscreen from "./DueloBigscreen";
 import LogoCampana from "../components/LogoCampana";
 import LogoJuego from "../components/LogoJuego";
-import QrEsquina, { QrDeJuego } from "../components/QrEsquina";
+import QrEsquina from "../components/QrEsquina";
+import { QrDeJuego } from "../components/QrDeJuego";
 import { PLACA_DE_JUEGO, QR_DE_JUEGO, usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
 import { useTriviaAccumulated, useTriviaQuestion, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
 import { useRaffle, motivoCancelacionPublico } from "../hooks/useRaffle";
@@ -430,13 +431,19 @@ export function RaffleScreen({ logo, gameState }) {
 }
 
 // Desafío Demente — trivia en tiempo real
-export function TriviaScreen({ gameState, sessionId }) {
+// `demo` (sólo vista previa del Diseñador): { question, pcts, accumulated } de
+// muestra. Con él no se consulta nada; en producción llega siempre null.
+export function TriviaScreen({ gameState, sessionId, demo = null }) {
   const questionIdx = gameState?.trivia_question ?? 0;
-  const roundId = gameState?.trivia_round_id ?? null;
+  const roundId = demo ? "demo" : (gameState?.trivia_round_id ?? null);
   const phase = gameState?.trivia_state ?? "idle";
-  const question = useTriviaQuestion(sessionId, roundId, questionIdx, phase);
-  const { pcts } = useTriviaVotes(sessionId, roundId, questionIdx, phase);
-  const { accumulated } = useTriviaAccumulated(sessionId, roundId, phase);
+  const sesionVivo = demo ? null : sessionId;
+  const questionVivo = useTriviaQuestion(sesionVivo, roundId, questionIdx, phase);
+  const { pcts: pctsVivo } = useTriviaVotes(sesionVivo, roundId, questionIdx, phase);
+  const { accumulated: accumulatedVivo } = useTriviaAccumulated(sesionVivo, roundId, phase);
+  const question = demo ? demo.question : questionVivo;
+  const pcts = demo ? demo.pcts : pctsVivo;
+  const accumulated = demo ? demo.accumulated : accumulatedVivo;
   const bataPct = pcts?.batata ?? 50;
   const membPct = pcts?.membrillo ?? 50;
   const winner = gameState?.trivia_winner_team;
@@ -782,14 +789,14 @@ export function PalabraScreen({ sessionId, demoRound = null }) {
   );
 }
 
-export function EscenarioScreen({ gameState, sessionId, demoDuelo = null }) {
+export function EscenarioScreen({ gameState, sessionId }) {
   const type = gameState?.active_escenario || "duelo";
 
   // El Duelo tiene su propio render (video + votos + burbujas + QR).
   // Los demás escenarios (ftl, pt, karaoke) siguen con el render clásico de abajo.
   if (type === "duelo") {
     return <DueloBigscreen gameState={gameState} sessionId={sessionId}
-      webappUrl={window.location.origin} demo={demoDuelo}
+      webappUrl={window.location.origin}
       placa={<PlacaScreen logo={LOGO} gameState={{ ...gameState, active_placa:"duelo", placa_custom:null }}/>} />;
   }
 
@@ -914,7 +921,7 @@ export function PlacaScreen({ logo, gameState }) {
     ? { ...PLACAS.promo, ...custom }
     : PLACAS[placaId] || PLACAS.logo_animado;
 
-  // Ajustes → QR y logo: el anuncio de cada juego respeta los mismos
+  // Diseñador → QR y logo del juego: el anuncio de cada juego respeta los mismos
   // interruptores que su juego en pantalla.
   const qrCfg   = usePantallaQr();
   const logoCfg = usePantallaLogo();
@@ -1129,77 +1136,7 @@ function Zocalo({ logo, messages, video }) {
 
 // ── ROOT — Terminal de proyección ─────────────────────────────────────────────
 export default function PantallaGigante() {
-  const { gameState: liveGameState, session } = useGameState();
-  const designerState = new URLSearchParams(window.location.search).get("designerState");
-  const designerGameState = (() => {
-    if (!designerState) return null;
-    if (designerState === "raffle") return { active_game:"rey del orto", raffle_state:"launched" };
-    if (designerState === "winner") return { active_game:"rey del orto", raffle_state:"winner", raffle_winner:{name:"JUAN CARLOS",avatar:"🎰",prize:"TRAGO GRATIS"} };
-    // Rey del Orto / Sorteo cancelado — ?designerState=raffleCancelled
-    if (designerState === "raffleCancelled") return { active_game:"rey del orto", raffle_state:"cancelled", raffle_cancel:{ code:"MIN_PARTICIPANTS", connected_count:4, required_count:5 } };
-    if (designerState === "trivia") return { active_game:"trivia", trivia_question:"¿Cuál es el mejor bar de Buenos Aires?", bata_pct:58, memb_pct:42 };
-    // Sumate: la ronda NO vive en game_state sino en `sumate_rounds`, así que
-    // acá sólo se monta la capa. La ronda de muestra viaja por `demoRound`
-    // (ver abajo), y es la única forma de previsualizar estas pantallas sin
-    // tener una ronda real abierta en la sesión.
-    if (["suma","sumaWinner","sumaCancelled"].includes(designerState)) return { active_game:"suma" };
-    if (["palabra","palabraStandby"].includes(designerState)) return { active_game:"palabra" };
-    // Duelo: la ronda vive en `applause_sessions`, así que las fases se arman
-    // con `demoDuelo` (abajo). `duelo` sin sufijo es la convocatoria.
-    if (["dueloVoting","dueloWinner","dueloTie"].includes(designerState)) return {
-      active_escenario:"duelo", duelo_state: designerState === "dueloVoting" ? "voting" : "revealed",
-      duelo_video:null,
-    };
-    if (designerState === "duelo") return { active_escenario:"duelo", duelo_state:"idle" };
-    if (["ftl","pt","karaoke"].includes(designerState)) return { active_escenario:designerState, escenario_participant:"PARTICIPANTE", escenario_avatar:"🎤" };
-    if (designerState.startsWith("placa:")) return { active_placa:designerState.slice(6) };
-    return {};
-  })();
-  const gameState = designerGameState ?? liveGameState;
-  // Ronda de muestra para el Diseñador. Es lo único que permite previsualizar
-  // las tres pantallas de Sumate sin abrir una ronda de verdad en el bar,
-  // porque su contenido vive en `sumate_rounds` y no en `game_state`.
-  const demoSumaRound = (() => {
-    if (designerState === "suma") return { id:"demo", target_number:23, status:"playing" };
-    if (designerState === "sumaCancelled") return { id:"demo", target_number:23, status:"cancelled", cancel_reason:"manual" };
-    if (designerState === "sumaWinner") return {
-      id:"demo", target_number:23, status:"finished",
-      winner_group:[
-        { user_id:"d1", name:"SOFI",  avatar_emoji:"🦄", assigned_number:9 },
-        { user_id:"d2", name:"MARCE", avatar_emoji:"🍺", assigned_number:7 },
-        { user_id:"d3", name:"JUAN",  avatar_emoji:"🎸", assigned_number:7 },
-      ],
-    };
-    return null;
-  })();
-  // Misma razón que `demoSumaRound`: la palabra vive en `arma_palabra_rounds`.
-  const demoPalabraRound = (() => {
-    if (designerState === "palabra") return { id:"demo", target_word:"AVE", status:"playing" };
-    if (designerState === "palabraStandby") return { id:"demo", target_word:"AVE", status:"cancelled" };
-    return null;
-  })();
-  // Duelo de Talentos: ronda de muestra para el Diseñador (sin suscripciones).
-  const demoDuelo = (() => {
-    if (!designerState || !designerState.startsWith("duelo")) return null;
-    if (designerState === "duelo") return { round:null, counts:{ p1:0, p2:0 } };
-    const base = {
-      id:"demo", game_type:"duelo", p1_user_id:"d1", p1_name:"SOFI", p1_avatar:JSON.stringify({ avatar_emoji:"🦄" }),
-      p2_user_id:"d2", p2_name:"JUAN", p2_avatar:JSON.stringify({ avatar_emoji:"🎸" }), tap_limit:100,
-    };
-    // Toques de muestra de cada participante.
-    const muestra = (a, b) => ({ p1:a, p2:b });
-    if (designerState === "dueloVoting") return {
-      round:{ ...base, status:"voting", vote_mode:"toques", voting_ends_at:new Date(Date.now() + 45000).toISOString() },
-      counts:muestra(132, 98),
-    };
-    if (designerState === "dueloWinner") return {
-      round:{ ...base, status:"finished", vote_mode:"toques", result:"p1", winner_slot:1 }, counts:muestra(212, 167),
-    };
-    if (designerState === "dueloTie") return {
-      round:{ ...base, status:"finished", vote_mode:"toques", result:"tie", winner_slot:null }, counts:muestra(150, 150),
-    };
-    return null;
-  })();
+  const { gameState, session } = useGameState();
   const { approved: messages } = useMessages(session?.id ?? null, "screen");
   const { requests: videoRequests } = useVideoRequests(session?.id ?? null);
   const liveVideo = [...videoRequests]
@@ -1244,11 +1181,11 @@ export default function PantallaGigante() {
   } else if (gameState?.active_game === "trivia") {
     content = <TriviaScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (gameState?.active_game === "suma") {
-    content = <SumaScreen sessionId={session?.id ?? null} demoRound={demoSumaRound}/>;
+    content = <SumaScreen sessionId={session?.id ?? null}/>;
   } else if (gameState?.active_game === "palabra") {
-    content = <PalabraScreen sessionId={session?.id ?? null} demoRound={demoPalabraRound}/>;
+    content = <PalabraScreen sessionId={session?.id ?? null}/>;
   } else if (hasEscenario) {
-    content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null} demoDuelo={demoDuelo}/>;
+    content = <EscenarioScreen gameState={gameState} sessionId={session?.id ?? null}/>;
   } else if (liveVideo && !hasGame) {
     content = <VideoScreen
       video={liveVideo}
@@ -1281,7 +1218,7 @@ export default function PantallaGigante() {
     content = <IdleScreen logo={LOGO}/>;
   }
 
-  // Juego en pantalla → su interruptor de logo (Ajustes → QR y logo).
+  // Juego en pantalla → su interruptor de logo (Diseñador → QR y logo del juego).
   const juegoEnPantalla = QR_DE_JUEGO[gameState?.active_game]
     || (hasEscenario ? gameState.active_escenario : null);
   const logoDelJuegoOn = !juegoEnPantalla || logoCfg[juegoEnPantalla] !== false;
@@ -1301,7 +1238,7 @@ export default function PantallaGigante() {
         <div className="scanline"/>
         {content}
 
-        {/* QR de Rey / Desafío / Sumate / Arma (Ajustes → QR en pantalla) */}
+        {/* QR de Rey / Desafío / Sumate / Arma (Diseñador → QR y logo del juego) */}
         {hasGame && <QrDeJuego activeGame={gameState?.active_game}/>}
 
         {/* Logo del bar — arriba a la izquierda, girando suave.
@@ -1310,7 +1247,7 @@ export default function PantallaGigante() {
             durante el Duelo (el BrandHeader ya muestra el logo centrado → evita
             duplicar el logo de BizarrApp en esa pantalla). Tampoco en las
             placas de anuncio (tienen su logo con campana) ni en un juego con
-            el logo apagado en Ajustes → QR y logo. */}
+            el logo apagado en Diseñador → QR y logo del juego. */}
         {!isLogoAnimadoFullscreen && !liveVideo && !placaDeAnuncio && logoDelJuegoOn
           && gameState?.active_escenario !== "duelo" && (
           <img

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { portada, conSigno, colorScore, mensajeAmigable } from "../../components/pantalla/pantallaUi";
 import Icono from "../../components/iconos/Icono";
 import djVotingCss from "./djVotingStyles";
+import { marcaDelEvento, hayMarca, rgba } from "../../constants/marcaEvento";
+import { esKickDual } from "../../constants/kickModos";
 
 /**
  * Cliente — Pantalla › 🎧 Música.
@@ -51,9 +53,85 @@ function dosRenglones(texto) {
   return <>{palabras.slice(0, corte).join(" ")}<br />{palabras.slice(corte).join(" ")}</>;
 }
 
+// ─── Amor y Odio / Guns & Roses ──────────────────────────────────────────────
+// Un voto por tema, a favor (flor, +1) o en contra (tomate / bala, −1), que no
+// se cambia. El medidor va del umbral negativo (se corta) al positivo (a salvo).
+
+function IconoKick({ url, emoji }) {
+  return url
+    ? <img src={url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
+    : <span style={{ fontSize: 20, lineHeight: 1 }}>{emoji}</span>;
+}
+
+function KickDual({ kick, onVote, puedeVotar }) {
+  const guns = kick.style === "guns_roses";
+  const neg  = Math.min(-1, kick.negative_threshold ?? -10);
+  const pos  = Math.max(1, kick.positive_threshold ?? 10);
+  const valor = Math.max(neg, Math.min(pos, kick.meter ?? 0));
+  // El cero queda donde corresponde entre los dos umbrales (no siempre al medio).
+  const cero = (-neg / (pos - neg)) * 100;
+  const punta = ((valor - neg) / (pos - neg)) * 100;
+  const verde = valor >= 0;
+  const yaVoto = kick.my_vote === 1 || kick.my_vote === -1;
+
+  const botones = [
+    { value: 1, texto: guns ? (kick.flower_text || "Salvar el Tema") : "Salvar",
+      icono: <IconoKick url={kick.assets?.flower_icon} emoji="🌹" />, color: "#34D399" },
+    { value: -1, texto: guns ? (kick.shoot_text || "Matar el Tema") : (kick.button_text || "Sacar Tema"),
+      icono: <IconoKick url={guns ? kick.assets?.shoot_icon : null} emoji={guns ? "🔫" : "🍅"} />, color: "#F87171" },
+  ];
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {kick.saved ? (
+        <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, color: "#34D399", padding: "6px 0" }}>
+          🌹 ¡Este tema quedó a salvo!
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8 }}>
+          {botones.map((b) => {
+            const mio = kick.my_vote === b.value;
+            return (
+              <button key={b.value} type="button" onClick={() => onVote(b.value)}
+                disabled={!puedeVotar || yaVoto}
+                style={{
+                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  minHeight: 40, padding: "6px 10px", borderRadius: 14, font: "inherit", fontSize: 13, fontWeight: 800,
+                  cursor: !puedeVotar || yaVoto ? "default" : "pointer",
+                  background: mio ? `${b.color}26` : "#000000",
+                  border: `1.5px solid ${mio ? b.color : "rgba(245,230,192,.14)"}`,
+                  color: mio ? b.color : "rgba(245,230,192,.75)",
+                  opacity: yaVoto && !mio ? .45 : 1, WebkitTapHighlightColor: "transparent",
+                }}>
+                {b.icono}{mio ? `✓ ${b.texto}` : b.texto}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {/* Medidor: del umbral negativo (izquierda) al positivo (derecha). */}
+      <div style={{ position: "relative", height: 8, marginTop: 9, borderRadius: 999, background: "rgba(245,230,192,.1)" }}>
+        <div style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999,
+          left: `${Math.min(cero, punta)}%`, width: `${Math.abs(punta - cero)}%`,
+          background: verde ? "#34D399" : "#F87171", transition: "all .4s ease" }} />
+        <div style={{ position: "absolute", top: -3, bottom: -3, width: 2, left: `calc(${cero}% - 1px)`,
+          background: "rgba(245,230,192,.45)" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, marginTop: 4,
+        color: "rgba(245,230,192,.45)" }}>
+        <span>{guns ? "🔫" : "🍅"} {neg}</span>
+        <span style={{ color: verde ? "#34D399" : "#F87171", fontWeight: 800 }}>{valor > 0 ? `+${valor}` : valor}</span>
+        <span>🌹 +{pos}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sonando ahora + Sacar tema ──────────────────────────────────────────────
-function SonandoAhora({ current, kick, onKick, puedeVotar, conPortada }) {
+function SonandoAhora({ current, kick, onKick, onKickFijo, puedeVotar, conPortada, logo = null }) {
   const pct = kick?.needed > 0 ? Math.min(100, (kick.votes / kick.needed) * 100) : 0;
+  const dual = esKickDual(kick?.style);
+  const mostrarKick = !!(current && kick?.enabled && kick.visible !== false);
   // La portada sólo la dibujan los temas que la piden (Vista Original va sin).
   const cover = conPortada && current ? portada(current) : null;
 
@@ -63,6 +141,11 @@ function SonandoAhora({ current, kick, onKick, puedeVotar, conPortada }) {
           verticalmente contra todo el bloque. */}
       <div className="djv-ahora-row">
         {cover && <img className="djv-ahora-cover" src={cover} alt="" decoding="async" />}
+        {/* Logo del evento (Editor → Personalización visual), si no hay portada. */}
+        {!cover && logo && (
+          <img src={logo} alt="" decoding="async"
+            style={{ width: 44, height: 44, objectFit: "contain", flexShrink: 0 }} />
+        )}
         <div className="djv-ahora-info">
           <div className="djv-ahora-lbl">🎵 SONANDO AHORA</div>
           <div className="djv-ahora-tit">{current ? current.title : "Esperando al DJ…"}</div>
@@ -70,7 +153,9 @@ function SonandoAhora({ current, kick, onKick, puedeVotar, conPortada }) {
             {current ? (current.artist || "—") : "En un rato arranca la música"}
           </div>
         </div>
-        {current && kick?.enabled && (
+        {/* Con menos invitados activos que el mínimo de conectados, el servidor
+            dice visible: false y el botón no aparece. */}
+        {mostrarKick && !dual && (
           <button
             className={`djv-kick${kick.voted ? " djv-kick-on" : ""}`}
             onClick={onKick}
@@ -82,8 +167,10 @@ function SonandoAhora({ current, kick, onKick, puedeVotar, conPortada }) {
         )}
       </div>
 
+      {mostrarKick && dual && <KickDual kick={kick} onVote={onKickFijo} puedeVotar={puedeVotar} />}
+
       {/* Progreso del kick: franja fina sobre el borde inferior del bloque. */}
-      {current && kick?.enabled && (
+      {current && kick?.enabled && !dual && (
         <div className="djv-kick-barra"><div className="djv-kick-fill" style={{ width: `${pct}%` }} /></div>
       )}
     </div>
@@ -189,15 +276,38 @@ function TemaCard({
   );
 }
 
+// ─── Personalización visual del evento ───────────────────────────────────────
+// Editor → «Personalización visual»: acento en «Sonando ahora», texto en los
+// títulos de los temas y fondo detrás de la vista. Va ANTES del tema del
+// Diseñador Cliente: con un tema activo, lo que el tema define gana.
+function cssDeMarca(m) {
+  const r = [];
+  if (m.acento) r.push(`.djv-marca .djv-ahora-lbl{color:${m.acento};}`,
+    `.djv-marca .djv-ahora{border-color:${rgba(m.acento, .4)};}`);
+  if (m.texto) r.push(`.djv-marca .djv-ahora-tit,.djv-marca .djv-tema-tit{color:${m.texto};}`);
+  if (m.fondo || m.fondoImagen) {
+    const img = m.fondoImagen
+      ? `background-image:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.55)),url("${m.fondoImagen.replace(/"/g, "%22")}");background-size:cover;background-position:center;`
+      : "";
+    // El fondo ocupa toda la sección: se come el padding de .app-content.
+    r.push(`.djv-marca{${m.fondo ? `background-color:${m.fondo};` : ""}${img}
+      margin:-14px -16px -16px;padding:14px 16px 16px;box-sizing:border-box;}`,
+      `.djv-marca.djv-vista{height:calc(100% + 30px);}`);
+  }
+  return r.join("");
+}
+
 // ─── Lienzo: CSS base + tema activo del Diseñador Cliente ───────────────────
 // Sin tema (Vista Original) es el mismo marcado de siempre. Con tema, todo va
 // dentro de su clase raíz, así su CSS no sale de la vista (ni al logo ni a la
 // navegación inferior, que son del shell).
-function Lienzo({ theme, className = "", children }) {
-  const clases = [className, theme?.className].filter(Boolean).join(" ");
+function Lienzo({ theme, marca = null, className = "", children }) {
+  const conMarca = hayMarca(marca);
+  const clases = [className, conMarca && "djv-marca", theme?.className].filter(Boolean).join(" ");
   return (
     <div className={clases || undefined}>
       <style>{djVotingCss}</style>
+      {conMarca && <style>{cssDeMarca(marca)}</style>}
       {theme && <style>{theme.fontsCss}</style>}
       {theme && <style>{theme.css}</style>}
       {theme?.tvStripe && (
@@ -255,6 +365,7 @@ export default function DjVotingView({
     );
   }
 
+  const marca = marcaDelEvento(event);
   const up    = cli.powerOf("up");
   const down  = cli.powerOf("down");
   const super_ = cli.powerOf("super_up");
@@ -275,7 +386,7 @@ export default function DjVotingView({
 
   // Todo hasta el título "Top" queda fijo; sólo scrollea la lista de temas.
   return (
-    <Lienzo theme={theme} className="djv-vista">
+    <Lienzo theme={theme} marca={marca} className="djv-vista">
       <div className="djv-fijo">
         {event.voting_frozen && (
           <div className="djv-meta" style={{ marginBottom: 13 }}>❄️ ranking congelado</div>
@@ -301,7 +412,9 @@ export default function DjVotingView({
 
         {puedeVotar && <Reacciones onReact={cli.react} emojis={cli.emojis} />}
 
-        <SonandoAhora current={current} kick={cli.kick} onKick={cli.toggleKick} puedeVotar={puedeVotar}
+        <SonandoAhora current={current} kick={cli.kick} onKick={cli.toggleKick} onKickFijo={cli.voteKickFijo}
+          puedeVotar={puedeVotar}
+          logo={marca.logo}
           conPortada={Boolean(theme?.nowPlayingCover)} />
 
         <div className="djv-seccion">

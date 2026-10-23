@@ -608,7 +608,7 @@ const duelStyles = (
  */
 export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo = null, placa = null }) {
   const live = useDueloRound(demo ? null : sessionId);
-  // Ajustes → QR en pantalla: el QR de la convocatoria se puede ocultar.
+  // Diseñador → QR y logo del juego: el QR de la convocatoria se puede ocultar.
   const mostrarQr   = usePantallaQr().duelo !== false;
   const mostrarLogo = usePantallaLogo().duelo !== false;
   // Admin → Duelo → Pantalla del duelo: centro (texto/imagen) y 👍 + %.
@@ -738,7 +738,7 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
       }}>
         {keyframes}
         {/* Logo BizarrApp con campana, igual que las demás convocatorias
-            (Ajustes → QR y logo). */}
+            (Diseñador → QR y logo del juego). */}
         {mostrarLogo && <LogoCampana src={LOGO_APP}/>}
         {/* Única identificación del juego: el logo oficial (asset existente). */}
         <LogoJuego src={PLACA} alt="Duelo de Talentos"

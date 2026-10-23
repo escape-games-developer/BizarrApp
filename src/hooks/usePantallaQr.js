@@ -12,8 +12,8 @@ import { supabase, supabaseAnon } from "../lib/supabase";
  *
  * `usePantallaQr` / `usePantallaLogo` los lee la TV (RPC pública, cliente
  * anónimo), con una sola consulta compartida cada 3 s (ver «Lectura
- * compartida»): un cambio en Ajustes se ve en la pantalla en ≤ 3 s.
- * `usePantallaVisibilidadAdmin(tipo)` lee y guarda Ajustes con el control de
+ * compartida»): un cambio en el Diseñador se ve en la pantalla en ≤ 3 s.
+ * `usePantallaVisibilidadAdmin(tipo)` lee y guarda el Diseñador con el control de
  * concurrencia de siempre (updated_at).
  */
 
@@ -92,7 +92,7 @@ function suscribir(tipo, fn) {
   };
 }
 
-/** Relee ya (lo llama Ajustes después de guardar, para la vista previa). */
+/** Relee ya (después de guardar desde el Diseñador). */
 export function refrescarPantallaVisibilidad(tipo) {
   if (stores[tipo]?.subs.size) leerStore(tipo);
 }
@@ -108,7 +108,7 @@ export const usePantallaQr   = () => usePantallaVisibilidad("qr");
 /** `{ <juego>: bool }` → true = se muestra el logo de BizarrApp. */
 export const usePantallaLogo = () => usePantallaVisibilidad("logo");
 
-/** Admin (Ajustes): lee la fila de `tipo` ('qr' | 'logo') y la guarda. */
+/** Admin (Diseñador → QR y logo): lee la fila de `tipo` ('qr' | 'logo') y la guarda. */
 export function usePantallaVisibilidadAdmin(tipo) {
   const { clave, que, migracion } = TIPOS[tipo];
   const [config, setConfig] = useState(null);

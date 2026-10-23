@@ -37,10 +37,8 @@ export const SIDEBAR_MENU = [
   { type: "item",   id: "novedades",     sec: "novedades",     bloque: "contenido" },
   { type: "item",   id: "playlists",     sec: "playlists",     bloque: "contenido" },
   { type: "item",   id: "dashboard",     sec: "dashboard",     bloque: "general" },
-  { type: "item",   id: "designer",      sec: "designer",      bloque: "general" },
-  { type: "item",   id: "designerClient", sec: "designerClient", bloque: "general" },
-  { type: "item",   id: "designerTv",    sec: "designerTv",    bloque: "general" },
-  { type: "item",   id: "designerGuest", sec: "designerGuest", bloque: "general" },
+  { type: "flyout", id: "disenador",     icon: "🎨", label: "Diseñador", bloque: "general",
+    children: ["disenoEscenario", "disenoJuegos", "designerTv", "designerClient"] },
   { type: "flyout", id: "usuariosMenu",  icon: "👥", label: "Usuarios",  bloque: "admin",
     children: ["clientes", "usuarios"] },
   // Ajustes es la única vía para volver a mostrar lo que se oculte: no se oculta.

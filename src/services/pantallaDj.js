@@ -168,6 +168,9 @@ export const castSuperVote = (eventId, itemId, type = "super_up") =>
 export const getKickStatus  = (eventId, client = supabase) =>
   rpc("pantalla_get_kick_status", { _event_id: eventId }, client);
 export const toggleKickVote = (eventId) => rpc("pantalla_toggle_kick_vote", { _event_id: eventId });
+/** Amor y Odio / Guns & Roses: el voto único del invitado, +1 (flor) o −1 (tomate / bala). */
+export const votarKickFijo  = (eventId, value) =>
+  rpc("pantalla_kick_voto_fijo", { _event_id: eventId, _value: value });
 
 /** Única escritura directa del cliente. La RLS exige user_id = auth.uid(). */
 export async function sendReaction(eventId, userId, emoji) {
@@ -180,8 +183,6 @@ export async function sendReaction(eventId, userId, emoji) {
 
 export const createEvent    = (name, sessionId = null) =>
   rpc("pantalla_create_event", { _name: name, _session_id: sessionId });
-export const duplicateEvent = (eventId, name = null) =>
-  rpc("pantalla_duplicate_event", { _event_id: eventId, _name: name });
 /**
  * Poner la noche en vivo. Es el comienzo real de la jornada en la app, así que
  * además del RPC deja `game_state` en neutro: sin esto el evento arranca
@@ -203,7 +204,6 @@ export async function startEvent(eventId) {
   return res;
 }
 
-export const endEvent    = (eventId) => rpc("pantalla_end_event",    { _event_id: eventId });
 export const resetEvent  = (eventId) => rpc("pantalla_reset_event",  { _event_id: eventId });
 export const resetVotes  = (eventId) => rpc("pantalla_reset_votes",  { _event_id: eventId });
 export const resetPowers = (eventId) => rpc("pantalla_reset_vote_powers", { _event_id: eventId });
@@ -385,6 +385,22 @@ export const tvEscenarioVideoTerminado = (eventId, token, turnId) =>
     _event_id: eventId, _token: token, _turn_id: turnId,
   }, supabaseAnon);
 
+/** La TV terminó de emitir una tanda publicitaria: suma una emisión al clip. */
+export const tvTandaEmitida = (eventId, token, clipId) =>
+  rpc("tv_tanda_emitida", {
+    _event_id: eventId, _token: token, _clip_id: clipId,
+  }, supabaseAnon);
+
+/** Cola de tandas de un evento (lectura pública: la usa la TV, sin sesión). */
+export async function tvTandas(eventId) {
+  if (!eventId) return [];
+  const { data, error } = await supabaseAnon.from("pantalla_ad_clips")
+    .select("id,title,source_type,youtube_id,audio_path,duration_seconds,trim_start_seconds,trim_end_seconds,volume,position,enabled,times_played")
+    .eq("event_id", eventId).order("position");
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 export const tvSongEnded = (eventId, token, itemId, reason = "advance") =>
   rpc("pantalla_tv_song_ended", {
     _event_id: eventId, _token: token, _item_id: itemId, _reason: reason,
@@ -451,8 +467,8 @@ export async function activateSet(eventId, setId) {
 }
 
 /**
- * Rotación por categorías: { enabled, slots: { A, B, C, D } } (lugares fijos
- * por categoría en la ventana de candidatas). Guarda y re-completa la ventana.
+ * Rotación por categorías: { enabled, rows: [{ slots, categories: ["A",…] }] }
+ * (filas de lugares fijos en la ventana de candidatas). Guarda y re-completa la ventana.
  */
 export async function saveCategoryRotation(eventId, rotation) {
   const { data, error } = await supabase.rpc("pantalla_set_category_rotation",

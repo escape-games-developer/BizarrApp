@@ -24,7 +24,7 @@ export const ESCENARIO_JUEGOS = {
     // operador elige el video del desafío.
     catalogo: "ftl",
     // La votación del público (toques / 👍👎 / ninguna) ya no se define acá:
-    // la elige Ajustes → Votación Escenario (useVotacionEscenario).
+    // la elige la card 🗳️ del panel de cada juego (useVotacionEscenario).
 
     // Admin
     colorAdmin: "#FF9500",

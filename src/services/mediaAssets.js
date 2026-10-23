@@ -14,8 +14,9 @@ import { supabase } from "../lib/supabase";
 
 export const MEDIA_BUCKET = "bizarren-media";
 
-export const ALLOWED_MIME = ["image/png", "image/jpeg", "image/webp"];
-export const ALLOWED_LABEL = "PNG, JPG o WEBP";
+// GIF: transición entre canciones del DJ (migración 20261023120000_media_gif).
+export const ALLOWED_MIME = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+export const ALLOWED_LABEL = "PNG, JPG, WEBP o GIF";
 
 /** 10 MB — mismo límite que el configurado en el bucket. */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -53,6 +54,7 @@ function extFor(mime, fileName = "") {
   if (mime === "image/png")  return "png";
   if (mime === "image/webp") return "webp";
   if (mime === "image/jpeg") return "jpg";
+  if (mime === "image/gif")  return "gif";
   const guess = fileName.split(".").pop();
   return guess && guess.length <= 5 ? guess.toLowerCase() : "png";
 }

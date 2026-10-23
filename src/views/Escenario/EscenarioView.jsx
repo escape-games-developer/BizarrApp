@@ -99,8 +99,13 @@ function CostumeStrip({ items, color, bg, border }) {
 // El voto va por el RPC cast_follow_leader_vote, que valida turno abierto,
 // modo 'votos' activo en Ajustes y que no vote el protagonista. Cambiar de
 // participante cambia el turno: contadores y voto propio arrancan de cero.
-function VotacionFtl({ turnId, userId }) {
-  const { totals, myVote, castVote, error } = useFollowLeaderVotes(turnId, userId);
+// `demo` en los tres modos (sólo vista previa del Diseñador): valores de
+// muestra; con él no se consulta ni se vota nada.
+function VotacionFtl({ turnId, userId, demo = null }) {
+  const vivo = useFollowLeaderVotes(demo ? null : turnId, userId);
+  const { totals, myVote, castVote, error } = demo
+    ? { totals: demo.totals, myVote: demo.myVote ?? null, castVote: async () => {}, error: null }
+    : vivo;
   const [enviando, setEnviando] = useState(null);
 
   const votar = async (voto) => {
@@ -163,9 +168,12 @@ function VotacionFtl({ turnId, userId }) {
 // ─── Mod 3: pelea de toques 👍/👎 durante un turno ────────────────────────────
 // Cada uno toca 👍 o 👎 todas las veces que quiera (RPC ftl_pelear). La barra
 // arranca en el medio y queda donde la deja la pelea: no se descarga sola.
-function PeleaFtl({ turnId, enVivo }) {
-  const { pct } = useFtlPelea(enVivo ? turnId : null, { cadaMs: 1000 });
-  const { tocar, mios, error } = useFtlPeleaToques(enVivo ? turnId : null);
+function PeleaFtl({ turnId, enVivo, demo = null }) {
+  const turno = enVivo && !demo ? turnId : null;
+  const { pct: pctVivo } = useFtlPelea(turno, { cadaMs: 1000 });
+  const toques = useFtlPeleaToques(turno);
+  const pct = demo ? demo.pct : pctVivo;
+  const { tocar, mios, error } = demo ? { tocar: () => {}, mios: { pos: 0, neg: 0 }, error: null } : toques;
   const [pulso, setPulso] = useState({ pos: 0, neg: 0 });
 
   const alTocar = (lado) => (e) => {
@@ -224,9 +232,12 @@ function PeleaFtl({ turnId, enVivo }) {
 // toque suma energía al barómetro (RPC ftl_tocar, que valida turno abierto,
 // video sonando y que no toque el protagonista). La energía baja sola si el
 // público deja de tocar: el % lo calcula la base (ftl_energia_pct).
-function ToquesFtl({ turnId, enVivo }) {
-  const pct = useFtlEnergia(enVivo ? turnId : null, { cadaMs: 1000 });
-  const { tocar, misToques, error } = useFtlToques(enVivo ? turnId : null);
+function ToquesFtl({ turnId, enVivo, demo = null }) {
+  const turno = enVivo && !demo ? turnId : null;
+  const pctVivo = useFtlEnergia(turno, { cadaMs: 1000 });
+  const toques = useFtlToques(turno);
+  const pct = demo ? demo.pct : pctVivo;
+  const { tocar, misToques, error } = demo ? { tocar: () => {}, misToques: 0, error: null } : toques;
   const [pulso, setPulso] = useState(0);
 
   const alTocar = (e) => {
@@ -284,9 +295,12 @@ function ToquesFtl({ turnId, enVivo }) {
 // La inscripción vive en `escenario_queue`, no en un useState: por eso el hook
 // recibe el user id. Un F5 acá tiene que devolver la misma pantalla, y la
 // llamada al escenario tiene que llegar sola por Realtime.
-function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido, mostrarVestuario = true, estiloCards = true }) {
-  const { myEntry, isEnrolled, enroll, leave, loading, error } =
-    useEscenarioQueue(sessionId, juego.type, user?.id ?? null);
+// `demo` (sólo vista previa del Diseñador): { inscripto, votacion } de muestra.
+function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido, mostrarVestuario = true, estiloCards = true, demo = null }) {
+  const cola = useEscenarioQueue(demo ? null : sessionId, juego.type, user?.id ?? null);
+  const { myEntry, isEnrolled, enroll, leave, loading, error } = demo
+    ? { myEntry: null, isEnrolled: !!demo.inscripto, enroll: () => {}, leave: () => {}, loading: false, error: null }
+    : cola;
   const modoVotacion = useVotacionEscenario()[juego.type] || "off";
 
   // El cliente NO elige video. Se postula y listo: el video del desafío lo
@@ -339,13 +353,13 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
         </div>
       </div>
 
-      {/* Modo de votación elegido en Ajustes → Votación Escenario. */}
+      {/* Modo de votación elegido en el panel del juego (Admin, 🗳️). */}
       {modoVotacion === "toques"
-        ? <ToquesFtl turnId={turnId} enVivo={!!participante.playing}/>
+        ? <ToquesFtl turnId={turnId} enVivo={!!participante.playing} demo={demo?.votacion}/>
         : modoVotacion === "votos"
-        ? <VotacionFtl turnId={turnId} userId={user?.id ?? null}/>
+        ? <VotacionFtl turnId={turnId} userId={user?.id ?? null} demo={demo?.votacion}/>
         : modoVotacion === "pelea"
-        ? <PeleaFtl turnId={turnId} enVivo={!!participante.playing}/>
+        ? <PeleaFtl turnId={turnId} enVivo={!!participante.playing} demo={demo?.votacion}/>
         : (
           <div style={{ marginTop: 16, textAlign: "center", fontSize: 12,
             color: "rgba(245,230,192,.35)", lineHeight: 1.6 }}>
@@ -380,7 +394,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
         <div className="sec-hdr" style={{ marginBottom: 0 }}>
           <span style={{ fontSize: 20 }}>{juego.icon}</span><h3>{juego.label}</h3>
         </div>
-        {/* Ajustes → General → Vestuario de cada juego. */}
+        {/* Admin → 🎨 Diseño de juegos → Celular → Vestuario. */}
         {mostrarVestuario && (
           <CostumeStrip
             items={juego.vestuario}
@@ -430,7 +444,9 @@ function KaraokeView({ user, sessionId, ytConfig }) {
 }
 
 // ─── EscenarioView (router) ──────────────────────────────────────────────────
-export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState, mostrarCatalogo = false, vestuario = {}, estiloCards = true }) {
+// `demo`: datos de muestra del juego activo, sólo para la vista previa del
+// Diseñador (ver preview/celularDemo.js). En la app llega siempre null.
+export default function EscenarioView({ user, activeEscenario, isRestricted, onGoProfile, sessionId, ytConfig, gameState, mostrarCatalogo = false, vestuario = {}, estiloCards = true, demo = null }) {
   if (isRestricted) {
     return (
       <BlockedView
@@ -455,7 +471,7 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
   // de entrada, sin cards ni pasos intermedios.
   if (activeEscenario === "duelo") return (
     <DueloVistaCompleta sessionId={sessionId} user={user} gameState={gameState}
-      activeEscenario={activeEscenario} estiloCards={estiloCards}/>
+      activeEscenario={activeEscenario} estiloCards={estiloCards} demo={demo}/>
   );
 
   // FTL y Personal Trainer corren el MISMO contrato (postulación → el operador
@@ -466,7 +482,7 @@ export default function EscenarioView({ user, activeEscenario, isRestricted, onG
     <JuegoEscenarioView juego={juego} user={user} sessionId={sessionId}
       mostrarVestuario={vestuario[juego.type] !== false} estiloCards={estiloCards}
       participante={gameState?.escenario_participant || null}
-      videoElegido={gameState?.escenario_video || null} />
+      videoElegido={gameState?.escenario_video || null} demo={demo} />
   );
 
   switch (activeEscenario) {

@@ -1,4 +1,5 @@
 import { isClientPreviewPath } from "./preview/previewContract";
+import { isTvPreviewPath } from "./preview/tvPreviewContract";
 
 // La ruta se decide ANTES de importar cualquier otra cosa. Los imports
 // estáticos se evalúan todos al cargar el módulo, y varias rutas arrastran
@@ -9,6 +10,11 @@ import { isClientPreviewPath } from "./preview/previewContract";
 if (isClientPreviewPath(window.location.pathname)) {
   // /designer-preview/client: Cliente con datos de prueba, sin efectos.
   import("./preview/clientPreviewMain");
+} else if (isTvPreviewPath(window.location.pathname)) {
+  // /designer-preview/tv: pantallas de los juegos con datos de ejemplo. En
+  // /designer-preview/* src/lib/supabase.js arranca sin sesión, así que esta
+  // ruta puede leer lo público sin tocar la sesión del Admin.
+  import("./preview/tvPreviewMain");
 } else {
   // Todas las demás rutas, igual que antes (ver src/appRoutes.jsx).
   import("./appRoutes");

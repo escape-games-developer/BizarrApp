@@ -6,9 +6,6 @@ import { useGameState, useAdminControls, parseDueloVideo } from "../hooks/realti
 import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
 import { useDueloRound } from "../hooks/realtime/useDueloRound";
 import { useReglasDuelo, motivoDuracionInvalida, motivoAplausosInvalido } from "../hooks/useReglasDuelo";
-import { useDueloPantallaAdmin, TEXTO_MAX, EFECTOS_DUELO, EFECTOS_CSS, ZOOM_MIN, ZOOM_MAX, RANGOS, POSICIONES_LOGO } from "../hooks/useDueloPantalla";
-import MediaLibraryModal from "../components/media/MediaLibraryModal";
-import { useEscenarioListoAdmin, TEXTO_LISTO_MAX, FUENTES_LISTO, POSICIONES_LISTO, RANGOS_BARO } from "../hooks/useEscenarioListo";
 import { useMessages } from "../hooks/realtime/useMessages";
 import { usePresence } from "../hooks/realtime/usePresence";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
@@ -17,7 +14,6 @@ import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
 import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
-import DesignerView from "../views/Designer/DesignerView";
 import TvDesigner from "../designers/tv/TvDesigner";
 import ClientDesignerPanel from "./designer-client/ClientDesignerPanel";
 import UsuariosPanel from "./UsuariosPanel";
@@ -29,6 +25,11 @@ import { useRaffle, raffleCountdown } from "../hooks/useRaffle";
 import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import AdminSidebar from "./AdminSidebar";
 import AjustesPanel from "./AjustesPanel";
+import Toggle from "./juegos/Toggle";
+import DisenadorEscenario from "./disenador/DisenadorEscenario";
+import DisenadorJuegos from "./disenador/DisenadorJuegos";
+import { pedirDisenoDe } from "./disenador/SolapasJuegos";
+import { VotacionJuego } from "./juegos/AjustesDelJuego";
 import { useSidebarConfig } from "../hooks/useSidebarConfig";
 import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import SelectorPantallas from "./pantalla/SelectorPantallas";
@@ -408,19 +409,6 @@ const STROBE = ["#FF2D78","#FFD600","#9B2FFF","#00E5FF","#FF9500","#FFF","#FF2D7
 const EMOJIS = ["🍺","🍹","🎉","🎰","🍔","🎤","💃","🏆","⭐","🔥","🎵","✨","🍕","🥂","🎁"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function Toggle({on,onToggle,label,color}){
-  return(
-    <div className="tgl">
-      <button className={`tgl-track ${on?"tgl-on":"tgl-off"}`}
-        style={on?{background:`linear-gradient(135deg,${color||"#00E5FF"},${color||"#00F5A0"})`}:{}}
-        onClick={onToggle}>
-        <div className="tgl-thumb"/>
-      </button>
-      <span className="tgl-lbl" style={{color:on?"#F0E8FF":"rgba(240,232,255,.38)"}}>{label}</span>
-    </div>
-  );
-}
-
 function VRow({v,sel,onSel,color}){
   return(
     <div className="vrow" style={{"--col":color||"rgba(0,229,255,.4)"}}
@@ -468,10 +456,13 @@ const SECS = [
   {id:"novedades",icon:"📣",label:"Novedades",  grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
   {id:"playlists",icon:"▶️", label:"Playlists YouTube",  grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
   {id:"dashboard",icon:"📊",label:"Dashboard",    grad:"linear-gradient(135deg,#FFD600,#00E5FF)",glow:"rgba(255,214,0,.3)"},
-  {id:"designer", icon:"✦", label:"Diseñador",    grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
-  {id:"designerClient",icon:"🎨",label:"Diseñador Cliente",grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
-  {id:"designerTv",icon:"📺",label:"Pantalla TV",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
-  {id:"designerGuest",icon:"📱",label:"Pantalla Invitado",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
+  // Flyout «Diseñador» (ver sidebarMenu.js). Los ids designerTv y
+  // designerClient no se renombran: son claves guardadas (sidebar, secciones
+  // de operadores).
+  {id:"disenoEscenario",icon:"🎭",label:"Diseñador de Escenario",labelMenu:"Escenario",grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
+  {id:"disenoJuegos",icon:"🎮",label:"Diseñador de Juegos",labelMenu:"Juegos",grad:"linear-gradient(135deg,#FFD600,#A855F7)",glow:"rgba(255,214,0,.3)"},
+  {id:"designerTv",icon:"🎧",label:"Diseñador DJ Democracy",labelMenu:"DJ Democracy",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
+  {id:"designerClient",icon:"📱",label:"Diseñador Cliente",labelMenu:"Cliente",grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
   {id:"clientes", icon:"🧑‍🤝‍🧑", label:"Clientes",
     grad:"linear-gradient(135deg,#9B2FFF,#FF2D78)",glow:"rgba(155,47,255,.3)"},
   {id:"usuarios", icon:"🛡️", label:"Usuarios del sistema", adminOnly:true,
@@ -851,419 +842,6 @@ function DueloCronometroCard({col}){
   );
 }
 
-// Barra de la card Pantalla del duelo: el número sigue a la barra en vivo y se
-// guarda UNA vez al soltarla (no una escritura por cada píxel).
-function SliderPantalla({label, valor, min, max, sufijo="", signo=false, col, disabled, onGuardar}){
-  const [v, setV] = useState(valor);
-  useEffect(() => { setV(valor); }, [valor]);
-  const fmt = (n) => `${signo && n > 0 ? "+" : ""}${n}${sufijo}`;
-  const soltar = () => { if (v !== valor) onGuardar(v); };
-  return (
-    <div style={{marginTop:6}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"rgba(240,232,255,.6)"}}>
-        <span>{label}</span><span style={{color:col,fontWeight:700}}>{fmt(v)}</span>
-      </div>
-      <input type="range" min={min} max={max} step={1} value={v} disabled={disabled} aria-label={label}
-        onChange={(e)=>setV(Number(e.target.value))} onPointerUp={soltar} onKeyUp={soltar}
-        style={{width:"100%",accentColor:col}}/>
-    </div>
-  );
-}
-
-// ── Pantalla del Duelo (admin_ui_config 'duelo_pantalla') ──────────────────
-// La votación es FONDO + MÁSCARA. Fondo: el video de la ronda a pantalla
-// completa, o la imagen de fondo, o negro. Máscara (siempre encima): paneles
-// laterales, barómetros, avatares, logo de BizarrApp y logo de duelo (texto o
-// imagen PNG/WEBP, con posición, tamaño y efecto). También 👍 + % por duelista.
-// La TV lo toma en ≤ 3 s, también con una ronda en curso.
-function DueloPantallaCard({col}){
-  const { config, error, guardar } = useDueloPantallaAdmin();
-  const [texto, setTexto] = useState("");
-  const [libOpen, setLibOpen] = useState(null); // null | "logo" | "fondo"
-  const [guardando, setGuardando] = useState(false);
-  const [aviso, setAviso] = useState(null); // {ok, text}
-
-  useEffect(() => { if (config) setTexto(config.texto); }, [config?.texto]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const aplicar = async (patch, okText) => {
-    if (guardando || !config) return;
-    setGuardando(true); setAviso(null);
-    try { await guardar({ ...config, ...patch }); setAviso({ok:true, text:okText}); }
-    catch (e) { setAviso({ok:false, text:e?.message || String(e)}); }
-    finally { setGuardando(false); }
-  };
-
-  if (error) return <div className="card" style={{marginBottom:10,fontSize:11,color:"#FCA5A5"}}>{error}</div>;
-  if (!config) return null;
-
-  const textoLimpio = texto.trim();
-  const textoSucio = textoLimpio !== config.texto;
-  const elegirImagen = (asset) => {
-    const para = libOpen;
-    setLibOpen(null);
-    if (!asset?.file_url) return;
-    if (para === "fondo") {
-      aplicar({ fondo: asset.file_url }, "Imagen de fondo puesta (se ve cuando la ronda no tiene video).");
-      return;
-    }
-    if (!["image/png","image/webp"].includes(asset.mime_type)) {
-      setAviso({ok:false, text:"Para el logo elegí un PNG o WEBP (con fondo transparente)."}); return;
-    }
-    aplicar({ centro:"imagen", imagen: asset.file_url }, "Imagen puesta como logo de duelo.");
-  };
-  const sub = {fontSize:11.5,fontWeight:700,marginTop:14,marginBottom:2};
-  const nota = {fontSize:9.5,color:"rgba(240,232,255,.38)",lineHeight:1.45};
-  const panelSlider = (lado, nombre) => (
-    <>
-      <div style={{fontSize:10.5,fontWeight:700,marginTop:8,color:"rgba(240,232,255,.75)"}}>{nombre}</div>
-      <SliderPantalla label="Ancho (% de la pantalla)" valor={config[lado].ancho} sufijo="%" col={col}
-        min={RANGOS.panelAncho[0]} max={RANGOS.panelAncho[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({[lado]:{...config[lado], ancho:n}}, `${nombre}: ancho ${n}%.`)}/>
-      <SliderPantalla label="Alto (% de la pantalla)" valor={config[lado].alto} sufijo="%" col={col}
-        min={RANGOS.panelAlto[0]} max={RANGOS.panelAlto[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({[lado]:{...config[lado], alto:n}}, `${nombre}: alto ${n}%.`)}/>
-    </>
-  );
-  const tab = (activo) => ({flex:1,padding:"7px 8px",fontSize:11,fontWeight:700,borderRadius:9,cursor:"pointer",
-    background:activo?`${col}26`:"rgba(240,232,255,.04)",color:activo?col:"rgba(240,232,255,.5)",
-    border:`1px solid ${activo?col:"rgba(240,232,255,.12)"}`});
-
-  return (
-    <div className="card" style={{marginBottom:10}}>
-      <div className="ctitle" style={{marginTop:0}}>🖥️ Pantalla del duelo</div>
-      <div style={{...nota,fontSize:10,marginBottom:8}}>
-        Durante la votación: el fondo es el video de la ronda a pantalla completa (o la imagen
-        de fondo, si no hay video) y encima va siempre la máscara: paneles, barómetros, avatares,
-        logo de BizarrApp y logo de duelo.
-      </div>
-
-      <div style={{...sub,marginTop:4}}>🏷️ Logo de duelo</div>
-      <div style={{display:"flex",gap:6,margin:"4px 0 8px"}}>
-        <button type="button" style={tab(config.centro==="texto")} disabled={guardando}
-          onClick={()=>config.centro!=="texto" && aplicar({centro:"texto"}, "Ahora se muestra el texto.")}>Aa Texto</button>
-        <button type="button" style={tab(config.centro==="imagen")} disabled={guardando}
-          onClick={()=> config.imagen ? (config.centro!=="imagen" && aplicar({centro:"imagen"}, "Ahora se muestra la imagen.")) : setLibOpen("logo")}>🖼️ Imagen</button>
-      </div>
-
-      {config.centro==="texto" ? (
-        <div style={{display:"flex",gap:6}}>
-          <input value={texto} maxLength={TEXTO_MAX} onChange={(e)=>setTexto(e.target.value)} placeholder="DUELO"
-            style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:9,fontSize:13,fontWeight:700,
-              background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.14)",color:"#F0E8FF",outline:"none"}}/>
-          <button className="btn btn-g" style={{padding:"7px 12px",fontSize:11}}
-            disabled={guardando || !textoLimpio || !textoSucio}
-            onClick={()=>aplicar({texto:textoLimpio}, `Texto guardado: «${textoLimpio}».`)}>
-            {guardando ? "…" : "Guardar"}
-          </button>
-        </div>
-      ) : (
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:96,height:60,borderRadius:9,background:"rgba(240,232,255,.05)",
-            border:"1px solid rgba(240,232,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-            {config.imagen && <img src={config.imagen} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            <button className="btn btn-g" style={{padding:"7px 12px",fontSize:11}} disabled={guardando}
-              onClick={()=>setLibOpen("logo")}>Cambiar imagen</button>
-            <button className="btn" style={{padding:"7px 12px",fontSize:11,background:"rgba(255,45,120,.08)",
-              border:"1px solid rgba(255,45,120,.3)",color:"#FF8FB8"}} disabled={guardando}
-              onClick={()=>aplicar({centro:"texto", imagen:null}, "Imagen quitada: vuelve a mostrarse el texto.")}>
-              🗑 Quitar imagen
-            </button>
-          </div>
-        </div>
-      )}
-
-      <SliderPantalla label="🔍 Tamaño (zoom)" valor={config.zoom} signo col={col}
-        min={ZOOM_MIN} max={ZOOM_MAX} disabled={guardando}
-        onGuardar={(n)=>aplicar({zoom:n}, `Tamaño del logo: ${n > 0 ? `+${n}` : n}.`)}/>
-
-      <div style={{fontSize:10.5,color:"rgba(240,232,255,.6)",marginTop:8}}>Posición</div>
-      <div style={{display:"flex",gap:6,marginTop:4}}>
-        {POSICIONES_LOGO.map((p)=>(
-          <button key={p.id} type="button" style={tab(config.logoPos===p.id)} disabled={guardando}
-            onClick={()=>config.logoPos!==p.id && aplicar({logoPos:p.id}, `Logo de duelo: ${p.nombre.toLowerCase()}.`)}>
-            {p.nombre}
-          </button>
-        ))}
-      </div>
-
-      <div style={{fontSize:10.5,color:"rgba(240,232,255,.6)",marginTop:10,marginBottom:4}}>✨ Efecto</div>
-      <style>{EFECTOS_CSS}</style>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:5}}>
-        {EFECTOS_DUELO.map((e)=>{
-          const activo = config.efecto === e.id;
-          return (
-            <button key={e.id} type="button" disabled={guardando} title={e.nombre}
-              onClick={()=>!activo && aplicar({efecto:e.id}, `Efecto: ${e.nombre}.`)}
-              style={{padding:"7px 3px",borderRadius:9,cursor:activo?"default":"pointer",
-                display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-                background:activo?`${col}26`:"rgba(240,232,255,.04)",
-                border:`1px solid ${activo?col:"rgba(240,232,255,.12)"}`,
-                color:activo?col:"rgba(240,232,255,.6)",fontSize:9.5,fontWeight:700}}>
-              {/* Vista previa: el ícono se mueve con el mismo efecto que la pantalla. */}
-              <span style={{display:"inline-block",fontSize:18,animation:e.anim,
-                transformOrigin:e.origen||"50% 50%"}}>{e.icono}</span>
-              {e.nombre}
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginTop:12}}>
-        <div style={{fontSize:11.5,fontWeight:700}}>👍 Porcentajes de cada duelista</div>
-        <Toggle on={config.porcentajes} color={col} label={config.porcentajes ? "Visibles" : "Ocultos"}
-          onToggle={()=>aplicar({porcentajes:!config.porcentajes},
-            config.porcentajes ? "Porcentajes ocultos en la pantalla." : "Porcentajes visibles en la pantalla.")}/>
-      </div>
-
-      <div style={sub}>🌄 Imagen de fondo</div>
-      <div style={nota}>
-        Se ve cuando la ronda no tiene video (con video, el video cubre toda la pantalla).
-        Tamaño recomendado: <b>1920 × 1080 px</b> (16:9, Full HD), JPG/PNG/WEBP de hasta 2 MB.
-        Se ajusta para cubrir la pantalla: lo importante, dejalo en el centro.
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
-        <div style={{width:96,height:54,borderRadius:8,flexShrink:0,background:"#050308 center / cover no-repeat",
-          backgroundImage:config.fondo?`url("${config.fondo}")`:"none",border:"1px solid rgba(240,232,255,.12)",
-          display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,color:"rgba(240,232,255,.35)"}}>
-          {!config.fondo && "Negro"}
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          <button className="btn btn-g" style={{padding:"6px 12px",fontSize:11}} disabled={guardando}
-            onClick={()=>setLibOpen("fondo")}>{config.fondo ? "Cambiar fondo" : "Elegir fondo"}</button>
-          {config.fondo && (
-            <button className="btn" style={{padding:"6px 12px",fontSize:11,background:"rgba(255,45,120,.08)",
-              border:"1px solid rgba(255,45,120,.3)",color:"#FF8FB8"}} disabled={guardando}
-              onClick={()=>aplicar({fondo:null}, "Fondo quitado: vuelve el negro.")}>🗑 Quitar fondo</button>
-          )}
-        </div>
-      </div>
-
-      <div style={sub}>▮ ▮ Paneles laterales</div>
-      <div style={nota}>Cada lado por separado. Si el alto es menor a 100 %, el panel queda centrado.</div>
-      {panelSlider("panelIzq", "Panel izquierdo (participante 1)")}
-      {panelSlider("panelDer", "Panel derecho (participante 2)")}
-
-      <div style={sub}>📊 Barómetros</div>
-      <div style={nota}>Iguales en los dos paneles; la ubicación horizontal se espeja para que queden simétricos.</div>
-      <SliderPantalla label="Ancho (% del tamaño base)" valor={config.barometro.ancho} sufijo="%" col={col}
-        min={RANGOS.baroAncho[0]} max={RANGOS.baroAncho[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...config.barometro, ancho:n}}, `Barómetros: ancho ${n}%.`)}/>
-      <SliderPantalla label="Alto (% del panel)" valor={config.barometro.alto} sufijo="%" col={col}
-        min={RANGOS.baroAlto[0]} max={RANGOS.baroAlto[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...config.barometro, alto:n}}, `Barómetros: alto ${n}%.`)}/>
-      <SliderPantalla label="Ubicación vertical (0 % arriba · 100 % abajo)" valor={config.barometro.y} sufijo="%" col={col}
-        min={RANGOS.baroY[0]} max={RANGOS.baroY[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...config.barometro, y:n}}, `Barómetros: ubicación ${n}%.`)}/>
-      <SliderPantalla label="Ubicación horizontal (0 % borde de la pantalla · 100 % hacia el centro)"
-        valor={config.barometro.x} sufijo="%" col={col}
-        min={RANGOS.baroX[0]} max={RANGOS.baroX[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...config.barometro, x:n}}, `Barómetros: horizontal ${n}%.`)}/>
-      <button className="btn btn-g" style={{padding:"5px 12px",fontSize:10.5,marginTop:6}}
-        disabled={guardando || config.barometro.x===50}
-        onClick={()=>aplicar({barometro:{...config.barometro, x:50}}, "Barómetros centrados en su panel.")}>
-        ⇔ Centrar en el panel
-      </button>
-
-      {aviso && (
-        <div style={{fontSize:10.5,color:aviso.ok?"#00F5A0":"#FCA5A5",marginTop:8}}>
-          {aviso.ok ? "✓ " : "✕ "}{aviso.text}
-        </div>
-      )}
-      <MediaLibraryModal open={!!libOpen}
-        title={libOpen === "fondo" ? "Imagen de fondo (1920 × 1080)" : "Logo de duelo (PNG o WEBP)"}
-        onClose={()=>setLibOpen(null)} onSelect={elegirImagen}/>
-    </div>
-  );
-}
-
-// ── Pantalla «participante listo» de FTL / PT (admin_ui_config 'escenario_listo') ──
-// La TV la muestra al llamar al participante, antes de que arranque el video:
-// avatar + nombre + «LISTO PARA …». Ese cartel se edita acá: texto o imagen
-// PNG/WEBP, tamaño, ubicación, efecto, tipografía y color. Si se muestra o no
-// se decide en Ajustes → General. La TV lo toma en ≤ 3 s.
-function EscenarioListoCard({tipo, col}){
-  const { config, error, guardar } = useEscenarioListoAdmin();
-  const [texto, setTexto] = useState("");
-  const [libOpen, setLibOpen] = useState(false);
-  const [guardando, setGuardando] = useState(false);
-  const [aviso, setAviso] = useState(null); // {ok, text}
-  const j = config?.[tipo];
-
-  useEffect(() => { if (j) setTexto(j.texto); }, [j?.texto]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [color, setColor] = useState("#FFD600");
-  const colorTimer = useRef(null);
-  useEffect(() => { if (j) setColor(j.color.toUpperCase()); }, [j?.color]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => clearTimeout(colorTimer.current), []);
-
-  const aplicar = async (cambios, okText) => {
-    if (guardando || !j) return;
-    setGuardando(true); setAviso(null);
-    try { await guardar(tipo, cambios); setAviso({ok:true, text:okText}); }
-    catch (e) { setAviso({ok:false, text:e?.message || String(e)}); }
-    finally { setGuardando(false); }
-  };
-
-  if (error) return <div className="card" style={{marginBottom:10,fontSize:11,color:"#FCA5A5"}}>{error}</div>;
-  if (!j) return null;
-
-  const textoLimpio = texto.trim();
-  const elegirImagen = (asset) => {
-    setLibOpen(false);
-    if (!asset?.file_url) return;
-    if (!["image/png","image/webp"].includes(asset.mime_type)) {
-      setAviso({ok:false, text:"Elegí un PNG o WEBP (con fondo transparente)."}); return;
-    }
-    aplicar({ centro:"imagen", imagen: asset.file_url }, "Imagen puesta en la pantalla del participante.");
-  };
-  const tab = (activo) => ({flex:1,padding:"7px 8px",fontSize:11,fontWeight:700,borderRadius:9,cursor:"pointer",
-    background:activo?`${col}26`:"rgba(240,232,255,.04)",color:activo?col:"rgba(240,232,255,.5)",
-    border:`1px solid ${activo?col:"rgba(240,232,255,.12)"}`});
-  const etiqueta = {fontSize:10.5,color:"rgba(240,232,255,.6)",marginTop:10,marginBottom:4};
-
-  return (
-    <div className="card" style={{marginBottom:10}}>
-      <div className="ctitle" style={{marginTop:0}}>🖥️ Pantalla en la TV</div>
-      <div style={{fontSize:11.5,fontWeight:700,marginBottom:2}}>🙋 Participante listo</div>
-      <div style={{fontSize:10,color:"rgba(240,232,255,.4)",marginBottom:8,lineHeight:1.5}}>
-        La TV la muestra al llamar al participante, antes de que arranque el video.
-        {!j.previa && <b style={{color:"#FFD600"}}> Ahora está apagada en Ajustes → General: la TV la saltea.</b>}
-      </div>
-
-      <div style={{display:"flex",gap:6,marginBottom:8}}>
-        <button type="button" style={tab(j.centro==="texto")} disabled={guardando}
-          onClick={()=>j.centro!=="texto" && aplicar({centro:"texto"}, "Ahora se muestra el texto.")}>Aa Texto</button>
-        <button type="button" style={tab(j.centro==="imagen")} disabled={guardando}
-          onClick={()=> j.imagen ? (j.centro!=="imagen" && aplicar({centro:"imagen"}, "Ahora se muestra la imagen.")) : setLibOpen(true)}>🖼️ Imagen</button>
-      </div>
-
-      {j.centro==="texto" ? (
-        <>
-          <div style={{display:"flex",gap:6}}>
-            <input value={texto} maxLength={TEXTO_LISTO_MAX} onChange={(e)=>setTexto(e.target.value)}
-              style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:9,fontSize:12.5,fontWeight:700,
-                background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.14)",color:"#F0E8FF",outline:"none"}}/>
-            <button className="btn btn-g" style={{padding:"7px 12px",fontSize:11}}
-              disabled={guardando || !textoLimpio || textoLimpio===j.texto}
-              onClick={()=>aplicar({texto:textoLimpio}, `Texto guardado: «${textoLimpio}».`)}>
-              {guardando ? "…" : "Guardar"}
-            </button>
-          </div>
-          <div style={etiqueta}>Tipografía</div>
-          <div style={{display:"flex",gap:6}}>
-            {FUENTES_LISTO.map((f)=>(
-              <button key={f.id} type="button" disabled={guardando}
-                style={{...tab(j.fuente===f.id), fontFamily:f.css}}
-                onClick={()=>j.fuente!==f.id && aplicar({fuente:f.id}, `Tipografía: ${f.nombre}.`)}>{f.nombre}</button>
-            ))}
-          </div>
-          <div style={{...etiqueta,display:"flex",alignItems:"center",gap:10}}>
-            <span>Color del texto</span>
-            {/* Se guarda 0,6 s después del último movimiento, no con cada uno. */}
-            <input type="color" value={color} disabled={guardando}
-              onChange={(e)=>{
-                const c = e.target.value.toUpperCase();
-                setColor(c);
-                clearTimeout(colorTimer.current);
-                colorTimer.current = setTimeout(() => {
-                  if (c !== j.color.toUpperCase()) aplicar({color:c}, `Color: ${c}.`);
-                }, 600);
-              }}
-              style={{width:40,height:26,border:"none",background:"none",padding:0,cursor:"pointer"}}/>
-            <span style={{color,fontWeight:700}}>{color}</span>
-          </div>
-        </>
-      ) : (
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:96,height:54,borderRadius:9,background:"rgba(240,232,255,.05)",
-            border:"1px solid rgba(240,232,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-            {j.imagen && <img src={j.imagen} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}}/>}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            <button className="btn btn-g" style={{padding:"6px 12px",fontSize:11}} disabled={guardando}
-              onClick={()=>setLibOpen(true)}>Cambiar imagen</button>
-            <button className="btn" style={{padding:"6px 12px",fontSize:11,background:"rgba(255,45,120,.08)",
-              border:"1px solid rgba(255,45,120,.3)",color:"#FF8FB8"}} disabled={guardando}
-              onClick={()=>aplicar({centro:"texto", imagen:null}, "Imagen quitada: vuelve el texto.")}>🗑 Quitar imagen</button>
-          </div>
-        </div>
-      )}
-
-      <SliderPantalla label="🔍 Tamaño (zoom)" valor={j.zoom} signo col={col} min={-100} max={100} disabled={guardando}
-        onGuardar={(n)=>aplicar({zoom:n}, `Tamaño: ${n > 0 ? `+${n}` : n}.`)}/>
-
-      <div style={etiqueta}>Ubicación</div>
-      <div style={{display:"flex",gap:6}}>
-        {POSICIONES_LISTO.map((p)=>(
-          <button key={p.id} type="button" style={tab(j.posicion===p.id)} disabled={guardando}
-            onClick={()=>j.posicion!==p.id && aplicar({posicion:p.id}, `Ubicación: ${p.nombre.toLowerCase()}.`)}>{p.nombre}</button>
-        ))}
-      </div>
-
-      <div style={etiqueta}>✨ Efecto</div>
-      <style>{EFECTOS_CSS}</style>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:5}}>
-        {EFECTOS_DUELO.map((e)=>{
-          const activo = j.efecto === e.id;
-          return (
-            <button key={e.id} type="button" disabled={guardando} title={e.nombre}
-              onClick={()=>!activo && aplicar({efecto:e.id}, `Efecto: ${e.nombre}.`)}
-              style={{padding:"7px 3px",borderRadius:9,cursor:activo?"default":"pointer",
-                display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-                background:activo?`${col}26`:"rgba(240,232,255,.04)",
-                border:`1px solid ${activo?col:"rgba(240,232,255,.12)"}`,
-                color:activo?col:"rgba(240,232,255,.6)",fontSize:9.5,fontWeight:700}}>
-              <span style={{display:"inline-block",fontSize:18,animation:e.anim,
-                transformOrigin:e.origen||"50% 50%"}}>{e.icono}</span>
-              {e.nombre}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Barómetro durante la performance: mismos controles que el del Duelo,
-          medidos sobre la pantalla entera (acá no hay paneles laterales). */}
-      <div style={{fontSize:11.5,fontWeight:700,marginTop:16,marginBottom:2}}>📊 Barómetro</div>
-      <div style={{fontSize:9.5,color:"rgba(240,232,255,.38)",lineHeight:1.45}}>
-        Se ve durante la performance, si el juego tiene votación (Ajustes → Votación Escenario).
-      </div>
-      <SliderPantalla label="Ancho (% del tamaño base)" valor={j.barometro.ancho} sufijo="%" col={col}
-        min={RANGOS_BARO.ancho[0]} max={RANGOS_BARO.ancho[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...j.barometro, ancho:n}}, `Barómetro: ancho ${n}%.`)}/>
-      <SliderPantalla label="Alto (% de la pantalla)" valor={j.barometro.alto} sufijo="%" col={col}
-        min={RANGOS_BARO.alto[0]} max={RANGOS_BARO.alto[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...j.barometro, alto:n}}, `Barómetro: alto ${n}%.`)}/>
-      <SliderPantalla label="Ubicación vertical (0 % arriba · 100 % abajo)" valor={j.barometro.y} sufijo="%" col={col}
-        min={RANGOS_BARO.y[0]} max={RANGOS_BARO.y[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...j.barometro, y:n}}, `Barómetro: vertical ${n}%.`)}/>
-      <SliderPantalla label="Ubicación horizontal (0 % izquierda · 100 % derecha)" valor={j.barometro.x} sufijo="%" col={col}
-        min={RANGOS_BARO.x[0]} max={RANGOS_BARO.x[1]} disabled={guardando}
-        onGuardar={(n)=>aplicar({barometro:{...j.barometro, x:n}}, `Barómetro: horizontal ${n}%.`)}/>
-      <div style={{display:"flex",gap:6,marginTop:6}}>
-        <button className="btn btn-g" style={{padding:"5px 10px",fontSize:10.5}}
-          disabled={guardando || j.barometro.x===50}
-          onClick={()=>aplicar({barometro:{...j.barometro, x:50}}, "Barómetro centrado en la pantalla.")}>
-          ⇔ Centrar
-        </button>
-        <button className="btn btn-g" style={{padding:"5px 10px",fontSize:10.5}}
-          disabled={guardando || (j.barometro.x===8 && j.barometro.y===61 && j.barometro.alto===70 && j.barometro.ancho===100)}
-          onClick={()=>aplicar({barometro:{ancho:100, alto:70, x:8, y:61}}, "Barómetro en su lugar de siempre.")}>
-          ↺ Como estaba
-        </button>
-      </div>
-
-      {aviso && (
-        <div style={{fontSize:10.5,color:aviso.ok?"#00F5A0":"#FCA5A5",marginTop:8}}>
-          {aviso.ok ? "✓ " : "✕ "}{aviso.text}
-        </div>
-      )}
-      <MediaLibraryModal open={libOpen} title="Cartel «listo» (PNG o WEBP)"
-        onClose={()=>setLibOpen(false)} onSelect={elegirImagen}/>
-    </div>
-  );
-}
-
 // ── Reglas del Duelo (duelo_reglas_config) ─────────────────────────────────
 function DueloReglasCard({col, enJuego}){
   const { loading, error: reglasError, reglaPorKey, actualizarRegla } = useReglasDuelo();
@@ -1403,7 +981,7 @@ function DueloReglasCard({col, enJuego}){
 // Lo único local es la SELECCIÓN previa al lanzamiento (quién va de P1 y de
 // P2) y el campo de video: elegir no es lanzar, y no se persiste hasta que
 // `duelo_launch_round` lo acepta.
-function DueloPanel({sec, controls, sessionId, gameState}){
+function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
   const { postulaciones, quitar, reactivar, vaciar } = useDueloPostulaciones(sessionId, null);
   const { round, counts, now } = useDueloRound(sessionId, { autoFinish: true });
 
@@ -1864,8 +1442,14 @@ function DueloPanel({sec, controls, sessionId, gameState}){
           {/* Siempre visible, también durante la votación: rige desde el
               próximo lanzamiento. */}
           <DueloCronometroCard col={DUELO_P1}/>
-          <DueloPantallaCard col={DUELO_P1}/>
           <DueloReglasCard col={DUELO_P1} enJuego={votando}/>
+          {/* Cómo se ve en la TV: Diseñador → Escenario → Duelo. */}
+          {puedeDisenar && (
+            <button type="button" className="btn btn-g" style={{width:"100%", marginTop:10, padding:"8px 10px", fontSize:11}}
+              onClick={() => { pedirDisenoDe("duelo"); goTo("disenoEscenario"); }}>
+              🎨 Diseño de la pantalla del Duelo
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1894,7 +1478,7 @@ function DueloPanel({sec, controls, sessionId, gameState}){
 //   game_state.active_escenario / escenario_participant / escenario_video
 //                            → qué proyecta /tv y qué vista abre el cliente
 // Las dos se escriben en la misma acción; el panel las lee de la base.
-function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
+function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, puedeDisenar}){
   const juego = ESCENARIO_JUEGOS[type];
   const COL = juego.colorAdmin;
   const { queue, error: errCola, call, finish } = useEscenarioQueue(sessionId, type);
@@ -1903,7 +1487,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
   // Inscripto elegido en la cola (a mano o al azar) antes de llamarlo: uno solo.
   const [elegidoId, setElegidoId] = useState(null);
 
-  // Votación del público según Ajustes → Votación Escenario: 'toques' =
+  // Votación del público según la card 🗳️ de este mismo panel: 'toques' =
   // barómetro, 'votos' = 👍/👎, 'off' = nada. El turno es la fila de la cola
   // que está `called`; sólo se lee con el video sonando. El Admin sólo mira.
   const modoVotacion = useVotacionEscenario()[type] || "off";
@@ -2016,8 +1600,8 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
   // hay ningún avance que hacer y por eso no se saltea ningún tema.
   const cerrarJuego = () => correr(async () => {
     // 1. Cortar la performance ES lo primero. Es un UPDATE de un solo campo, y
-    //    en cuanto llega por Realtime la TV entra en lluvia y pausa el video del
-    //    participante. Sin este paso, la canción del juego seguía sonando el
+    //    en cuanto llega por Realtime la TV corta el video del participante
+    //    (corte seco, sin lluvia). Sin este paso, la canción del juego seguía sonando el
     //    ida y vuelta que tarda el avance del DJ.
     //    Si el avance de abajo falla, el juego queda abierto con el candidato
     //    preparado: recuperable, y el mismo botón reintenta.
@@ -2032,8 +1616,9 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
       avanceHechoRef.current = true;
     }
 
-    // 3. Recién ahora se suelta el escenario. La lluvia sigue puesta hasta que
-    //    el motor confirma que la canción nueva está sonando.
+    // 3. Recién ahora se suelta el escenario. El cambio de canción del DJ que
+    //    disparó el paso 2 es un corte seco en la TV: con un juego en pantalla
+    //    (y unos segundos después) no hay lluvia (ver `sinLluvia` en PantallaTV).
     if (active) await oTirar(finish(active.id));
     await controls?.closeEscenario();
     avanceHechoRef.current = false;
@@ -2130,7 +1715,8 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
 
       {/* Dos columnas, como el resto de los juegos: a la izquierda la
           operación (estado, inscriptos, participante); a la derecha la barra
-          operativa, el juego y el catálogo. */}
+          operativa, el juego, la regla de votación y el catálogo. Cómo se ve
+          en la TV y en el celular se arma en 🎨 Diseño de juegos. */}
       <div className="pal-split">
       <div>
       {/* Estado */}
@@ -2312,9 +1898,15 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo}){
             corta el audio durante este juego.
             {!enElAire && " Tocá 📢 Anunciar para abrir la convocatoria."}
           </p>
+          {puedeDisenar && (
+            <button type="button" className="btn btn-g" style={{width:"100%", marginTop:10, padding:"8px 10px", fontSize:11}}
+              onClick={() => { pedirDisenoDe(type); goTo("disenoEscenario"); }}>
+              🎨 Diseño de pantallas (TV y celular)
+            </button>
+          )}
         </div>
 
-        <EscenarioListoCard tipo={type} col={COL}/>
+        <VotacionJuego juego={type} col={COL}/>
 
         {/* Biblioteca — links de YouTube, archivos de la PC y playlists. Con
             un participante preparado, cada video tiene «Asignar». Elegir NO
@@ -6784,11 +6376,7 @@ function LoginAdmin(){
 }
 
 export default function AdminPanel(){
-  const [sec,      setSec]      = useState(()=>{
-    if(window.location.pathname.startsWith("/admin/designer")) return "designer";
-    const requested=new URLSearchParams(window.location.search).get("designerSection");
-    return SECS.some(item=>item.id===requested&&requested!=="designer")?requested:"launch";
-  });
+  const [sec,      setSec]      = useState("launch");
   const [sbCollapsed, setSbCollapsed] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -6880,10 +6468,8 @@ export default function AdminPanel(){
   },[acceso,sec,visibleSecs]);
   const goTo   = useCallback(id=>setSec(id),[]);
   useEffect(()=>{
-    if(new URLSearchParams(window.location.search).get("designerPreview")==="1") return;
-    const nextPath = sec === "designer" ? "/admin/designer" : "/admin";
-    if (window.location.pathname !== nextPath) window.history.replaceState(null,"",nextPath);
-  },[sec]);
+    if (window.location.pathname !== "/admin") window.history.replaceState(null,"","/admin");
+  },[]);
 
   const renderPanel = () => {
     if(!visibleSecs.length) return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>
@@ -6893,9 +6479,9 @@ export default function AdminPanel(){
       case "launch":    return <LaunchPanel sec={curSec} gameState={gameState}
                                  zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
                                  msgCount={msgCount} vidCount={vidCount} goTo={goTo} controls={controls}/>;
-      case "duelo":     return <DueloPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
-      case "ftl":       return <JuegoEscenarioPanel sec={curSec} type="ftl" controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo}/>;
-      case "pt":        return <JuegoEscenarioPanel sec={curSec} type="pt"  controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo}/>;
+      case "duelo":     return <DueloPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo} puedeDisenar={puedeVer("disenoEscenario")}/>;
+      case "ftl":       return <JuegoEscenarioPanel sec={curSec} type="ftl" controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo} puedeDisenar={puedeVer("disenoEscenario")}/>;
+      case "pt":        return <JuegoEscenarioPanel sec={curSec} type="pt"  controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo} puedeDisenar={puedeVer("disenoEscenario")}/>;
       case "karaoke":   return <KaraokePanel sec={curSec}/>;
       case "rey":       return <ReyPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
       case "suma":      return <SumaPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState}/>;
@@ -6922,10 +6508,10 @@ export default function AdminPanel(){
       case "pantallaLive":   return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null} modo="live" goTo={goTo}/>;
       case "dashboard": return <DashboardPanel sec={curSec} connectedCount={connectedCount}/>;
       case "playlists": return <PlaylistsPanel/>;
-      case "designer":  return <DesignerView/>;
       case "designerClient": return <ClientDesignerPanel/>;
       case "designerTv": return <TvDesigner sessionId="default"/>;
-      case "designerGuest": return <div style={{padding:20,color:"rgba(240,232,255,.45)",fontSize:12}}>Diseñador de Pantalla Invitado — próxima etapa</div>;
+      case "disenoEscenario": return <DisenadorEscenario/>;
+      case "disenoJuegos": return <DisenadorJuegos/>;
       case "clientes": return <ClientesPanel/>;
       case "usuarios": return <UsuariosPanel grupos={GRUPOS_SECCIONES}/>;
       case "ajustes":  return <AjustesPanel config={sidebarConfig} secs={SECS} visibleSecs={visibleSecs}
@@ -6998,7 +6584,7 @@ export default function AdminPanel(){
 
         {/* Main */}
         <div className="main">
-          {sec!=="designer" && <div className="mhdr" style={{"--sg":curSec.grad}}>
+          <div className="mhdr" style={{"--sg":curSec.grad}}>
             <div>
               <div className="mhdr-title">{curSec.icon} {curSec.label}</div>
             </div>
@@ -7100,8 +6686,8 @@ export default function AdminPanel(){
                 <span style={{fontSize:11,fontWeight:700,color:screenAudioOn?"#00E5FF":"#7A6E8A"}}>AUDIO PANTALLA</span>
               </button>
             </div>
-          </div>}
-          <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow,...(sec==="designer"?{padding:0,overflow:"hidden"}:{})}} key={sec}>
+          </div>
+          <div className="mbody" style={{"--sg":curSec.grad,"--gw":curSec.glow}} key={sec}>
             {renderPanel()}
           </div>
         </div>

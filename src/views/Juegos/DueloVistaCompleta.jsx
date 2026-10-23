@@ -61,11 +61,20 @@ const cajaCentro = {
  *   · resultado     → applause_sessions.result (lo decide el servidor)
  *   · mis votos     → applause_add (toques) / duelo_votar (voto único)
  */
-export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack, estiloCards = true }) {
-  const { misPostulacion, postularme, error } = useDueloPostulaciones(sessionId, user);
-  const { round, counts, now, vencida } = useDueloRound(sessionId, { autoFinish: true });
-  const toques = useToquesDuelo(round);
-  const voto = useVotoDuelo(round, user?.id || null);
+// `demo` (sólo vista previa del Diseñador): { misPostulacion, round, counts }
+// de muestra. Con él no se consulta ni se vota nada; en la app llega null.
+export default function DueloVistaCompleta({ sessionId, user, activeEscenario, gameState, onBack, estiloCards = true, demo = null }) {
+  const sesion = demo ? null : sessionId;
+  const postulaciones = useDueloPostulaciones(sesion, user);
+  const ronda = useDueloRound(sesion, { autoFinish: !demo });
+  const { misPostulacion, postularme, error } = demo
+    ? { misPostulacion: demo.misPostulacion ?? null, postularme: async () => {}, error: null }
+    : postulaciones;
+  const { round, counts, now, vencida } = demo
+    ? { round: demo.round ?? null, counts: demo.counts ?? { p1: 0, p2: 0 }, now: Date.now(), vencida: false }
+    : ronda;
+  const toques = useToquesDuelo(demo ? null : round);
+  const voto = useVotoDuelo(demo ? null : round, user?.id || null);
   const [enviando, setEnviando] = useState(false);
 
   const fase = faseDuelo({ ...gameState, active_escenario: activeEscenario }, round);

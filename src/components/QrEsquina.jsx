@@ -1,5 +1,4 @@
 import QRCode from "react-qr-code";
-import { QR_DE_JUEGO, usePantallaQr } from "../hooks/usePantallaQr";
 
 /**
  * QR de la TV en la esquina inferior izquierda, con la leyenda arriba.
@@ -26,14 +25,3 @@ export default function QrEsquina({ url, texto = "Escaneá para participar" }) {
   );
 }
 
-/**
- * QR de un juego de la sección Juegos (Rey, Desafío, Sumate, Arma) mientras
- * está en pantalla. Respeta Ajustes → QR en pantalla y lleva a ?view=games.
- * `activeGame` = game_state.active_game.
- */
-export function QrDeJuego({ activeGame, webappUrl = window.location.origin }) {
-  const config = usePantallaQr();
-  const id = QR_DE_JUEGO[activeGame];
-  if (!id || config[id] === false) return null;
-  return <QrEsquina url={`${webappUrl}/?view=games`}/>;
-}

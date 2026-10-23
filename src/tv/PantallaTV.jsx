@@ -7,14 +7,17 @@ import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen, Pal
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
 import FtlOverlay from "./FtlOverlay";
 import FtlStandby from "./FtlStandby";
-import { QrDeJuego } from "../components/QrEsquina";
+import { QrDeJuego } from "../components/QrDeJuego";
 import TomatazoOverlay from "./TomatazoOverlay";
+import KickDualOverlay from "./KickDualOverlay";
 import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
 import { useEscenarioListo } from "../hooks/useEscenarioListo";
 import { resolveTv, guestUrl, ytThumb, tvEscenarioVideoTerminado, telepronterReport, tvLatido } from "../services/pantallaDj";
-import { useContinuousTvPlayers } from "./useContinuousTvPlayers";
+import { useContinuousTvPlayers, TRANSICION_APAGADA } from "./useContinuousTvPlayers";
+import { useTandasTv } from "./useTandasTv";
+import { marcaDelEvento, colorConMarca } from "../constants/marcaEvento";
 import { loadTvConfig, normalizeTvConfig } from "../designers/lib/persistence";
 import { DEFAULT_TV_CONFIG } from "../designers/defaults";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
@@ -104,13 +107,21 @@ function Reacciones({ eventId, size = "medium" }) {
 }
 
 // ─── Panel lateral: QR + próximas ────────────────────────────────────────────
-function QrPanel({ code, block }) {
+// El logo que el bloque «Logo» del Diseñador trae por defecto.
+const LOGO_POR_DEFECTO = "/logo.png";
+
+// Los colores del QR que el Diseñador trae por defecto: si no se tocaron,
+// manda el acento de la personalización del evento.
+const QR_COLOR_POR_DEFECTO = "#FFD600";
+
+function QrPanel({ code, block, marca }) {
   const content = block.content || {};
+  const acentoQr = (v) => colorConMarca(v, QR_COLOR_POR_DEFECTO, marca.acento) || C.gold;
   const align = block.font?.align || "center";
   const label = <div style={{
     fontFamily: fontFamily(content.labelFont), fontWeight: content.bold ? 900 : 400,
     fontSize: content.labelSize ? `${content.labelSize}px` : "min(8cqw,12cqh)",
-    letterSpacing: ".08em", color: content.labelColor || content.textColor || C.gold,
+    letterSpacing: ".08em", color: acentoQr(content.labelColor || content.textColor),
   }}>{content.text}</div>;
   return (
       <div style={{ alignItems: align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center", display: "flex", flexDirection: "column", gap: "3cqh", height: "100%", justifyContent: "center", textAlign: align, width: "100%" }}>
@@ -118,14 +129,14 @@ function QrPanel({ code, block }) {
         <div style={{ background: "#fff", padding: "2cqw", borderRadius: "3cqw", display: "flex", maxHeight: "62cqh", maxWidth: "78cqw" }}>
           <QRCode value={guestUrl(code)} style={{ height: "100%", width: "100%" }} />
         </div>
-        {content.showSubtitle && <span style={{ color: content.labelColor || C.gold, fontFamily: fontFamily(content.labelFont), fontSize: `max(8px,${Number(content.labelSize || 18) * .72}px)` }}>{content.subtitle || "Entrá y votá…"}</span>}
-        {content.showCode && <b style={{ color: content.codeColor || C.gold, fontFamily: fontFamily(content.codeFont), fontSize: content.codeSize ? `${content.codeSize}px` : "min(11cqw,18cqh)" }}>{code}</b>}
+        {content.showSubtitle && <span style={{ color: acentoQr(content.labelColor), fontFamily: fontFamily(content.labelFont), fontSize: `max(8px,${Number(content.labelSize || 18) * .72}px)` }}>{content.subtitle || "Entrá y votá…"}</span>}
+        {content.showCode && <b style={{ color: acentoQr(content.codeColor), fontFamily: fontFamily(content.codeFont), fontSize: content.codeSize ? `${content.codeSize}px` : "min(11cqw,18cqh)" }}>{code}</b>}
         {content.textPosition === "bottom" && label}
       </div>
   );
 }
 
-function UpcomingPanel({ candidates }) {
+function UpcomingPanel({ candidates, marca }) {
   return (
       <div style={{ width: "100%", height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div style={{
@@ -148,11 +159,11 @@ function UpcomingPanel({ candidates }) {
               <span style={{
                 width: "8cqw", textAlign: "center", flexShrink: 0,
                 fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "min(6cqw,9cqh)",
-                color: i === 0 ? C.gold : "rgba(240,232,255,.28)",
+                color: i === 0 ? (marca.acento || C.gold) : "rgba(240,232,255,.28)",
               }}>{i + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontSize: "min(6cqw,9cqh)", fontWeight: 700, color: C.white,
+                  fontSize: "min(6cqw,9cqh)", fontWeight: 700, color: marca.texto || C.white,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}>{item.title}</div>
                 <div style={{
@@ -214,20 +225,86 @@ function EditableOverlayText({ block }) {
 }
 
 /**
- * Lluvia del motor del DJ: el cruce entre SUS canciones y la espera de arranque
- * mientras los players todavía no están listos. Follow the Leader ya no la usa
- * — sus cambios de modo son cortes directos — así que tampoco existe el z-index
- * especial que la subía por encima de todo durante una transición del juego.
+ * Transición entre canciones del DJ: el GIF que se elige en DJ Democracy →
+ * Editor → «Transición entre canciones» (`transition_gif_url`). Sin audio: se
+ * superpone sobre el área del video, aparece (fade in), se mantiene (hold) y se
+ * desvanece (fade out). CUÁNDO pasa cada cosa lo decide el motor (`phase`).
+ *
+ * El área es la del bloque «Transición entre canciones» del Diseñador TV si
+ * está visible; si no, la del video. Ningún juego la usa: con un juego en
+ * pantalla no se dibuja y el motor hace cortes secos (ver `sinTransicion`).
+ *
+ * phase: 'idle' | 'entering' | 'static' | 'leaving'.
  */
-function TvStatic({ phase, waiting }) {
-  if (phase === "idle" && !waiting) return null;
+function TvTransicion({ phase, gif, area, fadeInMs, fadeOutMs }) {
+  if (!gif || phase === "idle") return null;
+  const opacidad = phase === "entering" ? { animation: `tvTransIn ${fadeInMs}ms ease both` }
+    : phase === "leaving" ? { opacity: 0, transition: `opacity ${fadeOutMs}ms ease` }
+    : { opacity: 1 };
   return (
-    <div className={`tv-static tv-static-${phase === "idle" ? "static" : phase}`} aria-hidden="true">
-      <div className="tv-static-noise" />
-      <div className="tv-static-scanlines" />
-      <div className="tv-static-band" />
+    <div aria-hidden="true" data-tv-transicion style={{
+      position: "absolute", left: `${area.x}%`, top: `${area.y}%`, width: `${area.w}%`, height: `${area.h}%`,
+      zIndex: 100, overflow: "hidden", pointerEvents: "none", borderRadius: area.radius ?? 0, ...opacidad,
+    }}>
+      <img src={gif} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
     </div>
   );
+}
+
+/**
+ * Tanda publicitaria en MP3 (ver useTandasTv): la reproduce un <audio>, con
+ * su recorte y su volumen, sobre una pantalla con el logo y el título. Avisa
+ * al terminar (o si el archivo no carga) para que arranque el tema siguiente.
+ */
+function TandaAudio({ tanda, logo, muted, onTerminar }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 120, background: C.bg,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3vh" }}>
+      <img src={logo} alt="" style={{ maxWidth: "34vw", maxHeight: "34vh", objectFit: "contain" }}/>
+      <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: "3vh", letterSpacing: ".18em",
+        color: "rgba(240,232,255,.55)", textAlign: "center", maxWidth: "80vw" }}>📢 {tanda.titulo}</div>
+      <audio src={tanda.url} autoPlay muted={muted}
+        onLoadedMetadata={(e) => {
+          e.currentTarget.volume = tanda.volumen;
+          if (tanda.inicio) e.currentTarget.currentTime = tanda.inicio;
+        }}
+        onTimeUpdate={(e) => { if (tanda.fin && e.currentTarget.currentTime >= tanda.fin) onTerminar(); }}
+        onEnded={onTerminar}
+        onError={() => { console.error("[PantallaTV] la tanda en MP3 no se pudo reproducir"); onTerminar(); }}/>
+    </div>
+  );
+}
+
+// Placas de anuncio de los juegos (📢 Anunciar del Admin): con una puesta la
+// TV ya está en el juego, y tampoco lleva transición.
+const PLACAS_DE_JUEGO = ["game_rey", "game_trivia", "game_suma", "game_palabra",
+  "duelo", "escenario", "escenario_ftl", "escenario_pt"];
+
+// Segundos sin transición después de que el juego sale de la pantalla (ver
+// `sinTransicion` en PantallaTV).
+const GRACIA_SIN_TRANSICION_MS = 5000;
+
+// Tiempos de la transición si el evento no tiene los suyos: los valores por
+// defecto de las columnas de `pantalla_events`.
+const FADE_IN_POR_DEFECTO  = 2;
+const HOLD_POR_DEFECTO     = 1;
+const FADE_OUT_POR_DEFECTO = 2;
+
+/** Segundos guardados en el evento → ms. Vacío o inválido: `porDefecto`. */
+const segundosAMs = (valor, porDefecto) => {
+  const n = valor === null || valor === undefined || valor === "" ? NaN : Number(valor);
+  return Math.round((Number.isFinite(n) && n >= 0 ? n : porDefecto) * 1000);
+};
+
+/** `activo`, y sigue en true `ms` después de que se apaga. */
+function useSostenido(activo, ms) {
+  const [sostenido, setSostenido] = useState(activo);
+  useEffect(() => {
+    if (activo) { setSostenido(true); return undefined; }
+    const t = setTimeout(() => setSostenido(false), ms);
+    return () => clearTimeout(t);
+  }, [activo, ms]);
+  return activo || sostenido;
 }
 
 // ─── Vista principal ─────────────────────────────────────────────────────────
@@ -259,6 +336,16 @@ export default function PantallaTV({ modo = "tv" }) {
   const canvasConfig = useMemo(
     () => (canvasRemoto ? completarConfigTv(canvasRemoto) : canvasLocal),
     [canvasRemoto, canvasLocal]);
+  // Personalización visual del evento (Editor → «Personalización visual»): la
+  // base de los colores, el fondo y el logo donde el Diseñador no fijó otra cosa.
+  const marca = useMemo(() => marcaDelEvento(event), [event]);
+  // El logo del evento reemplaza al de BizarrApp que trae el bloque por defecto;
+  // si en el Diseñador se eligió otra imagen, queda esa.
+  const bloqueLogo = useMemo(() => {
+    const b = canvasConfig.blocks.logo;
+    return marca.logo && b?.bg?.image === LOGO_POR_DEFECTO ? { ...b, bg: { ...b.bg, image: marca.logo } } : b;
+  }, [canvasConfig.blocks.logo, marca.logo]);
+
   const sharesSession = !event?.session_id || event.session_id === session?.id;
   const activeGame = sharesSession ? gameState?.active_game : null;
   // El Duelo es un escenario, no un `active_game`, pero para la TV es lo mismo:
@@ -315,7 +402,7 @@ export default function PantallaTV({ modo = "tv" }) {
   const ftlPerformance  = modoFtl === "performance";
   const ftlCandidato    = modoFtl === "candidato";
   const ftlConvocatoria = modoFtl === "convocatoria";
-  // Modo de votación del juego (Ajustes → Votación Escenario). La TV muestra
+  // Modo de votación del juego (🗳️ del panel del juego en el Admin). La TV muestra
   // SIEMPRE el barómetro; el modo sólo cambia cómo vota la gente y de dónde
   // sale el %: 'toques' = energía, 'votos' = % de 👍, 'pelea' = posición de
   // la pelea 👍/👎, 'off' = sin barómetro. /tv entra por token, sin sesión:
@@ -366,15 +453,41 @@ export default function PantallaTV({ modo = "tv" }) {
     youtube_volume:     100,
   } : null;
 
-  // Lo que suena. Al soltar el escenario vuelve a ser `current` y el motor hace
-  // su transición de siempre.
-  const fuente = itemFtl || current;
+  const PLACAS_NO_TV = ["escenario_karaoke", "logo", "logo_animado"];
+  const activePlaca = sharesSession ? gameState?.active_placa : null;
+  const hasPlaca = !!activePlaca && !PLACAS_NO_TV.includes(activePlaca);
+  // Los juegos NO llevan transición: ni al entrar ni al salir, ni en los videos
+  // de FTL / PT. Mientras un juego (o su placa de anuncio) está en pantalla, el
+  // motor hace cortes secos y el GIF no se dibuja. La gracia cubre el cierre:
+  // al cerrar FTL / PT el Admin avanza el DJ y suelta el escenario, y esos dos
+  // avisos pueden llegar a la TV en cualquier orden. Los cambios entre
+  // canciones del DJ, con la TV mostrando al DJ, usan la transición configurada.
+  const juegoEnPantalla = showFtl || hasLiveLayer || (hasPlaca && PLACAS_DE_JUEGO.includes(activePlaca));
+  const sinTransicion = useSostenido(juegoEnPantalla, GRACIA_SIN_TRANSICION_MS);
+
+  // Tandas publicitarias: cada N canciones del DJ, una tanda antes del tema
+  // siguiente (ver useTandasTv). Con un juego en pantalla no entran.
+  const { itemTanda, audioTanda, terminarTanda } = useTandasTv({
+    eventId, token, current,
+    habilitadas: event?.ads_enabled === true,
+    cadaN: event?.ads_every_n_songs,
+    pausado: juegoEnPantalla,
+    reportar: !telepronter,
+  });
+
+  // Lo que suena. Al soltar el escenario (o terminar la tanda) vuelve a ser
+  // `current`. Con una tanda en MP3 los players del DJ quedan sin fuente: la
+  // reproduce el <audio> de abajo.
+  const fuente = itemFtl || itemTanda || (audioTanda ? null : current);
+  // Con FTL o una tanda de YouTube al aire, el video va a pantalla completa y
+  // sin la interfaz del DJ (título, QR, próximas…).
+  const soloVideo = soloVideoFtl || !!itemTanda;
 
   // Los cambios de MODO de Follow the Leader son CORTES DIRECTOS: convocatoria
   // → participante preparado → video → convocatoria. Acá vivía una transición
-  // propia del juego (estado `transicion`/`modoPrevio`, lluvia forzada, z-index
-  // especial) que ya no existe. La lluvia del motor del DJ sigue intacta para
-  // sus propios cambios de canción.
+  // propia del juego (estado `transicion`/`modoPrevio`, transición forzada,
+  // z-index especial) que ya no existe. La transición del DJ (el GIF
+  // configurado) es sólo para sus propios cambios de canción.
 
   // Se corta la fuente mientras la TV no está mostrando un video: en
   // convocatoria y con el participante preparado el DJ queda pausado en su
@@ -400,25 +513,52 @@ export default function PantallaTV({ modo = "tv" }) {
   };
   const reproduciendo = cortarFuente ? false : event?.is_playing !== false;
 
-  const PLACAS_NO_TV = ["escenario_karaoke", "logo", "logo_animado"];
-  const activePlaca = sharesSession ? gameState?.active_placa : null;
-  const hasPlaca = !!activePlaca && !PLACAS_NO_TV.includes(activePlaca);
+  // Transición entre canciones del DJ (DJ Democracy → Editor → «Transición
+  // entre canciones»). Sin GIF no hay transición: corte directo. El fundido de
+  // audio sólo vale con la transición activa.
+  const transicionGif = event?.transition_enabled && event?.transition_gif_url ? event.transition_gif_url : null;
+  const fadeInMs  = segundosAMs(event?.transition_fade_in_seconds,  FADE_IN_POR_DEFECTO);
+  const holdMs    = segundosAMs(event?.transition_hold_seconds,     HOLD_POR_DEFECTO);
+  const fadeOutMs = segundosAMs(event?.transition_fade_out_seconds, FADE_OUT_POR_DEFECTO);
+  const fundidoAudio = !!transicionGif && event?.transition_audio_fade === true;
+  const transicion = useMemo(() => (transicionGif
+    ? { activa: true, fadeInMs, holdMs, fadeOutMs, fundidoAudio }
+    : TRANSICION_APAGADA), [transicionGif, fadeInMs, holdMs, fadeOutMs, fundidoAudio]);
+  // Dónde se dibuja: el bloque «Transición entre canciones» del Diseñador TV
+  // si está visible; si no, el área del video.
+  const areaTransicion = canvasConfig.blocks.transition?.visible
+    ? canvasConfig.blocks.transition : canvasConfig.blocks.video;
+
   // `displayedId` lo consumía la transición de FTL, que ya no existe: el motor
   // lo sigue exponiendo para quien lo necesite, pero acá no hay nada que esperar.
-  const { playerIds, visiblePlayer, rainPhase, playerError, readyCount } =
+  const { playerIds, visiblePlayer, transitionPhase, cargando, playerError, readyCount } =
     useContinuousTvPlayers({ current: fuente, eventId, token, unlocked,
       muted: telepronter || !screenAudioOn || muteDj,
       playing: reproduciendo,
       // La performance no es la canción del evento: si la TV pidiera avanzar
       // al terminarla, el servidor archivaría la canción del DJ que está
       // congelada detrás. La Telepronter nunca avanza: espera el cambio de /tv.
-      autoAdvance: !telepronter && !itemFtl,
-      reportar: !telepronter,
+      // Una tanda tampoco es la canción del evento: ni avanza ni reporta
+      // progreso (el Admin vería el del tema que espera detrás).
+      autoAdvance: !telepronter && !itemFtl && !itemTanda,
+      reportar: !telepronter && !itemTanda,
       // Fin del video del juego: vuelve a la convocatoria, sin transición.
-      onFuenteTerminada: (itemId) => { if (itemFtl && itemId === itemFtl.id) terminarVideoEscenario(); },
+      // Fin de la tanda: arranca el tema que esperaba.
+      onFuenteTerminada: (itemId) => {
+        if (itemFtl && itemId === itemFtl.id) terminarVideoEscenario();
+        if (itemTanda && itemId === itemTanda.id) terminarTanda();
+      },
       captionsEnabled: event?.youtube_captions_enabled === true,
-      rainAnticipationSeconds: event?.rain_anticipation_seconds ?? 6,
-      rainTailSeconds: event?.rain_tail_seconds ?? 0 });
+      transicion,
+      sinTransicion });
+
+  // El GIF se descarga de antemano: si no, la primera transición de la noche
+  // arrancaría con el área vacía mientras baja.
+  useEffect(() => {
+    if (!transicionGif) return;
+    const img = new Image();
+    img.src = transicionGif;
+  }, [transicionGif]);
 
   // 1. Validar el acceso contra el servidor.
   useEffect(() => {
@@ -463,21 +603,7 @@ export default function PantallaTV({ modo = "tv" }) {
     body{background:${C.bg};color:${C.white};font-family:'Space Grotesk',sans-serif;overflow:hidden}
     #${playerIds[0]},#${playerIds[1]}{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;border:0!important;pointer-events:none!important}
     .tv-player-layer{position:absolute;inset:0;background:#000;transition:opacity .35s ease;pointer-events:none}
-    .tv-static{position:fixed;inset:0;z-index:100;overflow:hidden;background:#111;opacity:1;transition:opacity .7s ease;pointer-events:none}
-    .tv-static-entering{animation:tvStaticEnter .45s ease both}
-    .tv-static-leaving{opacity:0}
-    .tv-static-noise{position:absolute;inset:-35%;background-image:repeating-radial-gradient(circle at 17% 29%,#fff 0 1px,#111 1px 3px,#888 3px 4px,#000 4px 7px);background-size:9px 7px;filter:contrast(190%);opacity:.72;animation:tvNoise .16s steps(2,end) infinite}
-    .tv-static-scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.68) 0 2px,rgba(255,255,255,.12) 2px 4px,transparent 4px 7px);mix-blend-mode:hard-light;animation:tvScan .55s linear infinite}
-    .tv-static-band{position:absolute;left:-10%;right:-10%;height:18%;background:linear-gradient(180deg,transparent,rgba(255,255,255,.32),rgba(0,0,0,.75),transparent);filter:blur(2px);animation:tvBand 1.35s steps(6,end) infinite}
-    .tv-static-brand{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;text-shadow:3px 0 #00e5ff,-3px 0 #ff2d78,0 3px 12px #000;animation:tvGlitch 1.1s steps(2,end) infinite}
-    .tv-static-brand strong{font-family:'Syne',sans-serif;font-size:clamp(34px,7vw,92px);font-weight:900;letter-spacing:.12em;color:rgba(255,255,255,.86)}
-    .tv-static-brand em{margin-top:10px;font-family:'Syne',sans-serif;font-size:clamp(15px,2.4vw,30px);font-style:normal;font-weight:800;letter-spacing:.12em;color:rgba(255,214,0,.82)}
-    .tv-static-brand span{margin-top:14px;font-size:clamp(11px,1.5vw,18px);font-weight:700;letter-spacing:.28em;color:rgba(255,255,255,.64)}
-    @keyframes tvStaticEnter{from{opacity:0}to{opacity:1}}
-    @keyframes tvNoise{0%{transform:translate3d(-3%,2%,0) scale(1.03)}25%{transform:translate3d(4%,-3%,0) scale(1.08)}50%{transform:translate3d(-1%,5%,0) scale(1.05)}75%{transform:translate3d(3%,1%,0) scale(1.1)}100%{transform:translate3d(-4%,-2%,0) scale(1.04)}}
-    @keyframes tvScan{to{background-position:0 28px}}
-    @keyframes tvBand{0%{top:-25%}100%{top:115%}}
-    @keyframes tvGlitch{0%,88%,100%{transform:translate(0);filter:none}90%{transform:translate(-5px,2px);filter:brightness(1.5)}94%{transform:translate(6px,-2px)}97%{transform:translate(-2px,1px)}}
+    @keyframes tvTransIn{from{opacity:0}to{opacity:1}}
     @keyframes tvFloat{
       0%{transform:translateY(0) scale(.6);opacity:0}
       12%{opacity:1;transform:translateY(-40px) scale(1)}
@@ -538,7 +664,7 @@ export default function PantallaTV({ modo = "tv" }) {
     </>
   );
 
-  // El espejo envuelve TODO, incluidas las capas `position: fixed` (lluvia,
+  // El espejo envuelve TODO, incluidas las capas `position: fixed` (tapa de carga,
   // reacciones): un ancestro con transform pasa a ser su caja contenedora, así
   // que se invierten junto con el resto sin tocarlas una por una.
   return (
@@ -549,12 +675,15 @@ export default function PantallaTV({ modo = "tv" }) {
       <style>{css}</style>
       <div data-tv-live-stage style={{
         position: "relative", height: "100vh", width: "100vw", overflow: "hidden",
-        backgroundColor: canvasConfig.screen.backgroundMode === "color" ? canvasConfig.screen.backgroundColor : C.bg,
-        backgroundImage: canvasConfig.screen.backgroundMode === "image" && canvasConfig.screen.backgroundImage ? `url(${canvasConfig.screen.backgroundImage})` : "none",
+        // Sin fondo elegido en el Diseñador, el de la personalización del evento.
+        backgroundColor: canvasConfig.screen.backgroundMode === "color" ? canvasConfig.screen.backgroundColor
+          : canvasConfig.screen.backgroundMode === "none" ? (marca.fondo || C.bg) : C.bg,
+        backgroundImage: canvasConfig.screen.backgroundMode === "image" && canvasConfig.screen.backgroundImage ? `url(${canvasConfig.screen.backgroundImage})`
+          : canvasConfig.screen.backgroundMode === "none" && marca.fondoImagen ? `url(${marca.fondoImagen})` : "none",
         backgroundSize: "cover", backgroundPosition: "center",
       }}>
         <ConfiguredBlock id="video"
-          block={soloVideoFtl ? aPantallaCompleta(canvasConfig.blocks.video) : canvasConfig.blocks.video}>
+          block={soloVideo ? aPantallaCompleta(canvasConfig.blocks.video) : canvasConfig.blocks.video}>
           {/* Players A/B permanentes: el standby nunca usa display:none. */}
           {playerIds.map((playerId, index) => (
             <div key={playerId} className="tv-player-layer" style={{
@@ -602,21 +731,21 @@ export default function PantallaTV({ modo = "tv" }) {
           )}
         </ConfiguredBlock>
 
-        {!soloVideoFtl && <>
-        <ConfiguredBlock id="logo" block={canvasConfig.blocks.logo}>
+        {!soloVideo && <>
+        <ConfiguredBlock id="logo" block={bloqueLogo}>
           <EditableOverlayText block={canvasConfig.blocks.logo}/>
         </ConfiguredBlock>
 
         <ConfiguredBlock id="qr" block={canvasConfig.blocks.qr} contentStyle={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "3cqh 3cqw" }}>
-          <QrPanel code={event?.code || code} block={canvasConfig.blocks.qr}/>
+          <QrPanel code={event?.code || code} block={canvasConfig.blocks.qr} marca={marca}/>
         </ConfiguredBlock>
 
         <ConfiguredBlock id="upcoming" block={canvasConfig.blocks.upcoming} contentStyle={{ padding: "4cqh 4cqw" }}>
-          <UpcomingPanel candidates={candidates}/>
+          <UpcomingPanel candidates={candidates} marca={marca}/>
         </ConfiguredBlock>
 
         <ConfiguredBlock id="header" block={canvasConfig.blocks.header} contentStyle={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "2cqh 2cqw" }}>
-          <span style={{ fontSize: "min(7cqw,20cqh)", fontWeight: canvasConfig.blocks.header.font.titleWeight, color: canvasConfig.blocks.header.font.titleColor || C.white }}>
+          <span style={{ fontSize: "min(7cqw,20cqh)", fontWeight: canvasConfig.blocks.header.font.titleWeight, color: canvasConfig.blocks.header.font.titleColor || marca.acento || C.white }}>
             {event?.name || "Pantalla Bizarren"} · {event?.code || code}
           </span>
         </ConfiguredBlock>
@@ -631,7 +760,7 @@ export default function PantallaTV({ modo = "tv" }) {
               )}
               <div style={{ minWidth: 0 }}>
                 <div style={{
-                  fontWeight: canvasConfig.blocks.nowPlaying.font.titleWeight, fontSize: canvasConfig.blocks.nowPlaying.font.titleSize || "min(8cqw,28cqh)", color: canvasConfig.blocks.nowPlaying.font.titleColor || C.gold,
+                  fontWeight: canvasConfig.blocks.nowPlaying.font.titleWeight, fontSize: canvasConfig.blocks.nowPlaying.font.titleSize || "min(8cqw,28cqh)", color: canvasConfig.blocks.nowPlaying.font.titleColor || marca.texto || C.gold,
                   lineHeight: 1.1, textShadow: "0 2px 14px #000",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}>{current.title}</div>
@@ -648,7 +777,7 @@ export default function PantallaTV({ modo = "tv" }) {
         </ConfiguredBlock>)}
         </>}
 
-        {!soloVideoFtl && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
+        {!soloVideo && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
 
         {/* Placa de anuncio. Reusa el PlacaScreen de /pantalla — mismo catálogo,
             mismos assets de /placas — en vez de duplicar el diseño. Va debajo
@@ -680,7 +809,7 @@ export default function PantallaTV({ modo = "tv" }) {
                 webappUrl={window.location.origin}
                 placa={<PlacaScreen logo="/logo.png" gameState={{ ...gameState, active_placa:"duelo", placa_custom:null }}/>}/>
             )}
-            {/* QR de Rey / Desafío / Sumate / Arma (Ajustes → QR en pantalla) */}
+            {/* QR de Rey / Desafío / Sumate / Arma (Diseñador → QR y logo del juego) */}
             {(showRaffle || showTrivia || showSuma || showPalabra) && (
               <QrDeJuego activeGame={activeGame}/>
             )}
@@ -691,7 +820,7 @@ export default function PantallaTV({ modo = "tv" }) {
             votación) los porcentajes. Transparente y sin reproductor propio —
             el video de abajo es el del DJ, con su recorte de inicio/fin. */}
         {(ftlConvocatoria || ftlCandidato) && !hasLiveLayer && !hasPlaca && (
-          // Pantalla previa apagada (Ajustes → General): al llamar al
+          // Pantalla previa apagada (🎨 Diseño de juegos): al llamar al
           // participante la TV sigue en la convocatoria hasta que arranca el video.
           <FtlStandby juego={juegoEsc} webappUrl={window.location.origin}
             participante={ftlCandidato && listoCfg[juegoEsc.type]?.previa !== false ? participanteFtl : null}/>
@@ -708,26 +837,40 @@ export default function PantallaTV({ modo = "tv" }) {
         )}
       </div>
 
-      {/* La lluvia SÍ va durante FTL: es la transición del motor y es lo que
-          se ve al cortar la canción del participante para volver al DJ. Fuera
-          de una transición no dibuja nada (phase 'idle' y sin espera), así que
-          no puede taparle la performance a nadie.
-          Las reacciones flotantes, en cambio, son del público del DJ. */}
-      {/* La lluvia cubre la espera, no sólo la anima: mientras esté puesta, el
-          destino se prepara detrás. Va por encima de las pantallas de FTL
-          (z 50) para que el cambio de modo no se vea a medio armar. */}
-      <TvStatic phase={rainPhase}
-        waiting={!soloVideoFtl && (!fuente || readyCount < 2)}/>
+      {/* La transición es sólo del DJ: con un juego o su placa en pantalla no
+          se dibuja nunca, aunque el motor haya quedado a mitad de un cruce. */}
+      <TvTransicion phase={juegoEnPantalla ? "idle" : transitionPhase}
+        gif={transicionGif} area={areaTransicion} fadeInMs={fadeInMs} fadeOutMs={fadeOutMs}/>
 
-      {!soloVideoFtl && <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>}
+      {/* Tapa lisa mientras los players cargan el tema (arranque, un video
+          que falló): que no se vea la carga de YouTube. Sin tema, en cambio,
+          se ve el «Esperando la próxima canción…» del DJ. */}
+      {!juegoEnPantalla && !!fuente && (cargando || readyCount < 2) && (
+        <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: 100,
+          background: C.bg, pointerEvents: "none" }}/>
+      )}
+
+      {/* Tanda publicitaria en MP3: pantalla propia mientras suena. Con un
+          juego encima (que tapa todo) se calla, igual que el DJ. */}
+      {audioTanda && (
+        <TandaAudio key={audioTanda.clave} tanda={audioTanda} logo={marca.logo || "/logo.png"}
+          muted={telepronter || !screenAudioOn || muteDj} onTerminar={terminarTanda}/>
+      )}
+
+      {!soloVideo && <Reacciones eventId={eventId} size={canvasConfig.screen.reactionEmojiSize}/>}
 
       {/* Tomatazo: es la votación para voltear la canción del DJ, así que sólo
           se monta cuando la capa visual es la del DJ. Con un juego en vivo, un
           escenario o una placa puesta no se tiran tomates: no son su pantalla.
           Desmontarlo no pierde nada — al volver, el seq del momento es baseline
           y no se reproducen impactos viejos. */}
-      {!soloVideoFtl && !hasLiveLayer && !hasPlaca && (
+      {!soloVideo && !hasLiveLayer && !hasPlaca && (
         <TomatazoOverlay event={event} eventId={eventId} client={supabaseAnon}/>
+      )}
+      {/* Amor y Odio / Guns & Roses: medidor en el bloque «Contador Sacar Tema»
+          del Diseñador, flores, tomates y balas. Mismas reglas que el Tomatazo. */}
+      {!soloVideo && !hasLiveLayer && !hasPlaca && (
+        <KickDualOverlay event={event} area={canvasConfig.blocks.kickCounter}/>
       )}
     </div>
   );

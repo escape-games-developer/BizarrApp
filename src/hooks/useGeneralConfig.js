@@ -42,8 +42,11 @@ function normalizar(value) {
   };
 }
 
-/** Cliente: ajustes vigentes. Mientras carga, o si falla, usa el comportamiento de siempre. */
-export function useGeneralConfig() {
+/**
+ * Cliente: ajustes vigentes. Mientras carga, o si falla, usa el comportamiento
+ * de siempre. `rev` (vista previa del Diseñador): al cambiar, se relee.
+ */
+export function useGeneralConfig(rev = 0) {
   const [config, setConfig] = useState(GENERAL_POR_DEFECTO);
   const [cargando, setCargando] = useState(true);
   useEffect(() => {
@@ -55,7 +58,7 @@ export function useGeneralConfig() {
       setCargando(false);
     });
     return () => { vivo = false; };
-  }, []);
+  }, [rev]);
   return { config, cargando };
 }
 

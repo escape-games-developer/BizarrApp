@@ -39,7 +39,7 @@ export default function PantallaDjPanel({ sec, sessionId, modo = "live", goTo = 
   /**
    * Relee la lista de eventos y deja elegido uno válido. No se guarda la lista
    * en estado: nadie la renderiza — lo único que se usa de ella es cuál queda
-   * seleccionado. La usan «Iniciar / Finalizar / Duplicar» (SeccionCiclo) y el
+   * seleccionado. La usan «Poner en vivo» (EventoFueraDeVivo) y el
    * cambio de código (SeccionCodigo), que necesitan que el evento se relea.
    */
   const refreshEvents = useCallback(async () => {

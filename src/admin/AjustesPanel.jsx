@@ -3,8 +3,6 @@ import General from "./ajustes/General";
 import VistaPanelOpciones from "./ajustes/VistaPanelOpciones";
 import RegistroClientes from "./ajustes/RegistroClientes";
 import CartaMenu from "./ajustes/CartaMenu";
-import VotacionEscenario from "./ajustes/VotacionEscenario";
-import QrPantalla from "./ajustes/QrPantalla";
 
 const card = {
   background: "rgba(240,232,255,.035)",
@@ -21,15 +19,14 @@ const card = {
  * solapas va pegada a la hoja y la activa se funde con ella. Todas reciben
  * las mismas props que AjustesPanel (`contexto`).
  *
- * Futuras: Juegos, Reglas y comportamientos, Pantalla, Otras. Las
- * reglas de cada juego siguen viviendo en su panel (p. ej. Arma la Palabra y
- * `participantes_minimos`) hasta que se diseñe el sistema general de reglas;
- * esta pantalla no las duplica ni las lee.
+ * Acá va sólo lo que afecta a toda la app. Lo que es de UN juego (reglas,
+ * votación, pantalla de la TV, QR y logo, opciones del celular) vive en el
+ * panel de ese juego (reglas) o en 🎨 Diseño de juegos (lo visual), no acá.
  */
 const CATEGORIAS = [
   {
     id: "general", icon: "⚙️", label: "General",
-    descripcion: "Reglas de acceso de los clientes y qué partes de la app se muestran: cards de juegos, estilo de los juegos, títulos de sección y vestuario.",
+    descripcion: "Reglas de acceso de los clientes y qué partes de la app se muestran: cards de juegos, estilo de los juegos y títulos de sección.",
     Componente: General,
   },
   {
@@ -41,16 +38,6 @@ const CATEGORIAS = [
     id: "registro", icon: "📝", label: "Registro de clientes",
     descripcion: "Activá o desactivá las formas en que los clientes pueden crear su cuenta.",
     Componente: RegistroClientes,
-  },
-  {
-    id: "votacion", icon: "🗳️", label: "Votación Escenario",
-    descripcion: "Elegí cómo vota el público en Follow the Leader y Personal Trainer: barómetro de toques o 👍/👎.",
-    Componente: VotacionEscenario,
-  },
-  {
-    id: "qr", icon: "🔳", label: "QR y logo",
-    descripcion: "Mostrá u ocultá el QR y el logo de BizarrApp en las pantallas de cada juego.",
-    Componente: QrPantalla,
   },
   {
     id: "carta", icon: "🍹", label: "Carta (menú)",

@@ -13,9 +13,22 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
+// Vistas previas del Diseñador (/designer-preview/*): viven en un iframe del
+// MISMO origen que el Admin. Con la sesión persistente leerían el token del
+// admin de localStorage y lo refrescarían en paralelo (rotación de refresh
+// token → el Admin queda deslogueado). Ahí el cliente arranca sin sesión, no
+// refresca nada y guarda aparte: sólo lee lo público, como la TV.
+const EN_VISTA_PREVIA = typeof window !== "undefined" &&
+  window.location.pathname.startsWith("/designer-preview/");
+
 // Cliente con auth persistente — usado por AdminPanel para writes (necesita auth.uid())
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
+  auth: EN_VISTA_PREVIA ? {
+    persistSession:    false,
+    autoRefreshToken:  false,
+    detectSessionInUrl: false,
+    storageKey:        "sb-vista-previa",
+  } : {
     persistSession:    true,
     autoRefreshToken:  true,
     detectSessionInUrl: false,

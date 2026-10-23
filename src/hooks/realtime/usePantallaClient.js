@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import {
   joinEvent, heartbeat, castVote, clearVote, castSuperVote,
-  getKickStatus, toggleKickVote, sendReaction,
+  getKickStatus, toggleKickVote, votarKickFijo, sendReaction,
   fetchMyVotes, fetchVotePowers, fetchMyParticipant,
 } from "../../services/pantallaDj";
 import { fetchEmojiPackForRole, EMOJIS_POR_DEFECTO } from "../../services/pantallaConfig";
+import { sonarPop } from "../../components/pantalla/sonidoPop";
 
 const HEARTBEAT_MS = 30_000;   // mismo intervalo que usePresence
+const KICK_RELEER_MS = 30_000;  // el mínimo de conectados cambia con la gente
 
 /**
  * Lo que el cliente puede hacer dentro del evento.
@@ -132,8 +134,19 @@ export function usePantallaClient(event, user) {
     return () => { supabase.removeChannel(channel); };
   }, [canPlay, eventId, userId, refreshVotes]);
 
-  // El kick se recalcula cuando cambia la canción (los votos son por tema).
+  // El kick se recalcula cuando cambia la canción (los votos son por tema) y
+  // cada 30 s: si aparece o se muestra depende de cuántos invitados hay activos
+  // (mínimo de conectados), que cambia sin que cambie la canción.
   useEffect(() => { refreshKick(); }, [event?.current_item_id, refreshKick]);
+  useEffect(() => {
+    if (!joined) return undefined;
+    const id = setInterval(refreshKick, KICK_RELEER_MS);
+    return () => clearInterval(id);
+  }, [joined, refreshKick]);
+
+  // «Sonido al votar/reaccionar» (Reglas de votación): un pop al tocar.
+  const sonido = event?.vote_sound_enabled !== false;
+  const pop = useCallback(() => { if (sonido) sonarPop(); }, [sonido]);
 
   const powerOf = useCallback((voteType) => {
     const row = powers.find((p) => p.role === role && p.vote_type === voteType);
@@ -166,30 +179,39 @@ export function usePantallaClient(event, user) {
   }, [refreshVotes]);
 
   const vote = useCallback((itemId, type = "up") => run(itemId, async () => {
+    pop();
     // Volver a tocar el mismo botón quita el voto, como en el original.
     if (voteOn(itemId) === type) await clearVote(eventId, itemId, type);
     else                         await castVote(eventId, itemId, type);
-  }), [run, voteOn, eventId]);
+  }), [run, voteOn, eventId, pop]);
 
   const superVote = useCallback((itemId, type = "super_up") =>
-    run(itemId, async () => { await castSuperVote(eventId, itemId, type); await refreshYo(); }),
-  [run, eventId, refreshYo]);
+    run(itemId, async () => { pop(); await castSuperVote(eventId, itemId, type); await refreshYo(); }),
+  [run, eventId, refreshYo, pop]);
 
   const toggleKick = useCallback(async () => {
-    setError(null);
+    setError(null); pop();
     try { setKick(await toggleKickVote(eventId)); await refreshKick(); }
     catch (err) { setError(err.message); }
-  }, [eventId, refreshKick]);
+  }, [eventId, refreshKick, pop]);
+
+  // Amor y Odio / Guns & Roses: un voto por tema, +1 o −1, sin cambiarlo.
+  const voteKickFijo = useCallback(async (value) => {
+    setError(null); pop();
+    try { await votarKickFijo(eventId, value); await refreshKick(); }
+    catch (err) { setError(err.message); await refreshKick(); }
+  }, [eventId, refreshKick, pop]);
 
   const react = useCallback(async (emoji) => {
+    pop();
     try { await sendReaction(eventId, userId, emoji); }
     catch (err) { console.error("[usePantallaClient] reaccion:", err); }
-  }, [eventId, userId]);
+  }, [eventId, userId, pop]);
 
   return {
     role, joined, myVotes, powers, kick, busy, error, emojis,
     powerOf, voteOn, superUsed, superLeft, superQuota, superOn,
-    vote, superVote, toggleKick, react,
+    vote, superVote, toggleKick, voteKickFijo, react,
     clearError: () => setError(null),
   };
 }
