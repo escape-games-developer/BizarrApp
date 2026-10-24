@@ -6,8 +6,13 @@ import { authCallbackUrl } from "../lib/authRedirect";
  *
  * Perfiles:
  * - Cliente: fila en `profiles`, sin fila en `admin_users`.
- * - Operador: `admin_users.role = 'operator'`; ve sólo `admin_users.sections`.
- * - Administrador: `admin_users.role = 'admin'`; ve todo.
+ * - Anfitrión: `admin_users.role = 'anfitrion'`; ve sólo `admin_users.sections`,
+ *   que le habilita el administrador (arranca sin ninguna).
+ * - Producción: `role = 'produccion'`; mismas reglas, pero arranca con todas
+ *   las secciones y el administrador le puede sacar alguna.
+ * - Administrador general: `role = 'admin'`; ve todo y gestiona usuarios.
+ *
+ * `operator` es el nombre viejo de `anfitrion` (migración 20261023210000).
  *
  * Backend: migraciones `20261013150000_admin_roles_y_secciones.sql` y
  * `20261013180000_admin_usuarios_gestion.sql`, y la Edge Function
@@ -20,9 +25,14 @@ import { authCallbackUrl } from "../lib/authRedirect";
  * Nunca se maneja `service_role` ni se escriben contraseñas.
  */
 
-export const ROLES = { admin: "Administrador", operator: "Operador" };
+export const ROLES = { anfitrion: "Anfitrión", produccion: "Producción", admin: "Administrador general" };
 
-/** Secciones que nunca se asignan a un operador (podría darse más permisos). */
+/** Perfiles que ven sólo sus secciones asignadas (el admin ve todo). */
+export const ROLES_CON_SECCIONES = new Set(["anfitrion", "produccion"]);
+
+const normalizarRol = (r) => (r === "operator" ? "anfitrion" : r);
+
+/** Secciones que nunca se asignan a anfitrión ni producción (podrían darse más permisos). */
 export const SECCIONES_SOLO_ADMIN = new Set(["usuarios"]);
 
 /** Un usuario es «activo» si se conectó en los últimos DIAS_ACTIVO días. */
@@ -62,7 +72,8 @@ export async function leerMiAcceso(uid) {
   const { data, error } = await supabase
     .from("admin_users").select("role, sections").eq("user_id", uid).maybeSingle();
   if (error || !data) return { rol: "admin", secciones: [] };
-  return { rol: data.role === "operator" ? "operator" : "admin", secciones: data.sections ?? [] };
+  const rol = normalizarRol(data.role);
+  return { rol: ROLES_CON_SECCIONES.has(rol) ? rol : "admin", secciones: data.sections ?? [] };
 }
 
 /** `[{ id, nombre, email, rol, secciones, esYo, creado }]` — sólo para administradores. */
@@ -80,7 +91,7 @@ export async function listarUsuariosSistema() {
     id: u.user_id,
     nombre: u.name ?? null,
     email: u.email ?? null,
-    rol: u.role,
+    rol: normalizarRol(u.role),
     secciones: u.sections ?? [],
     esYo: u.user_id === user.id,
     creado: u.created_at,
@@ -89,7 +100,7 @@ export async function listarUsuariosSistema() {
   }));
 }
 
-/** `[{ id, nombre, email, team, telefono, creado }]` — admin u operador con «clientes». */
+/** `[{ id, nombre, email, team, telefono, creado }]` — admin, o anfitrión / producción con «clientes». */
 export async function listarClientes() {
   const { data, error } = await supabase.rpc("admin_list_clients");
   if (error) {
@@ -112,7 +123,7 @@ export async function listarClientes() {
 /** Guarda rol y secciones. Para un administrador las secciones se ignoran. */
 export async function guardarAcceso(id, rol, secciones) {
   const { data, error } = await supabase.rpc("admin_set_staff_access", {
-    p_user_id: id, p_role: rol, p_sections: rol === "operator" ? secciones : [],
+    p_user_id: id, p_role: rol, p_sections: ROLES_CON_SECCIONES.has(rol) ? secciones : [],
   });
   if (error) {
     if (faltaRpc(error)) throw new Error(MIGRACION_FALTANTE);
@@ -140,14 +151,14 @@ const ERRORES_ALTA = {
 
 /**
  * Da de alta un usuario y le manda el mail de invitación para validarse.
- * `tipo`: "cliente" | "operator" | "admin". Devuelve `{ id, existente, invitado }`:
+ * `tipo`: "cliente" | "anfitrion" | "produccion" | "admin". Devuelve `{ id, existente, invitado }`:
  * `existente` = la cuenta ya existía y sólo se le dio el rol (sin mail).
  */
 export async function crearUsuario({ tipo, email, nombre, team = null, telefono = null, secciones = [] }) {
   const { data, error } = await supabase.functions.invoke("admin-create-user", {
     body: {
       tipo, email: String(email).trim().toLowerCase(), nombre: String(nombre).trim(),
-      team, telefono, secciones: tipo === "operator" ? secciones : [],
+      team, telefono, secciones: ROLES_CON_SECCIONES.has(tipo) ? secciones : [],
       redirectTo: authCallbackUrl("invite"),
     },
   });

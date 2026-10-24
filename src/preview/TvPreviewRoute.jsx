@@ -7,6 +7,7 @@ import { demoDuelo, demoSumaRound, demoPalabraRound, demoRey, demoTrivia } from 
 import { QrDeJuego } from "../components/QrDeJuego";
 import { refrescarPantallaVisibilidad } from "../hooks/usePantallaQr";
 import { refrescarDueloPantalla } from "../hooks/useDueloPantalla";
+import { refrescarLienzo } from "../lienzo/useLienzo";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useGeneralConfig } from "../hooks/useGeneralConfig";
 import globalCss from "../constants/styles";
@@ -233,6 +234,7 @@ export default function TvPreviewRoute() {
     refrescarPantallaVisibilidad("logo");
     refrescarPantallaVisibilidad("mensaje");
     refrescarDueloPantalla();
+    refrescarLienzo("palabra");
   }, [rev]);
 
   if (escena?.placa) {

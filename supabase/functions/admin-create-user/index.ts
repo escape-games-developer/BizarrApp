@@ -7,10 +7,10 @@
 // handle_new_user con la metadata { name, team, phone }.
 //
 // Quién puede:
-//   - Operador o Administrador nuevo → sólo un administrador.
-//   - Cliente nuevo → administrador u operador con la sección «clientes».
+//   - Anfitrión, Producción o Administrador general nuevo → sólo un administrador.
+//   - Cliente nuevo → administrador, o anfitrión / producción con la sección «clientes».
 //
-// Staff con una cuenta que ya existe (p. ej. un cliente que pasa a operador):
+// Staff con una cuenta que ya existe (p. ej. un cliente que pasa a anfitrión):
 // no se crea nada ni se manda mail; se le da el rol sobre la cuenta existente.
 
 import { serve }        from "https://deno.land/std@0.168.0/http/server.ts";
@@ -31,7 +31,9 @@ const json = (body: unknown, status = 200) =>
 const MAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SECCION_RE = /^[a-z][a-zA-Z0-9]{1,63}$/;
 const NOMBRE_MAX = 24;
-const TIPOS      = ["cliente", "operator", "admin"];
+const TIPOS      = ["cliente", "anfitrion", "produccion", "admin"];
+// Perfiles con secciones asignadas (el admin ve todo). `operator` = alias viejo de anfitrion.
+const CON_SECCIONES = ["anfitrion", "produccion"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -52,11 +54,12 @@ serve(async (req) => {
     const { data: staff } = await supabase
       .from("admin_users").select("role, sections").eq("user_id", caller.id).maybeSingle();
     const esAdmin = staff?.role === "admin";
-    const veClientes = esAdmin || (staff?.role === "operator" && (staff.sections ?? []).includes("clientes"));
+    const veClientes = esAdmin || (CON_SECCIONES.includes(staff?.role) && (staff.sections ?? []).includes("clientes"));
 
     // ── Datos ──────────────────────────────────────────────────────────────────
     const body = await req.json().catch(() => ({}));
-    const tipo     = String(body.tipo ?? "");
+    const tipoPedido = String(body.tipo ?? "");
+    const tipo     = tipoPedido === "operator" ? "anfitrion" : tipoPedido;
     const email    = String(body.email ?? "").trim().toLowerCase();
     const nombre   = String(body.nombre ?? "").trim();
     const team     = ["batata", "membrillo"].includes(body.team) ? body.team : null;
@@ -72,7 +75,7 @@ serve(async (req) => {
     if (esStaff ? !esAdmin : !veClientes) return json({ error: "forbidden" }, 403);
 
     let secciones: string[] = [];
-    if (tipo === "operator") {
+    if (CON_SECCIONES.includes(tipo)) {
       secciones = [...new Set((Array.isArray(body.secciones) ? body.secciones : []).map(String))];
       if (secciones.some((s) => !SECCION_RE.test(s) || s === "usuarios")) {
         return json({ error: "invalid_section" }, 400);

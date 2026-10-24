@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  NOMBRE_MAX, ROLES, actualizarNombre, crearUsuario, eliminarUsuario, enviarMailRecuperacion, guardarAcceso,
+  NOMBRE_MAX, ROLES, ROLES_CON_SECCIONES, actualizarNombre, crearUsuario, eliminarUsuario, enviarMailRecuperacion, guardarAcceso,
   motivoMailInvalido, motivoNombreInvalido,
 } from "../../services/usuariosSistema";
 import { TEAMS } from "../../constants/theme";
@@ -107,37 +107,59 @@ export function ModalResetearPassword({ usuario, onCerrar }) {
   );
 }
 
+// ── Perfiles ─────────────────────────────────────────────────────────────────
+
+const NOTA_PERFIL = {
+  anfitrion:  "Ve y usa sólo las secciones que le habilites abajo.",
+  produccion: "Arranca con todas las secciones; podés sacarle las que no necesite.",
+  admin:      "Ve y usa todo, incluidas Usuarios del sistema y Clientes.",
+};
+
+function OpcionesPerfil() {
+  return ["anfitrion", "produccion", "admin"].map((r) => <option key={r} value={r}>{ROLES[r]}</option>);
+}
+
+/**
+ * Secciones al elegir un perfil: Producción arranca con todas, Anfitrión sin
+ * ninguna (se las habilita el admin). Si el usuario ya tenía ese perfil, se
+ * respetan las que tenía.
+ */
+function seccionesIniciales(rol, grupos, usuario = null) {
+  if (usuario && usuario.rol === rol) return usuario.secciones ?? [];
+  if (rol === "produccion") return grupos.flatMap((g) => g.items.map((s) => s.id));
+  return [];
+}
+
 // ── Editar: datos, rol y secciones ──────────────────────────────────────────
 
 const mismoConjunto = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 
 /**
- * Checklist de secciones del panel, agrupadas como en el sidebar.
+ * Secciones que ve el usuario, agrupadas como en el sidebar. Cada grupo es un
+ * bloque con su nombre, cuántas tiene prendidas y un botón «Todo / Nada»; cada
+ * sección es una pastilla que se prende o apaga con un clic. Las secciones
+ * sueltas del sidebar van juntas en «General».
  * `grupos`: `[{ id, titulo, items: [{ id, icon, label }] }]`; `titulo` null
  * para las secciones sueltas.
  */
 function SelectorSecciones({ grupos, elegidas, onCambiar, deshabilitado }) {
   const todas = grupos.flatMap((g) => g.items.map((s) => s.id));
+  const sueltas = grupos.filter((g) => !g.titulo).flatMap((g) => g.items);
+  const bloques = [
+    ...(sueltas.length ? [{ id: "general", titulo: "General", items: sueltas }] : []),
+    ...grupos.filter((g) => g.titulo),
+  ];
   const marcar = (ids, on) => onCambiar(on
     ? [...new Set([...elegidas, ...ids])]
     : elegidas.filter((id) => !ids.includes(id)));
-  const casilla = (s) => (
-    <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px", borderRadius: 7,
-      fontSize: 12, color: "#F0E8FF", cursor: deshabilitado ? "default" : "pointer", opacity: deshabilitado ? .55 : 1 }}>
-      <input type="checkbox" checked={elegidas.includes(s.id)} disabled={deshabilitado}
-        onChange={(e) => marcar([s.id], e.target.checked)} style={{ accentColor: "#9B2FFF" }}/>
-      <span aria-hidden="true" style={{ width: 18, textAlign: "center" }}>{s.icon}</span>
-      {s.label}
-    </label>
-  );
+  const total = elegidas.filter((id) => todas.includes(id)).length;
   const enlace = { border: "none", background: "none", padding: 0, fontSize: 11, fontWeight: 700,
     color: "#00E5FF", cursor: "pointer", fontFamily: "inherit" };
+
   return (
     <fieldset style={{ border: "none", margin: 0, padding: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <legend style={{ ...etiqueta, marginBottom: 0, padding: 0 }}>
-          Secciones que ve ({elegidas.filter((id) => todas.includes(id)).length}/{todas.length})
-        </legend>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <legend style={{ ...etiqueta, marginBottom: 0, padding: 0 }}>Secciones que ve ({total}/{todas.length})</legend>
         {!deshabilitado && (
           <span style={{ display: "flex", gap: 12 }}>
             <button type="button" style={enlace} onClick={() => onCambiar(todas)}>Todas</button>
@@ -145,21 +167,46 @@ function SelectorSecciones({ grupos, elegidas, onCambiar, deshabilitado }) {
           </span>
         )}
       </div>
-      <div style={{ ...caja(), marginTop: 0, padding: "6px 8px", display: "grid", gap: 2 }}>
-        {grupos.map((g) => g.titulo ? (
-          <div key={g.id} style={{ marginTop: 4 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px", fontSize: 10.5,
-              fontWeight: 800, letterSpacing: .6, textTransform: "uppercase", color: "rgba(240,232,255,.55)",
-              cursor: deshabilitado ? "default" : "pointer" }}>
-              <input type="checkbox" disabled={deshabilitado} style={{ accentColor: "#9B2FFF" }}
-                checked={g.items.every((s) => elegidas.includes(s.id))}
-                ref={(el) => { if (el) el.indeterminate = g.items.some((s) => elegidas.includes(s.id)) && !g.items.every((s) => elegidas.includes(s.id)); }}
-                onChange={(e) => marcar(g.items.map((s) => s.id), e.target.checked)}/>
-              {g.titulo}
-            </label>
-            <div style={{ paddingLeft: 22 }}>{g.items.map(casilla)}</div>
-          </div>
-        ) : g.items.map(casilla))}
+      <div style={{ display: "grid", gap: 8 }}>
+        {bloques.map((g) => {
+          const ids = g.items.map((s) => s.id);
+          const prendidas = ids.filter((id) => elegidas.includes(id)).length;
+          const completo = prendidas === ids.length;
+          return (
+            <div key={g.id} style={{ padding: "10px 12px", borderRadius: 11,
+              background: prendidas ? "rgba(155,47,255,.07)" : "rgba(240,232,255,.03)",
+              border: `1px solid ${prendidas ? "rgba(155,47,255,.3)" : "rgba(240,232,255,.08)"}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ flex: 1, fontSize: 11, fontWeight: 800, letterSpacing: .6, textTransform: "uppercase",
+                  color: prendidas ? "#F0E8FF" : "rgba(240,232,255,.55)" }}>
+                  {g.titulo} <span style={{ fontWeight: 600, color: "rgba(240,232,255,.4)" }}>· {prendidas}/{ids.length}</span>
+                </span>
+                {!deshabilitado && (
+                  <button type="button" style={enlace} onClick={() => marcar(ids, !completo)}>
+                    {completo ? "Nada" : "Todo"}
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {g.items.map((s) => {
+                  const on = elegidas.includes(s.id);
+                  return (
+                    <button key={s.id} type="button" role="switch" aria-checked={on} disabled={deshabilitado}
+                      onClick={() => marcar([s.id], !on)}
+                      style={{ padding: "6px 12px", borderRadius: 999, fontFamily: "inherit", fontSize: 12, fontWeight: 600,
+                        cursor: deshabilitado ? "default" : "pointer", opacity: deshabilitado ? .55 : 1,
+                        transition: "background .12s,border-color .12s,color .12s",
+                        background: on ? "rgba(155,47,255,.28)" : "transparent",
+                        border: `1px solid ${on ? "#9B2FFF" : "rgba(240,232,255,.16)"}`,
+                        color: on ? "#F0E8FF" : "rgba(240,232,255,.55)" }}>
+                      {on ? "✓ " : ""}{s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </fieldset>
   );
@@ -177,7 +224,7 @@ export function ModalEditarUsuario({ usuario, grupos, onCerrar, onGuardado }) {
   const motivo = editableNombre ? motivoNombreInvalido(nombre) : null;
   const cambioNombre = editableNombre && nombre.trim() !== (usuario.nombre ?? "");
   const cambioAcceso = rol !== usuario.rol
-    || (rol === "operator" && !mismoConjunto(secciones, usuario.secciones ?? []));
+    || (ROLES_CON_SECCIONES.has(rol) && !mismoConjunto(secciones, usuario.secciones ?? []));
   const bloqueado = estado === "guardando" || estado === "ok";
 
   const guardar = async () => {
@@ -226,24 +273,21 @@ export function ModalEditarUsuario({ usuario, grupos, onCerrar, onGuardado }) {
           <label style={etiqueta} htmlFor="usr-rol">Perfil</label>
           <select id="usr-rol" className="inp" value={rol} disabled={!editableRol || bloqueado}
             aria-describedby="usr-rol-nota"
-            onChange={(e) => { setRol(e.target.value); tocar(); }}>
-            <option value="operator">{ROLES.operator}</option>
-            <option value="admin">{ROLES.admin}</option>
+            onChange={(e) => { const r = e.target.value; setRol(r); setSecciones(seccionesIniciales(r, grupos, usuario)); tocar(); }}>
+            <OpcionesPerfil/>
           </select>
           <div id="usr-rol-nota" style={nota}>
             {!editableRol
               ? "No podés cambiar tu propio perfil: otro administrador tiene que hacerlo."
-              : rol === "admin"
-                ? "Ve y usa todas las secciones, incluidas Usuarios del sistema y Clientes."
-                : "Ve y usa sólo las secciones que marques abajo."}
+              : NOTA_PERFIL[rol]}
           </div>
         </div>
-        {rol === "operator" && (
+        {ROLES_CON_SECCIONES.has(rol) && (
           <SelectorSecciones grupos={grupos} elegidas={secciones} deshabilitado={bloqueado}
             onCambiar={(ids) => { setSecciones(ids); tocar(); }}/>
         )}
-        {rol === "operator" && secciones.length === 0 && (
-          <div style={{ ...caja(), marginTop: 0 }}>Sin secciones marcadas, el operador entra al panel pero no ve nada.</div>
+        {ROLES_CON_SECCIONES.has(rol) && secciones.length === 0 && (
+          <div style={{ ...caja(), marginTop: 0 }}>Sin secciones marcadas, entra al panel pero no ve nada.</div>
         )}
       </form>
       {estado === "ok" && <div role="status" style={caja("ok")}>Cambios guardados. El usuario los ve la próxima vez que abra el panel.</div>}
@@ -254,7 +298,7 @@ export function ModalEditarUsuario({ usuario, grupos, onCerrar, onGuardado }) {
 
 // ── Nuevo usuario ───────────────────────────────────────────────────────────
 //
-// `tipo`: "staff" (Operador o Administrador) o "cliente". En los dos casos la
+// `tipo`: "staff" (Anfitrión, Producción o Administrador general) o "cliente". En los dos casos la
 // Edge Function crea la cuenta y Supabase le manda el mail de invitación: la
 // persona valida el mail y elige su contraseña desde el link.
 
@@ -262,7 +306,7 @@ export function ModalNuevoUsuario({ tipo, grupos = [], onCerrar, onCreado }) {
   const esStaff = tipo === "staff";
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
-  const [rol, setRol] = useState("operator");
+  const [rol, setRol] = useState("anfitrion");
   const [secciones, setSecciones] = useState([]);
   const [team, setTeam] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -331,17 +375,14 @@ export function ModalNuevoUsuario({ tipo, grupos = [], onCerrar, onCreado }) {
           <div>
             <label style={etiqueta} htmlFor="nu-rol">Perfil</label>
             <select id="nu-rol" className="inp" value={rol} disabled={bloqueado}
-              onChange={(e) => { setRol(e.target.value); tocar(); }}>
-              <option value="operator">{ROLES.operator}</option>
-              <option value="admin">{ROLES.admin}</option>
+              onChange={(e) => { const r = e.target.value; setRol(r); setSecciones(seccionesIniciales(r, grupos)); tocar(); }}>
+              <OpcionesPerfil/>
             </select>
             <div style={nota}>
-              {rol === "admin"
-                ? "Tiene todos los accesos automáticamente, incluidas Usuarios del sistema y Clientes."
-                : "Ve y usa sólo las secciones que marques abajo. Se pueden cambiar después desde Editar."}
+              {NOTA_PERFIL[rol]}{ROLES_CON_SECCIONES.has(rol) && " Se pueden cambiar después desde Editar."}
             </div>
           </div>
-          {rol === "operator" && (
+          {ROLES_CON_SECCIONES.has(rol) && (
             <SelectorSecciones grupos={grupos} elegidas={secciones} deshabilitado={bloqueado}
               onCambiar={(ids) => { setSecciones(ids); tocar(); }}/>
           )}

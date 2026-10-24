@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ROLES, esActivo, listarUsuariosSistema } from "../services/usuariosSistema";
+import { ROLES, ROLES_CON_SECCIONES, esActivo, listarUsuariosSistema } from "../services/usuariosSistema";
 import {
   ModalEditarUsuario, ModalEliminarUsuario, ModalNuevoUsuario, ModalResetearPassword,
 } from "./usuarios/ModalesUsuario";
@@ -9,11 +9,11 @@ import {
 } from "./usuarios/comunes";
 
 /**
- * Usuarios del sistema — operadores y administradores del panel.
+ * Usuarios del sistema — anfitriones, producción y administradores generales.
  *
  * La lista sale de `admin_list_staff` (ver services/usuariosSistema.js), que
  * sólo responde a administradores. `grupos` son las secciones que se le pueden
- * asignar a un operador, agrupadas como en el sidebar (las arma el AdminPanel).
+ * asignar a anfitrión o producción, agrupadas como en el sidebar (las arma el AdminPanel).
  */
 
 const ACCIONES = [
@@ -23,9 +23,10 @@ const ACCIONES = [
 ];
 
 const FILTROS = {
-  activos:  esActivo,
-  admins:   (u) => u.rol === "admin",
-  operador: (u) => u.rol === "operator",
+  activos:    esActivo,
+  admins:     (u) => u.rol === "admin",
+  produccion: (u) => u.rol === "produccion",
+  anfitrion:  (u) => u.rol === "anfitrion",
 };
 
 export default function UsuariosPanel({ grupos }) {
@@ -65,8 +66,9 @@ export default function UsuariosPanel({ grupos }) {
 
       <Vistas activa={vista} onCambiar={setVista} vistas={[
         { id: "activos",  label: "Usuarios activos", valor: contar(FILTROS.activos),  color: "#00F5A0" },
-        { id: "admins",   label: "Administradores",  valor: contar(FILTROS.admins),   color: "#FFD600" },
-        { id: "operador", label: "Operadores",       valor: contar(FILTROS.operador), color: "#00E5FF" },
+        { id: "admins",     label: "Administradores generales", valor: contar(FILTROS.admins),     color: "#FFD600" },
+        { id: "produccion", label: "Producción",                valor: contar(FILTROS.produccion), color: "#FF2D78" },
+        { id: "anfitrion",  label: "Anfitriones",               valor: contar(FILTROS.anfitrion),  color: "#00E5FF" },
       ]}/>
 
       <div style={{ ...card, overflowX: "auto" }}>
@@ -79,7 +81,7 @@ export default function UsuariosPanel({ grupos }) {
             <tr>
               <th scope="col" style={th}>Nombre de usuario</th>
               <th scope="col" style={th}>Mail</th>
-              <th scope="col" style={th}>Rol</th>
+              <th scope="col" style={th}>Perfil</th>
               <th scope="col" style={th}>Mail verificado</th>
               <th scope="col" style={th}>Última conexión</th>
               <th scope="col" style={{ ...th, textAlign: "center" }}><span style={soloLector}>Acciones</span></th>
@@ -113,7 +115,7 @@ export default function UsuariosPanel({ grupos }) {
                 <td style={td} title={u.email || ""}>{u.email || <span style={tenue}>Sin mail</span>}</td>
                 <td style={td}>
                   {ROLES[u.rol] ?? u.rol}
-                  {u.rol === "operator" && (
+                  {ROLES_CON_SECCIONES.has(u.rol) && (
                     <span style={{ marginLeft: 6, fontSize: 11, color: "rgba(240,232,255,.45)" }}>
                       · {u.secciones.length} {u.secciones.length === 1 ? "sección" : "secciones"}
                     </span>

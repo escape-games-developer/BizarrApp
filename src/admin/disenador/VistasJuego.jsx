@@ -19,6 +19,9 @@ import { VISTAS, VISTAS_POR_JUEGO } from "./vistasJuegos";
  * guardado exitoso: sube `rev` y la vista previa relee la configuración ya.
  * `escenaExtra({ qr, logo })` agrega a la escena lo que la vista previa no lee
  * sola (FTL / PT).
+ *
+ * `editor(vista)`: si devuelve algo, esa vista se edita en el editor libre de
+ * pantallas (src/lienzo) en lugar de controles + vista previa.
  */
 
 const CSS = `
@@ -53,7 +56,7 @@ function SinOpciones({ texto }) {
   );
 }
 
-export default function VistasJuego({ juego, col, nav, controles, escenaExtra }) {
+export default function VistasJuego({ juego, col, nav, controles, escenaExtra, editor }) {
   const qr   = usePantallaVisibilidadAdmin("qr");
   const logo = usePantallaVisibilidadAdmin("logo");
   const [vista, setVista] = useState("convocatoria");
@@ -75,6 +78,7 @@ export default function VistasJuego({ juego, col, nav, controles, escenaExtra })
     : { juego, vista, estado, rev, ...extra };
 
   const propios = controles ? controles(vista, ctx) : null;
+  const editorLibre = editor ? editor(vista) : null;
   const panelControles = (
     <>
       {vista === "convocatoria" && (
@@ -108,7 +112,8 @@ export default function VistasJuego({ juego, col, nav, controles, escenaExtra })
         </div>
       </div>
 
-      <div className="vj-cuerpo">
+      {editorLibre}
+      {!editorLibre && <div className="vj-cuerpo">
         <div>{panelControles}</div>
 
         <div className="vj-preview">
@@ -129,7 +134,7 @@ export default function VistasJuego({ juego, col, nav, controles, escenaExtra })
             {vistaDef.texto} · Datos de ejemplo; se actualiza al guardar.
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

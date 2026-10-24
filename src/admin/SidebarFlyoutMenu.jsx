@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import SidebarIcon from "./sidebarIcons";
 
 /**
  * Item padre del sidebar del admin con sus hijos en un flyout lateral
@@ -13,7 +14,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
  * `.sb-nav` es `overflow-y:auto`, así que un absolute quedaría recortado. Fixed
  * tampoco ocupa lugar en el layout ni genera scroll horizontal.
  *
- * Mouse: abre al entrar al botón y se cierra con una demora corta al salir,
+ * Mouse: abre al entrar al botón y se cierra con una demora al salir,
  * para poder cruzar del botón al flyout sin que desaparezca. El flyout arranca
  * pegado al botón y su `paddingLeft` transparente hace de puente.
  * Touch: el hover no existe; el toque abre y cierra, y un toque afuera cierra.
@@ -28,11 +29,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
  * opción queda a la altura del botón, así el camino natural es horizontal.
  */
 
-const DEMORA_CIERRE = 180;
+// Cuánto sigue abierto el flyout después de sacar el mouse: da tiempo a
+// volver o a cruzar hasta las opciones sin que desaparezca.
+const DEMORA_CIERRE = 1500;
 const DEMORA_CAMBIO = 150;
 let cerrarAbierto = null;   // cierre del flyout abierto ahora, si hay uno
 
-export default function SidebarFlyoutMenu({ icon, label, hijos, sec, setSec, collapsed }) {
+export default function SidebarFlyoutMenu({ id, label, hijos, sec, setSec, collapsed }) {
   const [fijado, setFijado] = useState(false);   // abierto por click/tap
   const [encima, setEncima] = useState(false);   // abierto por hover
   const [caja, setCaja] = useState(null);        // rect del botón
@@ -111,9 +114,10 @@ export default function SidebarFlyoutMenu({ icon, label, hijos, sec, setSec, col
     setTop(Math.max(8, Math.min(caja.top - desfase, window.innerHeight - alto - 8)));
   }, [caja]);
 
-  // Un toque/click fuera cierra el menú fijado (el camino de touch).
+  // Un toque/click fuera cierra el menú, se haya abierto por click o por
+  // hover (con la demora de cierre, el de hover también queda un rato).
   useEffect(() => {
-    if (!fijado) return;
+    if (!abierto) return;
     const fuera = (e) => { if (!raizRef.current?.contains(e.target)) cerrar(); };
     const tecla = (e) => { if (e.key === "Escape") cerrar(); };
     document.addEventListener("pointerdown", fuera);
@@ -122,7 +126,7 @@ export default function SidebarFlyoutMenu({ icon, label, hijos, sec, setSec, col
       document.removeEventListener("pointerdown", fuera);
       document.removeEventListener("keydown", tecla);
     };
-  }, [fijado, cerrar]);
+  }, [abierto, cerrar]);
 
   const elegir = (hijo) => {
     setSec(hijo.id);
@@ -139,9 +143,9 @@ export default function SidebarFlyoutMenu({ icon, label, hijos, sec, setSec, col
         aria-haspopup="menu"
         aria-expanded={abierto}
         title={label}>
-        <span className="sb-btn-icon">{icon}</span>
+        <span className="sb-btn-icon"><SidebarIcon id={id}/></span>
         {!collapsed && <span className="sb-btn-label">{label}</span>}
-        {!collapsed && <span style={{ fontSize: 9, marginLeft: 4, opacity: .55, flexShrink: 0 }}>▸</span>}
+        {!collapsed && <span className="sb-chevron"><SidebarIcon id="chevron" size={13}/></span>}
       </button>
 
       {abierto && caja && (
@@ -151,42 +155,14 @@ export default function SidebarFlyoutMenu({ icon, label, hijos, sec, setSec, col
             paddingLeft: collapsed ? 8 : 12,
             visibility: top === null ? "hidden" : "visible",
           }}>
-          <div style={{
-            minWidth: 190, padding: 5, borderRadius: 11,
-            background: "#0A0514", border: "1px solid #9B2FFF55",
-            boxShadow: "0 10px 34px rgba(0,0,0,.6)",
-            display: "flex", flexDirection: "column", gap: 1,
-            animation: "fadeUp .15s ease",
-          }}>
-            <div style={{
-              fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase",
-              color: "#FFD600", padding: "4px 10px 5px",
-            }}>{label}</div>
-            {hijos.map((h) => {
-              const activo = sec === h.id;
-              return (
-                <button key={h.id} type="button" role="menuitem"
-                  onClick={() => elegir(h)}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = activo ? "#9B2FFF44" : "#9B2FFF22"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = activo ? "#9B2FFF33" : "none"; }}
-                  style={{
-                    display: "flex", alignItems: "center", width: "100%",
-                    border: "none", borderRadius: 7, cursor: "pointer",
-                    fontFamily: "inherit", fontSize: 12, fontWeight: 500, textAlign: "left",
-                    padding: "7px 10px", whiteSpace: "nowrap",
-                    color: activo ? "#FFD600" : "#F0E8FF",
-                    background: activo ? "#9B2FFF33" : "none",
-                    transition: "background .12s",
-                  }}>
-                  {/* Caja fija: cada emoji tiene su propia altura de línea y
-                      desparejaría el alto de las opciones entre flyouts. */}
-                  <span style={{ fontSize: 14, width: 20, height: 18, lineHeight: 1, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {h.icon}
-                  </span>
-                  <span style={{ marginLeft: 8, flex: 1 }}>{h.labelMenu ?? h.label}</span>
-                </button>
-              );
-            })}
+          {/* Sólo los nombres de las opciones, sin título (clases .sb-fly*). */}
+          <div className="sb-fly">
+            {hijos.map((h) => (
+              <button key={h.id} type="button" role="menuitem" onClick={() => elegir(h)}
+                className={`sb-fly-item${sec === h.id ? " sb-fly-item-active" : ""}`}>
+                {h.labelMenu ?? h.label}
+              </button>
+            ))}
           </div>
         </div>
       )}

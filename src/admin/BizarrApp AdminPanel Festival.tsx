@@ -104,37 +104,46 @@ const css = `
   .orbs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
   .orb{position:absolute;border-radius:50%;filter:blur(90px);animation:orbDrift ease-in-out infinite;}
 
-  /* Sidebar */
-  .sb{width:210px;min-width:210px;height:100vh;background:#0A0514;border-right:1px solid #9B2FFF44;display:flex;flex-direction:column;overflow:hidden;transition:width .2s ease,min-width .2s ease;}
-  .sb.collapsed{width:60px;min-width:60px;}
+  /* Sidebar — sin emojis: íconos de línea (sidebarIcons.jsx) en currentColor.
+     Activo = barra de acento a la izquierda + texto dorado. */
+  .sb{width:224px;min-width:224px;height:100vh;background:linear-gradient(180deg,#0D0719 0%,#08040F 100%);border-right:1px solid rgba(155,47,255,.18);display:flex;flex-direction:column;overflow:hidden;transition:width .2s ease,min-width .2s ease;}
+  .sb.collapsed{width:64px;min-width:64px;}
   /* Lista: scroll vertical interno. El gutter estable reserva el lugar de la
      scrollbar a ambos lados, así el eje de los íconos no se corre cuando la
      lista no entra en la altura y aparece la barra. */
-  .sb-nav{flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable both-edges;padding:4px 2px;display:flex;flex-direction:column;gap:2px;}
+  .sb-nav{flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable both-edges;padding:8px 6px;display:flex;flex-direction:column;gap:2px;}
   .sb-nav::-webkit-scrollbar{width:4px;}
   .sb-nav::-webkit-scrollbar-track{background:transparent;}
   .sb-nav::-webkit-scrollbar-thumb{background:#9B2FFF44;border-radius:2px;}
-  .sb-footer{padding:8px 6px;border-top:1px solid #9B2FFF44;flex-shrink:0;background:#0A0514;}
-  .sb-sep{height:1px;background:#9B2FFF2A;margin:4px 8px;flex-shrink:0;}
-  /* Botón del sidebar (items, padres de flyout, DJ Democracy, cerrar sesión):
-     mismo alto y mismo eje en los dos modos. */
-  .sb-btn{display:flex;align-items:center;justify-content:flex-start;width:100%;min-height:34px;background:none;border:none;color:#F0E8FF;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;text-align:left;transition:background .12s;position:relative;flex-shrink:0;}
-  .sb-btn:hover{background:#9B2FFF22;}
-  .sb-btn-active{background:#9B2FFF33;color:#FFD600;}
-  .sb-btn-icon{font-size:17px;width:24px;height:24px;line-height:1;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
-  .sb-btn-label{margin-left:8px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sb-footer{padding:10px 10px 12px;border-top:1px solid rgba(240,232,255,.06);flex-shrink:0;}
+  .sb-sep{height:1px;background:rgba(240,232,255,.06);margin:7px 12px;flex-shrink:0;}
+  /* Botón del sidebar (items, padres de flyout, cerrar sesión): mismo alto y
+     mismo eje en los dos modos. */
+  .sb-btn{display:flex;align-items:center;justify-content:flex-start;width:100%;min-height:38px;background:none;border:none;color:rgba(240,232,255,.62);padding:0 12px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;letter-spacing:.1px;text-align:left;transition:background .15s,color .15s;position:relative;flex-shrink:0;}
+  .sb-btn:hover{background:rgba(240,232,255,.05);color:#F0E8FF;}
+  .sb-btn-active,.sb-btn-active:hover{background:linear-gradient(90deg,rgba(255,214,0,.13),rgba(255,214,0,0) 90%);color:#FFD600;font-weight:600;}
+  .sb-btn-active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#FFD600,#FF9500);box-shadow:0 0 10px rgba(255,214,0,.55);}
+  .sb-btn-icon{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .sb-btn-label{margin-left:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sb-chevron{display:flex;margin-left:4px;flex-shrink:0;opacity:.35;transition:opacity .15s;}
+  .sb-btn:hover .sb-chevron,.sb-btn[aria-expanded="true"] .sb-chevron{opacity:.85;}
   .sb.collapsed .sb-btn{justify-content:center;padding-left:0;padding-right:0;}
-  .sb-logout{border:1px solid #FF2D7855;border-radius:8px;color:#FF2D78;font-weight:700;padding-left:7px;padding-right:7px;}
-  .sb-logout:hover{background:#FF2D7818;}
-  .sb-top{padding:12px 10px 8px;border-bottom:1px solid rgba(155,47,255,.1);flex-shrink:0;}
-  .sb-logo{height:48px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(255,214,0,.5));display:block;margin-bottom:5px;}
-  /* La hamburguesa ocupa una caja de 32px centrada sobre la columna de íconos. */
-  .sb-toggle-row{padding:10px 0 6px;display:flex;justify-content:flex-start;}
-  .sb-toggle{width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:none;border-radius:7px;color:#F0E8FF;font-size:20px;line-height:1;cursor:pointer;}
-  .sb-toggle:hover{background:#9B2FFF22;}
-  .sb.collapsed .sb-top{padding:12px 0 8px;display:flex;flex-direction:column;align-items:center;}
-  .sb.collapsed .sb-logo{width:40px;height:40px;}
-  .sb.collapsed .sb-toggle-row{justify-content:center;width:100%;}
+  .sb-logout{border:1px solid rgba(255,45,120,.22);color:rgba(255,45,120,.85);font-weight:600;}
+  .sb-logout:hover{background:rgba(255,45,120,.08);color:#FF2D78;}
+  .sb-top{padding:16px 12px 6px;border-bottom:1px solid rgba(240,232,255,.06);flex-shrink:0;}
+  .sb-logo{height:62px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(255,214,0,.45));display:block;margin:0 0 4px 4px;}
+  /* La hamburguesa ocupa una caja de 32px sobre la columna de íconos. */
+  .sb-toggle-row{padding:8px 0 4px 3px;display:flex;justify-content:flex-start;}
+  .sb-toggle{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:none;border:none;border-radius:9px;color:rgba(240,232,255,.55);cursor:pointer;transition:background .15s,color .15s;}
+  .sb-toggle:hover{background:rgba(240,232,255,.05);color:#F0E8FF;}
+  .sb.collapsed .sb-top{padding:14px 0 6px;display:flex;flex-direction:column;align-items:center;}
+  .sb.collapsed .sb-logo{width:52px;height:52px;margin:0 0 4px;}
+  .sb.collapsed .sb-toggle-row{justify-content:center;width:100%;padding-left:0;}
+  /* Flyout de los grupos: sólo texto. */
+  .sb-fly{min-width:200px;padding:6px;border-radius:12px;background:#0D0719;border:1px solid rgba(155,47,255,.25);box-shadow:0 14px 40px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:1px;animation:fadeUp .15s ease;}
+  .sb-fly-item{display:block;width:100%;border:none;background:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;text-align:left;padding:8px 12px;white-space:nowrap;color:rgba(240,232,255,.72);transition:background .12s,color .12s;}
+  .sb-fly-item:hover{background:rgba(240,232,255,.06);color:#F0E8FF;}
+  .sb-fly-item-active,.sb-fly-item-active:hover{color:#FFD600;background:rgba(255,214,0,.09);font-weight:600;}
   .sb-pills{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
   .pill{font-size:7.5px;font-weight:800;padding:2px 7px;border-radius:10px;letter-spacing:.5px;}
   .pill-live{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#FCA5A5;}
@@ -185,6 +194,9 @@ const css = `
   .tgl-lbl{font-size:11.5px;font-weight:600;}
 
   /* Grid botonera */
+  /* Título de los contenedores de Lanzar: más grande que .ctitle para que se lea */
+  .ltitle{font-family:'DM Sans',sans-serif;font-size:15px;font-weight:800;letter-spacing:1.5px;
+    text-transform:uppercase;color:rgba(240,232,255,.85);margin-bottom:12px;}
   .lg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;}
   .lg3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
   .lbtn{border:none;border-radius:12px;padding:14px 8px;cursor:pointer;transition:all .2s;
@@ -204,6 +216,11 @@ const css = `
     font-size:12px;outline:none;transition:border-color .18s;margin-bottom:6px;}
   .inp:focus{border-color:rgba(155,47,255,.45);}
   .inp::placeholder{color:rgba(240,232,255,.18);}
+  /* Lista desplegable de los select: el sistema la dibuja con fondo claro y
+     el texto heredado (claro) no se lee. color-scheme oscuro + colores propios. */
+  select.inp{color-scheme:dark;}
+  .inp option{background:#1A1028;color:#F0E8FF;}
+  .inp option:checked{background:#9B2FFF;color:#fff;}
   textarea.inp{resize:none;}
 
   /* Video row */
@@ -768,7 +785,7 @@ function LaunchPanel({sec,gameState,goTo,controls}){
       {/* Placas */}
       <div className="card">
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-          <div className="ctitle" style={{margin:0}}>Placas</div>
+          <div className="ltitle" style={{margin:0}}>Placas</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {mensajeCelular&&(
               <button className="btn" disabled={busy} onClick={()=>correr(()=>controls?.setMensajeCliente(null))}
@@ -805,13 +822,13 @@ function LaunchPanel({sec,gameState,goTo,controls}){
       {/* Módulos: el clic abre su panel (ahí se configura, se anuncia y se
           lanza; entrar a configurar no es lanzar). El borde y el punto marcan
           el que está en vivo o anunciado. */}
-      <div className="card">
-        {MODULOS_LANZAR.map(({grupo,items},gi)=>{
+      {/* Un contenedor por grupo: Juegos y Escenario van separados. */}
+      {MODULOS_LANZAR.map(({grupo,items})=>{
           const visibles = items.filter(it=>!FROZEN_MODULE_IDS.has(it.id));
           if(!visibles.length) return null;
           return(
-            <div key={grupo} style={{marginTop:gi?12:0}}>
-              <div className="ctitle">{grupo}</div>
+            <div key={grupo} className="card">
+              <div className="ltitle">{grupo}</div>
               <div className="lg">
                 {visibles.map(it=>{
                   const resaltado = isOn(it.id) || placaAlAire===it.placa;
@@ -830,7 +847,6 @@ function LaunchPanel({sec,gameState,goTo,controls}){
             </div>
           );
         })}
-      </div>
     </div>
   );
 }

@@ -11,6 +11,8 @@ import DueloBigscreen from "./DueloBigscreen";
 import LogoCampana from "../components/LogoCampana";
 import LogoJuego from "../components/LogoJuego";
 import QrEsquina from "../components/QrEsquina";
+import LienzoPantalla from "../lienzo/LienzoPantalla";
+import { useLienzo } from "../lienzo/useLienzo";
 import { QrDeJuego } from "../components/QrDeJuego";
 import { PLACA_DE_JUEGO, QR_DE_JUEGO, QR_DE_PLACA, usePantallaLogo, usePantallaMensaje, usePantallaQr } from "../hooks/usePantallaQr";
 import { useTriviaAccumulated, useTriviaQuestion, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
@@ -672,7 +674,14 @@ export function PalabraScreen({ sessionId, demoRound = null }) {
   // contenido vive en `arma_palabra_rounds`, no en game_state, así que sin esto
   // la pantalla no se puede previsualizar. En producción llega siempre null.
   const round = demoRound ?? roundVivo;
+  // Diseñador → Juegos → Arma la palabra: una pantalla editada en el lienzo
+  // reemplaza a la de fábrica de abajo; sin lienzo guardado se ve la de siempre.
+  const lienzo = useLienzo("palabra");
+  const datos = { palabra: round?.target_word, ganadores: round?.winner_group,
+    qrUrl: `${window.location.origin}/?view=games` };
+  const enLienzo = (estado) => <LienzoPantalla pantalla={lienzo[estado]} datos={datos} juego="palabra"/>;
 
+  if (!round && lienzo.preparando) return enLienzo("preparando");
   if (!round) return (
     <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
       Preparando la ronda…
@@ -690,6 +699,7 @@ export function PalabraScreen({ sessionId, demoRound = null }) {
   );
 
   // ── Ganador ──
+  if (round.status === "finished" && round.winner_group?.length && lienzo.ganadores) return enLienzo("ganadores");
   if (round.status === "finished" && round.winner_group?.length) {
     const grupo = round.winner_group;
     return (
@@ -736,6 +746,9 @@ export function PalabraScreen({ sessionId, demoRound = null }) {
   // «ronda en curso» y la pantalla seguía pidiendo a la sala que formara la
   // palabra VIEJA, mientras los celulares ya decían que la ronda había cerrado.
   // El juego sigue al aire: por eso es el standby del juego y no el logo del bar.
+  if (round.status !== "playing" && lienzo["entre-rondas"]) return (
+    enLienzo("entre-rondas")
+  );
   if (round.status !== "playing") return (
     <div style={{position:"absolute",inset:0,
       background:"radial-gradient(ellipse at center,rgba(168,85,247,.1),#08040F 70%)",
@@ -753,6 +766,9 @@ export function PalabraScreen({ sessionId, demoRound = null }) {
   );
 
   // ── Ronda en curso: la palabra manda la pantalla ──
+  if (lienzo["en-juego"]) return (
+    enLienzo("en-juego")
+  );
   return (
     <div style={{position:"absolute",inset:0,
       background:"radial-gradient(ellipse at center,rgba(168,85,247,.14),#08040F 70%)",
@@ -884,6 +900,8 @@ export function PlacaScreen({ logo, gameState }) {
   // gameState.active_placa: id de la placa
   // gameState.placa_custom: { emoji, title, subtitle, grad, bg, glow, border }
   const custom = gameState?.placa_custom;
+  // Diseñador → Juegos → Arma la palabra → Convocatoria: pantalla del editor.
+  const lienzoPalabra = useLienzo("palabra");
 
   const PLACAS = {
     logo_animado: { emoji:null, useLogoAnimado:true,
@@ -954,6 +972,11 @@ export function PlacaScreen({ logo, gameState }) {
   const efectos = usePantallaMensaje();
   const efecto = placaId === "mensaje_app" ? efectos.efecto
     : placaId === "promo" ? efectos.efecto_promo : "fijo";
+
+  if (placaId === "game_palabra" && lienzoPalabra.convocatoria) return (
+    <LienzoPantalla pantalla={lienzoPalabra.convocatoria} juego="palabra"
+      datos={{ qrUrl: `${window.location.origin}/?view=games` }}/>
+  );
 
   return (
     <div className="placa" style={{background:placa.bg}}>

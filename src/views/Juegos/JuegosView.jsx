@@ -5,6 +5,13 @@ import { TEAMS }             from "../../constants/theme";
 import CatalogoJuegos, { JUEGOS_CATALOGO } from "../../components/CatalogoJuegos";
 import { useSumateRound }    from "../../hooks/realtime/useSumateRound";
 import { useArmaPalabraRound } from "../../hooks/realtime/useArmaPalabraRound";
+import LienzoPantalla from "../../lienzo/LienzoPantalla";
+import { useLienzo } from "../../lienzo/useLienzo";
+
+// Diseñador → Juegos → Arma la palabra → Celular: pantallas editadas en el
+// lienzo (`cel-<estado>` en lienzo_palabra). La app relee cada 30 s: una
+// consulta por celular cada 3 s, como la TV, sería mucha carga.
+const LIENZO_CEL_CADA = 30000;
 
 // ─── Standby ──────────────────────────────────────────────────────────────────
 function GameStandby() {
@@ -414,6 +421,10 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
   // que ya están repartidas.
   const vivo = useArmaPalabraRound(demo ? null : sessionId, { userId: user?.id ?? null });
   const { round, miLetra, loading } = demo ? { loading: false, ...demo } : vivo;
+  const lienzo = useLienzo("palabra", { cada: LIENZO_CEL_CADA });
+  // Pantalla editada de este estado, si la hay; si no, la de siempre (abajo).
+  const editada = (id) => (lienzo[id]
+    ? <LienzoPantalla formato="celular" pantalla={lienzo[id]} datos={{ miLetra }}/> : null);
 
   const header = (
     <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Arma la palabra</h3></div>
@@ -427,7 +438,7 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
     </div>
   );
 
-  if (!round) return (
+  if (!round) return editada("cel-sin-ronda") || (
     <div>{header}
       <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
         Todavía no arrancó ninguna ronda.
@@ -439,7 +450,7 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
   if (round.status !== "playing") {
     const grupo = round.winner_group || [];
     const gane  = grupo.some((g) => g.user_id === user?.id);
-    if (round.status === "finished" && gane) return (
+    if (round.status === "finished" && gane) return editada("cel-ganaron") || (
       <div>{header}
         <div style={{
           textAlign:"center", padding:"34px 20px", borderRadius:20,
@@ -456,6 +467,8 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
         </div>
       </div>
     );
+    const otra = editada(round.status === "finished" ? "cel-terminada" : "cel-cerrada");
+    if (otra) return otra;
     return (
       <div>{header}
         <div style={{
@@ -480,6 +493,8 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
   // La PALABRA no se dibuja acá: vive sólo en la pantalla gigante, igual que el
   // objetivo de Sumate. `round.target_word` llega en el estado de la ronda
   // (lo necesitan /tv y el panel) pero esta vista no lo renderiza nunca.
+  const enJuego = editada("cel-tu-letra");
+  if (enJuego) return enJuego;
   return (
     <div>
       {header}
@@ -585,6 +600,12 @@ function TriviaProximamenteCard() {
  * ahí valdrá la pena unificar las tres.
  */
 function PalabraProximamenteCard() {
+  const lienzo = useLienzo("palabra", { cada: LIENZO_CEL_CADA });
+  if (lienzo["cel-anuncio"]) return (
+    <div style={{ marginBottom: 14 }}>
+      <LienzoPantalla formato="celular" pantalla={lienzo["cel-anuncio"]}/>
+    </div>
+  );
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{
