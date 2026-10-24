@@ -359,6 +359,13 @@ export function RaffleScreen({ logo, gameState }) {
     prize: gameState.raffle_prize,
   } : null);
 
+  // Diseñador → Juegos → Rey del Orto: la pantalla editada de cada estado
+  // reemplaza a la de fábrica; sin lienzo guardado se ve la de siempre.
+  const lienzo = useLienzo("rey");
+  const enLienzo = (estado) => lienzo[estado] ? <LienzoPantalla pantalla={lienzo[estado]} juego="rey"
+    datos={{ vivo: true, cuenta: cd, ganador: winner, motivo: cancelMessage || motivoCancelacionPublico(null),
+      qrUrl: `${window.location.origin}/?view=games` }}/> : null;
+
   const [bg, setBg] = useState("#08040F");
   const strobeRef = useRef(null);
   const iRef      = useRef(0);
@@ -373,6 +380,7 @@ export function RaffleScreen({ logo, gameState }) {
   }, [isStrobe]);
 
   if (isWinner) {
+    if (winner && lienzo.ganador) return enLienzo("ganador");
     if (!winner) return (
       <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
         No hay resultado disponible.
@@ -409,6 +417,7 @@ export function RaffleScreen({ logo, gameState }) {
   // Sin timeout a propósito: se queda hasta que el operador vuelva a lanzar
   // (→ estroboscópico), abra una ronda nueva (→ reposo) o cierre el juego
   // (→ DJ Democracy). Ninguna transición automática sorprende al bar.
+  if (isCancelled && lienzo.cancelado) return enLienzo("cancelado");
   if (isCancelled) return (
     <div className="rey rey-cancel" style={{background:"#08040F"}}>
       <Orbs colors={["rgba(255,214,0,.07)","rgba(255,45,120,.05)","rgba(155,47,255,.05)"]}/>
@@ -429,6 +438,7 @@ export function RaffleScreen({ logo, gameState }) {
   // raffle_state='idle' con la capa todavia montada (el admin cancelo, o
   // active_game quedo en 'rey del orto' sin sorteo lanzado): antes esto caia
   // en el estroboscopico y la pantalla gigante parpadeaba sin fin.
+  if (!isStrobe && lienzo.listo) return enLienzo("listo");
   if (!isStrobe) return (
     <div className="rey" style={{background:"#08040F"}}>
       <Orbs colors={["rgba(255,45,120,.08)","rgba(255,214,0,.06)","rgba(155,47,255,.05)"]}/>
@@ -436,6 +446,7 @@ export function RaffleScreen({ logo, gameState }) {
     </div>
   );
 
+  if (lienzo.sorteo) return enLienzo("sorteo");
   return (
     <div className="rey" style={{background:bg}}>
       <Orbs colors={["rgba(255,45,120,.08)","rgba(255,214,0,.06)","rgba(155,47,255,.05)"]}/>
@@ -462,6 +473,15 @@ export function TriviaScreen({ gameState, sessionId, demo = null }) {
   const bataPct = pcts?.batata ?? 50;
   const membPct = pcts?.membrillo ?? 50;
   const winner = gameState?.trivia_winner_team;
+  // Diseñador → Juegos → Desafío Demente: pantalla editada por estado.
+  const lienzo = useLienzo("trivia");
+  const estadoLienzo = (phase === "idle" || !roundId) ? "preparando"
+    : phase === "finished" ? "final" : phase === "revealed" ? "respuesta" : "pregunta";
+  if (lienzo[estadoLienzo]) return (
+    <LienzoPantalla pantalla={lienzo[estadoLienzo]} juego="trivia" datos={{ vivo: true, numero: questionIdx + 1,
+      pregunta: question, revelada: phase === "revealed", pcts, ganador: winner, aciertos: accumulated,
+      qrUrl: `${window.location.origin}/?view=games` }}/>
+  );
 
   // Reposo CON el juego en el aire: es donde queda la TV después de "🔁 Nueva
   // partida", mientras el operador carga las preguntas de la siguiente. Sin
@@ -586,6 +606,16 @@ export function SumaScreen({ sessionId, demoRound = null }) {
   // pueden previsualizar, porque su contenido no está en game_state. En
   // producción llega siempre null y manda la ronda real.
   const round = demoRound ?? roundVivo;
+  // Diseñador → Juegos → Sumate: pantalla editada por estado (sin ella, la de siempre).
+  const lienzo = useLienzo("suma");
+  const estadoLienzo = !round ? "preparando"
+    : round.status === "finished" && round.winner_group?.length ? "ganadores"
+    : round.status === "cancelled" ? "cerrada" : "en-juego";
+  if (lienzo[estadoLienzo]) return (
+    <LienzoPantalla pantalla={lienzo[estadoLienzo]} juego="suma" datos={{ vivo: true,
+      objetivo: typeof round?.target_number === "number" ? round.target_number : null, ganadores: round?.winner_group,
+      qrUrl: `${window.location.origin}/?view=games` }}/>
+  );
 
   if (!round) return (
     <div className="screen" style={{display:"grid",placeItems:"center",color:"rgba(240,232,255,.35)"}}>
@@ -896,12 +926,16 @@ const PALETA_PLACA = {
   pt:      { deep:"#02001A", mid:"#05003D", glow:"rgba(61,107,255,.5)", border:"rgba(123,77,255,.3)" }, // azul / violeta
 };
 
+// Placa de anuncio → juego cuyo lienzo trae la Convocatoria editada.
+const LIENZO_DE_PLACA = { game_rey: "rey", game_trivia: "trivia", game_suma: "suma", game_palabra: "palabra" };
+
 export function PlacaScreen({ logo, gameState }) {
   // gameState.active_placa: id de la placa
   // gameState.placa_custom: { emoji, title, subtitle, grad, bg, glow, border }
   const custom = gameState?.placa_custom;
-  // Diseñador → Juegos → Arma la palabra → Convocatoria: pantalla del editor.
-  const lienzoPalabra = useLienzo("palabra");
+  // Diseñador → Juegos → <juego> → Convocatoria: pantalla del editor.
+  const juegoPlaca = LIENZO_DE_PLACA[gameState?.active_placa] || null;
+  const lienzoPlaca = useLienzo(juegoPlaca);
 
   const PLACAS = {
     logo_animado: { emoji:null, useLogoAnimado:true,
@@ -973,9 +1007,9 @@ export function PlacaScreen({ logo, gameState }) {
   const efecto = placaId === "mensaje_app" ? efectos.efecto
     : placaId === "promo" ? efectos.efecto_promo : "fijo";
 
-  if (placaId === "game_palabra" && lienzoPalabra.convocatoria) return (
-    <LienzoPantalla pantalla={lienzoPalabra.convocatoria} juego="palabra"
-      datos={{ qrUrl: `${window.location.origin}/?view=games` }}/>
+  if (juegoPlaca && lienzoPlaca.convocatoria) return (
+    <LienzoPantalla pantalla={lienzoPlaca.convocatoria} juego={juegoPlaca}
+      datos={{ vivo: true, qrUrl: `${window.location.origin}/?view=games` }}/>
   );
 
   return (

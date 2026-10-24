@@ -17,10 +17,16 @@ import { nota } from "./controles";
  * Teclado (con el foco fuera de los campos): flechas, Supr/Borrar, Ctrl+D
  * duplicar, Ctrl+Z deshacer, Ctrl+Y / Ctrl+Shift+Z rehacer, Esc soltar.
  *
- * Trabaja sobre una copia; «Guardar» la escribe en `lienzo_<juego>` y la TV la
- * toma en ≤ 3 s. Un estado sin diseño guardado arranca desde `porDefecto`.
+ * Trabaja sobre una copia. El guardado es por pantalla: «Guardar pantalla»
+ * escribe sólo la que está a la vista en `lienzo_<juego>` (las demás quedan
+ * como estaban, con sus cambios pendientes marcados con ●) y la TV la toma en
+ * ≤ 3 s. Un estado sin diseño guardado arranca desde `porDefecto`; guardar una
+ * pantalla igual a la de fábrica borra su entrada.
  *
  * `formato`: "tv" (1920 × 1080) o "celular" (390 × 640, la sección de la app).
+ * `datos`: los datos de ejemplo de los elementos «dato», o una función
+ * `(estado) => datos` cuando cambian según la pantalla (p. ej. la respuesta
+ * revelada del Desafío).
  */
 
 const TIRADORES = [
@@ -75,16 +81,27 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
   const arrastre = useRef(null);
   const docRef = useRef(null);
   docRef.current = doc;
+  const baseRef = useRef(null);
+  baseRef.current = base;
   const estadoRef = useRef(null);
   const histRef = useRef(hist);
   histRef.current = hist;
 
   // Copia de trabajo: lo guardado o, si un estado no tiene diseño, el de fábrica.
+  // Al releer (después de guardar una pantalla, o si otro cambió el diseño)
+  // las pantallas con cambios sin guardar conservan esos cambios.
   useEffect(() => {
     if (!admin.pantallas) return;
-    const d = {};
-    for (const p of listaPantallas) d[p.id] = admin.pantallas[p.id] || normalizarPantalla(porDefecto[p.id]);
-    setDoc(d); setBase(d); setHist({ pasado: [], futuro: [] });
+    const nueva = {};
+    for (const p of listaPantallas) nueva[p.id] = admin.pantallas[p.id] || normalizarPantalla(porDefecto[p.id]);
+    const d = docRef.current, b = baseRef.current;
+    if (d && b) {
+      const conCambios = (id) => JSON.stringify(d[id]) !== JSON.stringify(b[id]);
+      setDoc(Object.fromEntries(listaPantallas.map((p) => [p.id, conCambios(p.id) ? d[p.id] : nueva[p.id]])));
+    } else {
+      setDoc(nueva); setHist({ pasado: [], futuro: [] });
+    }
+    setBase(nueva);
   }, [admin.pantallas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -98,13 +115,18 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
   }, [doc !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pantalla = doc?.[estado];
+  const datosEstado = typeof datos === "function" ? datos(estado) : datos;
   estadoRef.current = estado;
   const cambiarAyudas = (patch) => setAyudas((g) => {
     const n = { ...g, ...patch };
     try { localStorage.setItem(PREF_AYUDAS, JSON.stringify(n)); } catch { /* sólo en memoria */ }
     return n;
   });
-  const sucio = useMemo(() => doc && base && JSON.stringify(doc) !== JSON.stringify(base), [doc, base]);
+  // El guardado es por pantalla: `sucias` son las que tienen cambios sin guardar.
+  const sucias = useMemo(() => new Set(doc && base
+    ? listaPantallas.filter((p) => JSON.stringify(doc[p.id]) !== JSON.stringify(base[p.id])).map((p) => p.id) : []),
+  [doc, base, listaPantallas]);
+  const sucio = sucias.has(estado);
 
   // ── Cambios con historial ────────────────────────────────────────────────
   const cambiar = useCallback((fn, { historial = true } = {}) => {
@@ -285,11 +307,17 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
   }, [sel, estado, libPara, cambiarElemento, accion, deshacer, rehacer]);
 
   // ── Guardar / restablecer ───────────────────────────────────────────────
+  // Guarda SÓLO la pantalla a la vista. Si quedó igual a la de fábrica, se
+  // borra su entrada: la TV vuelve a la pantalla original del código.
   const guardar = async () => {
     setGuardando(true); setAviso(null);
+    const nombre = listaPantallas.find((p) => p.id === estado)?.nombre || estado;
     try {
-      await admin.guardar({ ...(admin.pantallas || {}), ...doc });
-      setAviso({ ok: true, text: "Guardado. La TV lo toma en unos segundos." });
+      const resto = { ...(admin.pantallas || {}) };
+      delete resto[estado];
+      const original = JSON.stringify(doc[estado]) === JSON.stringify(normalizarPantalla(porDefecto[estado]));
+      await admin.guardar(original ? resto : { ...resto, [estado]: doc[estado] });
+      setAviso({ ok: true, text: original ? `«${nombre}» volvió al diseño original.` : `«${nombre}» guardada. La TV la toma en unos segundos.` });
     } catch (e) { setAviso({ ok: false, text: e.message }); }
     finally { setGuardando(false); }
   };
@@ -319,7 +347,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
       <div style={{ position: "absolute", left: 0, top: 0, width: ANCHO, height: ALTO, transformOrigin: "0 0", zIndex: 2,
         transform: `scale(${escala})`, visibility: escala ? "visible" : "hidden" }}>
         {pantalla.elementos.map((el, i) => (
-          <ElementoLienzo key={el.id} el={el} datos={datos} z={i + 1}
+          <ElementoLienzo key={el.id} el={el} datos={datosEstado} z={i + 1}
             props={{
               onPointerDown: (e) => empezar(e, el, "mover"),
               onDoubleClick: () => { if (el.tipo === "texto") setEnfocar((n) => n + 1); },
@@ -349,10 +377,11 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
       {/* Barra: pantallas del juego + herramientas */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {listaPantallas.map((p) => (
-          <button key={p.id} type="button" className="btn" onClick={() => { setEstado(p.id); setSel(null); }}
+          <button key={p.id} type="button" className="btn" onClick={() => { setEstado(p.id); setSel(null); setAviso(null); }}
+            title={sucias.has(p.id) ? "Tiene cambios sin guardar" : undefined}
             style={{ ...btn, background: estado === p.id ? "rgba(155,47,255,.28)" : "rgba(240,232,255,.04)",
               border: `1px solid ${estado === p.id ? "#9B2FFF" : "rgba(240,232,255,.14)"}`, color: "#F0E8FF" }}>
-            {p.nombre}
+            {p.nombre}{sucias.has(p.id) && <span style={{ color: "#FFD600" }}> ●</span>}
           </button>
         ))}
         <span style={{ width: 1, alignSelf: "stretch", background: "rgba(240,232,255,.14)" }}/>
@@ -385,9 +414,11 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
         )}
         <span style={{ flex: 1 }}/>
         {aviso && <span role={aviso.ok ? "status" : "alert"} style={{ fontSize: 11, color: aviso.ok ? "#00F5A0" : "#FCA5A5" }}>{aviso.text}</span>}
-        {sucio && !aviso && <span style={{ ...nota, color: "#FFD600" }}>Cambios sin guardar</span>}
-        <button type="button" className="btn btn-p" style={{ ...btn, padding: "7px 16px" }} disabled={!sucio || guardando} onClick={guardar}>
-          {guardando ? "Guardando…" : "Guardar"}
+        {sucio && !aviso && <span style={{ ...nota, color: "#FFD600" }}>Esta pantalla tiene cambios sin guardar</span>}
+        {!sucio && !aviso && sucias.size > 0 && <span style={{ ...nota, color: "#FFD600" }}>Hay pantallas con cambios sin guardar (●)</span>}
+        <button type="button" className="btn btn-p" style={{ ...btn, padding: "7px 16px" }} disabled={!sucio || guardando} onClick={guardar}
+          title="Guarda sólo la pantalla que estás viendo">
+          {guardando ? "Guardando…" : "Guardar pantalla"}
         </button>
       </div>
 
@@ -399,7 +430,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
           {cel ? <MarcoCelular>{lienzo}</MarcoCelular> : lienzo}
           <div style={{ ...nota, marginTop: 6 }}>
             Clic para elegir · arrastrá para mover (Guías: líneas rosas de alineación; Alt = sin enganche) · tiradores para el tamaño (Shift = misma proporción) · flechas para mover de a 1 px (Shift = 10) ·
-            Supr borra · Ctrl+D duplica · Ctrl+Z deshace · doble clic en un texto para escribir. Las fichas muestran una palabra de ejemplo.
+            Supr borra · Ctrl+D duplica · Ctrl+Z deshace · doble clic en un texto para escribir. Los datos del juego (◆) muestran un ejemplo.
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import { FORMATOS } from "./modelo";
 import { FUENTES_CSS, cssDeTexto } from "./estilosTexto";
 import { EFECTOS_LIENZO_CSS, efectoLienzo } from "./efectos";
 import { marcarLienzo } from "./lienzoActivo";
+import { DATOS_JUEGOS, DATOS_JUEGOS_CSS } from "./datosJuegos";
 
 /**
  * Dibuja una pantalla del editor (ver modelo.js). El fondo ocupa todo el
@@ -91,7 +92,7 @@ function FichasGanadoras({ el, datos }) {
   return <FilaFichas el={el} letras={grupo.map((g) => g.assigned_letter)}/>;
 }
 
-/** Una tarjeta por ganador: avatar, nombre y su letra. */
+/** Una tarjeta por ganador: avatar, nombre y su letra (Arma la palabra) o su número (Sumate). */
 function TarjetasGanadores({ el, datos }) {
   const grupo = datos?.ganadores?.length ? datos.ganadores : GANADORES_EJEMPLO;
   const t = el.estilo.tamano;
@@ -105,7 +106,7 @@ function TarjetasGanadores({ el, datos }) {
           <div style={{ fontSize: t * 1.4, lineHeight: 1 }}>{g.avatar_emoji || "👤"}</div>
           <div style={{ ...css, textAlign: "center" }}>{g.name}</div>
           <div style={{ ...css, color: el.ficha.acento, WebkitTextFillColor: el.ficha.acento, backgroundImage: "none",
-            fontSize: t * 1.45, lineHeight: 1, textAlign: "center" }}>{g.assigned_letter}</div>
+            fontSize: t * 1.45, lineHeight: 1, textAlign: "center" }}>{g.assigned_letter ?? g.assigned_number}</div>
         </div>
       ))}
     </div>
@@ -143,9 +144,10 @@ function Qr({ el, datos }) {
 export const DATOS = {
   fichas:            { nombre: "Fichas de la palabra",  Componente: Fichas,            ayuda: "La palabra de la ronda." },
   fichasGanadoras:   { nombre: "Letras ganadoras",      Componente: FichasGanadoras,   ayuda: "Las letras del grupo que armó la palabra." },
-  tarjetasGanadores: { nombre: "Tarjetas de ganadores", Componente: TarjetasGanadores, ayuda: "Avatar, nombre y letra de cada ganador.", acento: true },
+  tarjetasGanadores: { nombre: "Tarjetas de ganadores", Componente: TarjetasGanadores, ayuda: "Avatar, nombre y letra (o número) de cada ganador.", acento: true },
   miLetra:           { nombre: "Tu letra",              Componente: MiLetra,           ayuda: "La letra que le tocó a este cliente.", sinFichas: true },
   qr:                { nombre: "QR a la app",           Componente: Qr,                ayuda: "Lleva al celular a la app. Su texto se edita, va arriba o abajo, o se oculta.", leyenda: true, sinFichas: true },
+  ...DATOS_JUEGOS,
 };
 
 function Contenido({ el, datos }) {
@@ -210,7 +212,7 @@ export function useEscalaLienzo({ ancho, alto }, soloAncho = false) {
   return [ref, escala];
 }
 
-export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS;
+export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS + DATOS_JUEGOS_CSS;
 
 /**
  * `juego`: avisa que esa pantalla trae su propio QR (ver lienzoActivo.js).

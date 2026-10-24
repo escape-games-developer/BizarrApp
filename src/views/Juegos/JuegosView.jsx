@@ -8,10 +8,22 @@ import { useArmaPalabraRound } from "../../hooks/realtime/useArmaPalabraRound";
 import LienzoPantalla from "../../lienzo/LienzoPantalla";
 import { useLienzo } from "../../lienzo/useLienzo";
 
-// Diseñador → Juegos → Arma la palabra → Celular: pantallas editadas en el
-// lienzo (`cel-<estado>` en lienzo_palabra). La app relee cada 30 s: una
-// consulta por celular cada 3 s, como la TV, sería mucha carga.
+// Diseñador → Juegos → <juego> → Celular: pantallas editadas en el lienzo
+// (`cel-<estado>` en lienzo_<juego>). La app relee cada 30 s: una consulta
+// por celular cada 3 s, como la TV, sería mucha carga.
 const LIENZO_CEL_CADA = 30000;
+
+/**
+ * `editada(id)`: la pantalla editada de ese estado del celular, con los datos
+ * en vivo del juego, o null (y se dibuja la de siempre).
+ */
+function useCelularEditado(juego, datos) {
+  const lienzo = useLienzo(juego, { cada: LIENZO_CEL_CADA });
+  return function editada(id) {
+    return lienzo[id]
+      ? <LienzoPantalla formato="celular" pantalla={lienzo[id]} datos={{ vivo: true, ...datos }}/> : null;
+  };
+}
 
 // ─── Standby ──────────────────────────────────────────────────────────────────
 function GameStandby() {
@@ -53,15 +65,16 @@ function ReyDelOrto({ user, gameState }) {
   const { state, color, dark, isStrobe, isWinner, isCancelled } = useRaffle(gameState);
   const iWon = isWinner && user?.id && gameState?.raffle_winner_id === user.id;
   const prize = gameState?.raffle_prize || null;
+  const editada = useCelularEditado("rey", { premio: prize });
 
   // ── Sorteo en curso: SÓLO los colores, como la pantalla gigante ──────────
   // Sin número ni texto: la cuenta regresiva vive en la pantalla gigante.
-  if (isStrobe) return (
+  if (isStrobe) return editada("cel-sorteo") || (
     <div aria-label="Sorteando" style={{ ...SECCION_COMPLETA, background: dark ? "#000" : color }} />
   );
 
   // ── Resultado: verde el que ganó, rojo los demás ──────────────────────────
-  if (isWinner) return (
+  if (isWinner) return editada(iWon ? "cel-ganaste" : "cel-perdiste") || (
     <div style={{
       ...SECCION_COMPLETA,
       background: iWon ? "#16A34A" : "#DC2626",
@@ -87,6 +100,8 @@ function ReyDelOrto({ user, gameState }) {
     </div>
   );
 
+  const reposo = state === "idle" ? editada("cel-esperando") : isCancelled ? editada("cel-cancelado") : null;
+  if (reposo) return reposo;
   return (
     <div>
       <div className="sec-hdr">
@@ -151,6 +166,20 @@ function DesafioDemente({ user, sessionId, gameState, demo = null }) {
   const { myVote, vote, hasVoted, sending, error } = demo
     ? { myVote: demo.myVote ?? null, vote: () => {}, hasVoted: demo.myVote != null, sending: false, error: null }
     : voter;
+  const editada = useCelularEditado("trivia", {
+    equipo: user?.team ?? null, numero: questionIdx + 1, pregunta: question, revelada: triviaState === "revealed",
+    miVoto: myVote, votar: vote, puedeVotar: !!t && !hasVoted && !sending && triviaState === "active",
+  });
+  // El error del voto va debajo de la pantalla editada: no es un elemento del lienzo.
+  const conError = (pantalla) => pantalla && (
+    <div>{pantalla}{error && <div style={{marginTop:10,textAlign:"center",fontSize:12,color:"#FCA5A5"}}>{error}</div>}</div>
+  );
+  const estadoEditado = (triviaState === "idle" || !question) ? "cel-esperando"
+    : triviaState === "finished"
+      ? (!gameState?.trivia_winner_team ? "cel-empate" : t && gameState.trivia_winner_team === user?.team ? "cel-final-gano" : "cel-final-perdio")
+      : triviaState === "revealed" ? "cel-respuesta" : hasVoted ? "cel-votaste" : "cel-pregunta";
+  const enLienzo = conError(editada(estadoEditado));
+  if (enLienzo) return enLienzo;
 
   if (triviaState === "idle" || !question) return (
     <div>
@@ -282,6 +311,7 @@ function SumaElNumero({ user, sessionId, demo = null }) {
   // ningún número: sólo muestra el que dio el servidor.
   const vivo = useSumateRound(demo ? null : sessionId, { userId: user?.id ?? null });
   const { round, miNumero, miNumeroRes, loading } = demo ? { loading: false, miNumeroRes: null, ...demo } : vivo;
+  const editada = useCelularEditado("suma", { miNumero });
 
   const header = (
     <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔢</span><h3>Sumate que sumamos</h3></div>
@@ -310,7 +340,7 @@ function SumaElNumero({ user, sessionId, demo = null }) {
     </div>
   );
 
-  if (!round) return (
+  if (!round) return editada("cel-sin-ronda") || (
     <div>{header}
       <div style={{textAlign:"center",padding:"48px 20px",fontSize:12,color:"rgba(245,230,192,.3)"}}>
         Todavía no arrancó ninguna ronda.
@@ -323,7 +353,7 @@ function SumaElNumero({ user, sessionId, demo = null }) {
     const grupo = round.winner_group || [];
     const gane  = grupo.some((g) => g.user_id === user?.id);
 
-    if (round.status === "finished" && gane) return (
+    if (round.status === "finished" && gane) return editada("cel-ganaron") || (
       <div>{header}
         <div style={{
           textAlign:"center", padding:"34px 20px", borderRadius:20,
@@ -342,11 +372,11 @@ function SumaElNumero({ user, sessionId, demo = null }) {
     );
 
     if (round.status === "finished") {
-      return aviso("🏁", "Ronda terminada", "Encontraron la combinación correcta.");
+      return editada("cel-terminada") || aviso("🏁", "Ronda terminada", "Encontraron la combinación correcta.");
     }
     // Cancelada: nunca hay ganador que mostrar, y el motivo técnico
     // (`cancel_reason`) es información del staff, no del cliente.
-    return aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
+    return editada("cel-cerrada") || aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
   }
 
   // ── Ronda en curso ────────────────────────────────────────────────────────
@@ -359,14 +389,11 @@ function SumaElNumero({ user, sessionId, demo = null }) {
       return aviso("📍", "No estás en la lista",
         "Verificá tu ubicación en el bar y volvé a entrar para recibir tu número.", "#FCD34D");
     }
-    if (code === "ROUND_EXPIRED" || code === "ROUND_ALREADY_CANCELLED") {
-      return aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
+    if (code === "ROUND_EXPIRED" || code === "ROUND_ALREADY_CANCELLED" || code === "ROUND_NOT_FOUND") {
+      return editada("cel-cerrada") || aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
     }
     if (code === "ROUND_ALREADY_FINISHED") {
-      return aviso("🏁", "Ronda terminada", "Encontraron la combinación correcta.");
-    }
-    if (code === "ROUND_NOT_FOUND") {
-      return aviso("🏁", "La ronda terminó.", "Esperá al próximo lanzamiento.");
+      return editada("cel-terminada") || aviso("🏁", "Ronda terminada", "Encontraron la combinación correcta.");
     }
     if (miNumeroRes && !miNumeroRes.ok) {
       // Fallo técnico (red, permisos). Antes esto dejaba "TU NÚMERO …" colgado
@@ -387,6 +414,8 @@ function SumaElNumero({ user, sessionId, demo = null }) {
   // Durante la ronda el celular muestra SÓLO el número propio. El objetivo y
   // la consigna viven exclusivamente en la Pantalla Gigante: ni objetivo, ni
   // números ajenos, ni instrucciones acá.
+  const enJuego = editada("cel-tu-numero");
+  if (enJuego) return enJuego;
   return (
     <div>
       {header}
@@ -421,10 +450,8 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
   // que ya están repartidas.
   const vivo = useArmaPalabraRound(demo ? null : sessionId, { userId: user?.id ?? null });
   const { round, miLetra, loading } = demo ? { loading: false, ...demo } : vivo;
-  const lienzo = useLienzo("palabra", { cada: LIENZO_CEL_CADA });
   // Pantalla editada de este estado, si la hay; si no, la de siempre (abajo).
-  const editada = (id) => (lienzo[id]
-    ? <LienzoPantalla formato="celular" pantalla={lienzo[id]} datos={{ miLetra }}/> : null);
+  const editada = useCelularEditado("palabra", { miLetra });
 
   const header = (
     <div className="sec-hdr"><span style={{ fontSize: 20 }}>🔤</span><h3>Arma la palabra</h3></div>
@@ -544,6 +571,8 @@ function FormaLaPalabra({ user, sessionId, demo = null }) {
  * deshabilitado, para que se lea distinto de un juego en curso.
  */
 function TriviaProximamenteCard() {
+  const editada = useCelularEditado("trivia", {})("cel-anuncio");
+  if (editada) return <div style={{ marginBottom: 14 }}>{editada}</div>;
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{
@@ -600,12 +629,8 @@ function TriviaProximamenteCard() {
  * ahí valdrá la pena unificar las tres.
  */
 function PalabraProximamenteCard() {
-  const lienzo = useLienzo("palabra", { cada: LIENZO_CEL_CADA });
-  if (lienzo["cel-anuncio"]) return (
-    <div style={{ marginBottom: 14 }}>
-      <LienzoPantalla formato="celular" pantalla={lienzo["cel-anuncio"]}/>
-    </div>
-  );
+  const editada = useCelularEditado("palabra", {})("cel-anuncio");
+  if (editada) return <div style={{ marginBottom: 14 }}>{editada}</div>;
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{
@@ -663,8 +688,13 @@ const PROXIMAMENTE = {
                color: "#FF2D95", rgb: "255,45,149", bajada: "Cuando abra la convocatoria vas a poder postularte 🎤" },
 };
 
+// Placa anunciada → juego cuyo lienzo trae la card editada (`cel-anuncio`).
+const LIENZO_DE_ANUNCIO = { game_rey: "rey", game_suma: "suma" };
+
 function ProximamenteCard({ placa }) {
   const p = PROXIMAMENTE[placa];
+  const editada = useCelularEditado(LIENZO_DE_ANUNCIO[placa] || null, {})("cel-anuncio");
+  if (editada) return <div style={{ marginBottom: 14 }}>{editada}</div>;
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{

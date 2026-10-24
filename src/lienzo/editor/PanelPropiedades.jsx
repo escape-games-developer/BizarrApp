@@ -67,6 +67,14 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
         </Seccion>
       )}
 
+      {dato?.plantilla && (
+        <Seccion titulo="Texto">
+          <input className="inp" value={el.texto} maxLength={120} onChange={(e) => set({ texto: e.target.value })}
+            placeholder="{}" style={{ margin: 0 }}/>
+          <div style={nota}>{"{}"} es el dato del juego: «Premio: {"{}"}» se ve «Premio: 2×1». Vacío = sólo el dato.</div>
+        </Seccion>
+      )}
+
       {el.tipo === "imagen" && (
         <Seccion titulo="Imagen">
           <button type="button" className="btn btn-g" style={{ padding: "6px 10px", fontSize: 11, justifySelf: "start" }}
@@ -110,16 +118,16 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
         </Seccion>
       )}
 
-      {(el.tipo === "texto" || esDato) && (
+      {(el.tipo === "texto" || (esDato && !dato?.sinTexto)) && (
         <ControlesTexto estilo={el.estilo} onCambiar={(estilo) => set({ estilo })}
-          titulo={!esDato ? "Formato" : dato?.leyenda ? "Formato del texto" : "Formato de las letras"}/>
+          titulo={!esDato ? "Formato" : dato?.leyenda || dato?.plantilla ? "Formato del texto" : "Formato de las letras"}/>
       )}
 
       {esDato && !dato?.sinFichas && (
         <Seccion titulo={dato?.acento ? "Tarjetas" : "Fichas"}>
           <Fila label="Fondo"><ColorInput value={el.ficha.fondo} onChange={(v) => set({ ficha: { ...el.ficha, fondo: v } })}/></Fila>
           <Fila label="Borde"><ColorInput value={el.ficha.borde} onChange={(v) => set({ ficha: { ...el.ficha, borde: v } })}/></Fila>
-          {dato?.acento && <Fila label="Letra"><ColorInput value={el.ficha.acento} onChange={(v) => set({ ficha: { ...el.ficha, acento: v } })}/></Fila>}
+          {dato?.acento && <Fila label={dato.acentoNombre || "Letra"}><ColorInput value={el.ficha.acento} onChange={(v) => set({ ficha: { ...el.ficha, acento: v } })}/></Fila>}
         </Seccion>
       )}
 

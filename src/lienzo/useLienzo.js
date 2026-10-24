@@ -45,12 +45,16 @@ export function refrescarLienzo(juego) {
 
 /**
  * `{ <estado>: pantalla }` — vacío = la pantalla de fábrica del código.
+ * `juego` null: no consulta nada (devuelve {}).
  * `cada`: la TV relee cada 3 s; la app del cliente usa algo más largo para no
  * sumar una consulta por celular cada 3 s.
  */
 export function useLienzo(juego, { cada = CADA_MS } = {}) {
-  const [pantallas, setPantallas] = useState(() => stores[juego]?.valor || {});
-  useEffect(() => suscribir(juego, setPantallas, cada), [juego, cada]);
+  const [pantallas, setPantallas] = useState(() => (juego && stores[juego]?.valor) || {});
+  useEffect(() => {
+    if (!juego) { setPantallas({}); return undefined; }
+    return suscribir(juego, setPantallas, cada);
+  }, [juego, cada]);
   return pantallas;
 }
 

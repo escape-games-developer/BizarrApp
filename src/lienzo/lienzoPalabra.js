@@ -1,4 +1,5 @@
 import { FONDO_BASE } from "./modelo";
+import { celAnuncio, celFin, celGanaron, celMensaje, celTitulo, convocatoria, preparando, qr, tarjeta, txt } from "./juegos/piezas";
 
 /**
  * Diseño de fábrica de las pantallas de Arma la palabra en el editor: calca
@@ -10,7 +11,6 @@ import { FONDO_BASE } from "./modelo";
  */
 
 const LOGO_JUEGO = "/placas/Arma_la_palabra-removebg-preview.png";
-const LOGO_APP = "/logo.png";
 
 export const PANTALLAS_PALABRA = [
   { id: "convocatoria", nombre: "Convocatoria", vista: "convocatoria" },
@@ -20,31 +20,9 @@ export const PANTALLAS_PALABRA = [
   { id: "ganadores",    nombre: "Ganadores",    vista: "performance" },
 ];
 
-/** QR del juego en pantalla, en el mismo lugar que el QR de la TV (abajo a la izquierda). */
-const qr = (texto = "Escaneá para participar") => ({
-  id: "qr", tipo: "dato", dato: "qr", nombre: "QR a la app", texto, x: 30, y: 790, w: 310, h: 262,
-  estilo: { fuente: "grotesk", tamano: 22, peso: 700, color: "#F0E8FF", sombra: { color: "rgba(0,0,0,.8)", x: 0, y: 2, blur: 10 } },
-});
-
 export const PALABRA_POR_DEFECTO = {
-  convocatoria: {
-    fondo: { ...FONDO_BASE },
-    elementos: [
-      { id: "logo", tipo: "imagen", nombre: "Logo del juego", src: LOGO_JUEGO, ajuste: "contain",
-        x: 173, y: 151, w: 1574, h: 778, efecto: "latido" },
-      { id: "logo-app", tipo: "imagen", nombre: "Logo de BizarrApp", src: LOGO_APP, ajuste: "contain",
-        x: 64, y: 64, w: 200, h: 130, efecto: "campana" },
-      qr(),
-    ],
-  },
-  preparando: {
-    fondo: { ...FONDO_BASE },
-    elementos: [
-      { id: "preparando", tipo: "texto", nombre: "Preparando", texto: "Preparando la ronda…", x: 460, y: 500, w: 1000, h: 80,
-        estilo: { fuente: "grotesk", tamano: 36, peso: 400, color: "rgba(240,232,255,.35)" } },
-      qr(),
-    ],
-  },
+  convocatoria: convocatoria(LOGO_JUEGO),
+  preparando: preparando(),
   "en-juego": {
     fondo: { ...FONDO_BASE },
     elementos: [
@@ -107,45 +85,13 @@ export const PANTALLAS_PALABRA_CEL = [
   { id: "cel-cerrada",   nombre: "Cerrada por el staff" },
 ];
 
-const CREMA = (a) => `rgba(245,230,192,${a})`;
-const titulo = () => ({ id: "titulo", tipo: "texto", nombre: "Título de la sección", texto: "🔤 Arma la palabra",
-  x: 0, y: 0, w: 390, h: 34, estilo: { fuente: "syne", tamano: 18, peso: 800, color: "#FFD700", alinear: "left" } });
-const tarjeta = (id, y, h, relleno, borde, radio) => ({ id, tipo: "forma", nombre: "Tarjeta", x: 0, y, w: 390, h,
-  relleno, borde: { color: borde, ancho: 1 }, radio });
-const txt = (id, nombre, texto, y, h, estilo, x = 16, w = 358) => ({ id, tipo: "texto", nombre, texto, x, y, w, h, estilo });
-const fin = (mensaje) => ({
-  fondo: { ...FONDO_BASE },
-  elementos: [
-    titulo(),
-    tarjeta("tarjeta", 50, 160, { color: "rgba(255,255,255,.04)" }, "rgba(255,255,255,.1)", 18),
-    txt("icono", "Ícono", "🏁", 76, 50, { fuente: "dmsans", tamano: 40, peso: 400 }),
-    txt("titulo-fin", "Ronda terminada", "Ronda terminada", 132, 26, { fuente: "syne", tamano: 16, peso: 800, color: CREMA(.6) }),
-    txt("mensaje", "Mensaje", mensaje, 162, 24, { fuente: "dmsans", tamano: 12.5, peso: 400, color: CREMA(.4) }),
-  ],
-});
+const titulo = () => celTitulo("🔤 Arma la palabra");
+const fin = (mensaje) => celFin("🔤 Arma la palabra", "Ronda terminada", mensaje);
 
 Object.assign(PALABRA_POR_DEFECTO, {
-  "cel-anuncio": {
-    fondo: { ...FONDO_BASE },
-    elementos: [
-      tarjeta("tarjeta", 0, 290, { color: "rgba(168,85,247,.12)", degradado: { colores: ["rgba(168,85,247,.12)", "rgba(255,45,120,.08)"], angulo: 135 } },
-        "rgba(168,85,247,.4)", 18),
-      { id: "logo", tipo: "imagen", nombre: "Logo del juego", src: LOGO_JUEGO, ajuste: "contain", x: 135, y: 18, w: 120, h: 120, opacidad: 0.85 },
-      txt("nombre", "Nombre del juego", "Arma la palabra", 144, 28, { fuente: "syne", tamano: 18, peso: 900, color: "#C77DFF" }),
-      txt("bajada", "Bajada", "Encontrá a los que tienen las otras letras 🔤", 174, 20, { fuente: "dmsans", tamano: 12, peso: 400, color: CREMA(.45) }),
-      { id: "boton", tipo: "forma", nombre: "Botón Próximamente", x: 16, y: 206, w: 358, h: 46,
-        relleno: { color: "rgba(255,255,255,.04)" }, borde: { color: "rgba(255,255,255,.08)", ancho: 1 }, radio: 12 },
-      txt("boton-texto", "Texto del botón", "Próximamente", 206, 46, { fuente: "syne", tamano: 13, peso: 700, color: CREMA(.35) }),
-      txt("preparate", "Preparate", "⏳ Preparate — arranca en breve", 262, 18, { fuente: "dmsans", tamano: 11, peso: 400, color: "rgba(255,215,0,.45)" }),
-    ],
-  },
-  "cel-sin-ronda": {
-    fondo: { ...FONDO_BASE },
-    elementos: [
-      titulo(),
-      txt("mensaje", "Mensaje", "Todavía no arrancó ninguna ronda.", 84, 28, { fuente: "dmsans", tamano: 12, peso: 400, color: CREMA(.3) }),
-    ],
-  },
+  "cel-anuncio": celAnuncio({ logo: LOGO_JUEGO, nombre: "Arma la palabra", color: "#C77DFF", rgb: "168,85,247",
+    bajada: "Encontrá a los que tienen las otras letras 🔤" }),
+  "cel-sin-ronda": celMensaje("🔤 Arma la palabra", "Todavía no arrancó ninguna ronda."),
   "cel-tu-letra": {
     fondo: { ...FONDO_BASE },
     elementos: [
@@ -162,17 +108,7 @@ Object.assign(PALABRA_POR_DEFECTO, {
       txt("juntense", "Júntense", "¡Júntense y acérquense al escenario!", 326, 30, { fuente: "syne", tamano: 13.5, peso: 900, color: "#C084FC" }),
     ],
   },
-  "cel-ganaron": {
-    fondo: { ...FONDO_BASE },
-    elementos: [
-      titulo(),
-      tarjeta("tarjeta", 50, 172, { color: "rgba(0,245,160,.16)", degradado: { colores: ["rgba(0,245,160,.16)", "rgba(168,85,247,.08)"], angulo: 135 } },
-        "rgba(0,245,160,.4)", 20),
-      txt("trofeo", "Trofeo", "🏆", 76, 58, { fuente: "dmsans", tamano: 48, peso: 400 }),
-      txt("ganaron", "¡GANARON!", "¡GANARON!", 138, 32, { fuente: "syne", tamano: 22, peso: 900, color: "#00F5A0" }),
-      txt("mensaje", "Mensaje", "Armaron la palabra correctamente.", 174, 24, { fuente: "dmsans", tamano: 13, peso: 400, color: CREMA(.6) }),
-    ],
-  },
+  "cel-ganaron": celGanaron("🔤 Arma la palabra", "Armaron la palabra correctamente.", "rgba(168,85,247,.08)"),
   "cel-terminada": fin("Armaron la palabra correctamente."),
   "cel-cerrada": fin("El staff cerró la ronda."),
 });
