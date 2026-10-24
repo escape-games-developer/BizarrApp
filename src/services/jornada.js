@@ -27,7 +27,6 @@ import { supabase } from "../lib/supabase";
  *  - `raffle_prize`: configuración de la casa, no overlay.
  *  - `zocalo_active` y `screen_audio_enabled`: modos de operación de la
  *    pantalla, no un juego anterior.
- *  - `webapp_banner`: columna sin uso en el código.
  *
  * `trivia_coupon` SÍ entra (antes no): es el premio de una partida concreta,
  * y el de la noche anterior aparecía como premio de la jornada nueva.
@@ -68,6 +67,8 @@ export const CAMPOS_NEUTROS_JORNADA = Object.freeze({
   escenario_video:       null,
   // Minijuegos
   minijuego_payload:     null,
+  // Mensaje del operador al celular (Lanzar → Mensaje / Promo)
+  webapp_banner:         null,
 });
 
 /** Sesión activa. Es la que leen /tv, /pantalla y la WebApp. */

@@ -191,8 +191,7 @@ export const createEvent    = (name, sessionId = null) =>
  *
  * La limpieza no puede tumbar el arranque del evento: para cuando corre, el
  * RPC ya se ejecutó y el evento quedó en vivo. Si falla, se avisa por consola
- * y se sigue — el operador tiene el botón «Iniciar jornada» del panel Lanzar
- * para reintentar con el error a la vista.
+ * y se sigue.
  */
 export async function startEvent(eventId) {
   const res = await rpc("pantalla_start_event", { _event_id: eventId });

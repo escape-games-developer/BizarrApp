@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, supabaseAnon } from "../../lib/supabase";
-import { pushAnuncio } from "../../services/anunciosPush";
+import { pushAnuncio, pushMensaje } from "../../services/anunciosPush";
 
 /**
  * Normaliza lo que el operador escribió (o subió) en el campo de video del
@@ -642,6 +642,26 @@ export function useAdminControls(sessionId) {
              active_placa: null, placa_custom: null }),
   [update]);
 
+  // Vuelve la TV a DJ Democracy: es la capa base y aparece sola cuando no
+  // queda nada encima. Baja juego, escenario, placa y video proyectado; a
+  // diferencia de `iniciarJornada` no toca rondas, colas ni resultados.
+  const volverAlDj = useCallback(async () => {
+    await dismissActiveVideo();
+    return update({ active_game: null, active_escenario: null,
+                    active_placa: null, placa_custom: null });
+  }, [update, dismissActiveVideo]);
+
+  // Mensaje del operador al celular del cliente. Vive en `webapp_banner`
+  // (jsonb) y la WebApp lo muestra mientras esté puesto; `null` lo saca.
+  // Es independiente de la TV: no toca placas ni juegos. Cada envío lleva un
+  // id nuevo, así el cliente que cerró el anterior ve el siguiente.
+  const setMensajeCliente = useCallback(async (mensaje) => {
+    const payload = mensaje ? { ...mensaje, id: crypto.randomUUID(), sent_at: new Date().toISOString() } : null;
+    const r = await update({ webapp_banner: payload });
+    if (!r?.error && payload) pushMensaje(sessionId, payload);
+    return r;
+  }, [update, sessionId]);
+
   // ── Return — SIN gameState (ese lo da useGameState) ───────────────────────
   return {
     announceGame, activateGame, deactivateGame,
@@ -654,6 +674,6 @@ export function useAdminControls(sessionId) {
     setEscenarioVideo, setPerformanceEscenario, finishEscenarioTurn, closeEscenario,
     launchMinijuego,
     toggleZocalo, toggleScreenAudio, sendPlaca, clearPlaca,
-    projectVideo,
+    projectVideo, volverAlDj, setMensajeCliente,
   };
 }

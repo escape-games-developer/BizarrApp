@@ -25,6 +25,7 @@ import PantallaView  from "./views/Pantalla/PantallaView";
 import { prefetchPantalla } from "./views/Pantalla/pantallaPrefetch";
 import { escenarioAnunciado } from "./client/anuncios/anunciosCatalog";
 import AnuncioDestacado from "./client/anuncios/AnuncioDestacado";
+import MensajeCliente from "./client/anuncios/MensajeCliente";
 import ProfileView, { LoginView } from "./views/Perfil/ProfileView";
 import ForgotPasswordView from "./views/Auth/ForgotPasswordView";
 import { RegistroMailView, ElegirRegistroView } from "./views/Auth/RegistroMailView";
@@ -254,6 +255,8 @@ export default function BizarrApp() {
                     fontSize:16,cursor:"pointer",padding:0,lineHeight:1 }}>×</button>
               </div>
             )}
+            {/* Mensaje / promo del operador (Admin → Lanzar), arriba de toda sección. */}
+            <MensajeCliente mensaje={gameState?.webapp_banner}/>
             {/* Tipografía de Pantalla en todas las secciones menos Juegos (ver .tipo-pantalla en styles.js). */}
             <div className={view === "games" ? undefined : "tipo-pantalla"} style={{ display: "contents" }}>
               {/* Experiencia de Escenario anunciada, todavía sin convocatoria. */}

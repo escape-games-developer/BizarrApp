@@ -12,6 +12,7 @@ import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
 import { useTriviaAccumulated, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
+import { usePantallaMensaje } from "../hooks/usePantallaQr";
 import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
 import TvDesigner from "../designers/tv/TvDesigner";
@@ -28,6 +29,7 @@ import AjustesPanel from "./AjustesPanel";
 import Toggle from "./juegos/Toggle";
 import DisenadorEscenario from "./disenador/DisenadorEscenario";
 import DisenadorJuegos from "./disenador/DisenadorJuegos";
+import DisenadorPlacas from "./disenador/DisenadorPlacas";
 import { pedirDisenoDe } from "./disenador/SolapasJuegos";
 import { VotacionJuego } from "./juegos/AjustesDelJuego";
 import { useSidebarConfig } from "../hooks/useSidebarConfig";
@@ -41,7 +43,6 @@ import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
 import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
 import FtlBarometro from "../components/FtlBarometro";
-import { iniciarJornada } from "../services/jornada";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
 import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInvalida } from "../hooks/realtime/useArmaPalabraRound";
@@ -184,15 +185,16 @@ const css = `
   .tgl-lbl{font-size:11.5px;font-weight:600;}
 
   /* Grid botonera */
-  .lg{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .lg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;}
   .lg3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
-  .lbtn{border:none;border-radius:12px;padding:10px 6px;cursor:pointer;transition:all .2s;
-    display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;overflow:hidden;
+  .lbtn{border:none;border-radius:12px;padding:14px 8px;cursor:pointer;transition:all .2s;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative;overflow:hidden;
     font-family:'DM Sans',sans-serif;}
   .lbtn:active{transform:scale(.95);}
+  .lbtn:disabled{opacity:.5;cursor:wait;}
   .lbtn .lico{font-size:22px;}
-  .lbtn .llbl{font-size:9px;font-weight:700;text-align:center;line-height:1.2;}
-  .lbtn .lsts{font-size:7.5px;font-weight:600;opacity:.6;}
+  .lbtn .llbl{font-size:11px;font-weight:700;text-align:center;line-height:1.2;}
+  .lbtn .lsts{font-size:9px;font-weight:600;opacity:.6;}
   .lbtn .achip{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;
     background:#00F5A0;animation:blink 1.4s infinite;}
 
@@ -441,7 +443,6 @@ function StatusAlert({text,color,onClose}){
 // Dónde y en qué orden aparecen en el sidebar lo define SIDEBAR_MENU (sidebarMenu.js).
 const SECS = [
   {id:"launch",   icon:"🚀",label:"Lanzar",    grad:"linear-gradient(135deg,#FFD600,#FF9500)",glow:"rgba(255,214,0,.3)"},
-  {id:"placas",   icon:"🖼️", label:"Placas",    grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
   {id:"pantallaEditor",icon:"✏️",label:"DJ Democracy · Editor",labelMenu:"Editor",grad:"linear-gradient(135deg,#00E5FF,#9B2FFF)",glow:"rgba(0,229,255,.3)"},
   {id:"pantallaLive",icon:"🔴",label:"DJ Democracy · En vivo",labelMenu:"En vivo",grad:"linear-gradient(135deg,#FF2D78,#9B2FFF)",glow:"rgba(255,45,120,.3)"},
   {id:"duelo",    icon:"⚔️", label:"Duelo de Talentos", grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
@@ -461,6 +462,7 @@ const SECS = [
   // de operadores).
   {id:"disenoEscenario",icon:"🎭",label:"Diseñador de Escenario",labelMenu:"Escenario",grad:"linear-gradient(135deg,#FF2D78,#FF9500)",glow:"rgba(255,45,120,.3)"},
   {id:"disenoJuegos",icon:"🎮",label:"Diseñador de Juegos",labelMenu:"Juegos",grad:"linear-gradient(135deg,#FFD600,#A855F7)",glow:"rgba(255,214,0,.3)"},
+  {id:"disenoPlacas",icon:"🖼️",label:"Diseñador de Placas",labelMenu:"Placas",grad:"linear-gradient(135deg,#FF9500,#00E5FF)",glow:"rgba(255,149,0,.3)"},
   {id:"designerTv",icon:"🎧",label:"Diseñador DJ Democracy",labelMenu:"DJ Democracy",grad:"linear-gradient(135deg,#F97316,#FB923C)",glow:"rgba(249,115,22,.3)"},
   {id:"designerClient",icon:"📱",label:"Diseñador Cliente",labelMenu:"Cliente",grad:"linear-gradient(135deg,#9B2FFF,#00E5FF)",glow:"rgba(155,47,255,.3)"},
   {id:"clientes", icon:"🧑‍🤝‍🧑", label:"Clientes",
@@ -478,6 +480,10 @@ const FROZEN_MODULE_IDS = new Set(["karaoke"]);
 // Pantallas internas que no están en SECS: se abren desde Lanzar (y la campana)
 // y las ve quien puede ver Lanzar.
 const SUBSECCIONES = { mensajes: "launch", videos: "launch" };
+
+// Secciones que se fusionaron en otra: un operador al que le habían asignado
+// la vieja sigue entrando por la nueva. «Placas» vive ahora dentro de Lanzar.
+const SECCIONES_FUSIONADAS = { placas: "launch" };
 
 // Secciones que se le pueden asignar a un operador, agrupadas como en el
 // sidebar (los flyouts son grupos con título). Las usa «Editar usuario».
@@ -566,158 +572,264 @@ function estadoEnVivo(gameState){
   return null;
 }
 
-// Prefijo del cartel por capa: distingue un juego de una experiencia de
-// escenario y de una placa, que no son lo mismo para el operador.
-const LIVE_KIND_PREFIX = { game:"EN VIVO", escenario:"ESCENARIO", placa:"PLACA" };
+// ══════════════════════════════════════════════════════════════════════════
+// PANEL LANZAR — placas + accesos a los módulos
+// ══════════════════════════════════════════════════════════════════════════
+// Absorbe la vieja sección «Placas»: tenían las mismas botoneras repetidas.
+// Los anuncios de cada juego/experiencia se mandan con «📢 Anunciar» desde el
+// panel del módulo, que además maneja su estado.
 
-// ══════════════════════════════════════════════════════════════════════════
-// PANEL LANZAR — accesos a los módulos + estado real de la pantalla
-// ══════════════════════════════════════════════════════════════════════════
-function LaunchPanel({sec,gameState,zocaloOn,setZocaloOn,msgCount,vidCount,goTo,controls}){
-  // Comienzo de jornada. El reset vive en services/jornada.js — acá sólo se
-  // dispara y se muestra el resultado; no hay lógica de limpieza duplicada.
-  const [jornadaBusy, setJornadaBusy] = useState(false);
-  const [jornadaMsg,  setJornadaMsg]  = useState(null);
-  const arrancarJornada = async () => {
-    if (!window.confirm(
-      "¿Arrancar la jornada?\n\nLa TV vuelve a DJ Democracy: se baja el juego, " +
-      "el escenario, la placa y el video que hayan quedado puestos." +
-      "\n\nNo se borra historial, playlists, resultados ni usuarios.")) return;
-    setJornadaBusy(true); setJornadaMsg(null);
-    try {
-      // No hay que bajar ningún estado local: `iniciarJornada` deja los campos
-      // de `game_state` en neutro y el cartel, que los lee por Realtime, pasa
-      // solo a standby.
-      // `avisos` son limpiezas NO críticas que no salieron (hoy: la ronda vieja
-      // de Sumate). La jornada arrancó igual, así que el cartel es de éxito —
-      // pero lo dice, en vez de tragárselo.
-      const r = await iniciarJornada();
-      const avisos = r?.avisos || [];
-      setJornadaMsg({
-        ok: true,
-        text: avisos.length
-          ? `Jornada iniciada — la TV está en DJ Democracy. ⚠️ ${avisos.join(" ")}`
-          : "Jornada iniciada — la TV está en DJ Democracy.",
-      });
-    } catch (err) {
-      setJornadaMsg({ ok: false, text: err?.message || String(err) });
-    } finally { setJornadaBusy(false); }
-  };
-  const ITEMS=[
-    {id:"rey",     icon:"🎰",label:"Rey del Orto",    col:"#FFD600",bg:"rgba(255,214,0,.1)", bdr:"rgba(255,214,0,.3)"},
-    {id:"trivia",  icon:"🧠",label:"Desafío Demente", col:"#9B2FFF",bg:"rgba(155,47,255,.1)",bdr:"rgba(155,47,255,.3)"},
-    {id:"suma",    icon:"🔢",label:"Sumate que sumamos",  col:"#FF9500",bg:"rgba(255,149,0,.1)", bdr:"rgba(255,149,0,.3)"},
-    {id:"palabra", icon:"🔤",label:"Arma la palabra",col:"#A855F7",bg:"rgba(168,85,247,.1)",bdr:"rgba(168,85,247,.3)"},
-    {id:"duelo",   icon:"⚔️", label:"Duelo",          col:"#FF2D78",bg:"rgba(255,45,120,.1)", bdr:"rgba(255,45,120,.3)"},
-    {id:"ftl",     icon:"💃",label:"Follow Leader",   col:"#FF9500",bg:"rgba(255,149,0,.1)", bdr:"rgba(255,149,0,.3)"},
-    {id:"pt",      icon:"🏋️",label:"Trainer",         col:"#00F5A0",bg:"rgba(0,245,160,.1)", bdr:"rgba(0,245,160,.3)"},
-    {id:"karaoke", icon:"🎤",label:"Karaoke",         col:"#9B2FFF",bg:"rgba(155,47,255,.1)",bdr:"rgba(155,47,255,.3)"},
-  ].filter(item => !FROZEN_MODULE_IDS.has(item.id));
+// Placas generales: se mandan con un clic. `dj` no es una placa: vuelve la TV
+// a DJ Democracy (la capa base) bajando todo lo que haya encima. El QR y el
+// logo de cada placa se eligen en el Diseñador de pantalla TV.
+const PLACAS_LANZAR = [
+  {id:"dj",     img:null,                                               emoji:"🎧", label:"DJ Democracy", col:"#F97316"},
+  {id:"break",  img:"/placas/Break-removebg-preview.png",                  emoji:"⏸️", label:"Break",        col:"#FF9500"},
+  {id:"cierre", img:"/placas/Gracias_por_esta_noche-removebg-preview.png", emoji:"🌙", label:"Cierre",       col:"#9B2FFF"},
+];
+// Placas con texto propio: el botón abre un popup para escribirlas y elegir
+// dónde se ven. Su efecto, QR y logo se eligen en Diseñador → Placas.
+const PLACAS_EDITABLES = [
+  {id:"mensaje", emoji:"📣", label:"Mensaje",  col:"#FFD600"},
+  {id:"promo",   emoji:"🍺", label:"Promo",    col:"#00E5FF"},
+];
+
+// `logo` es la imagen oficial del módulo (la misma de su placa en pantalla) y
+// `placa` el id de su placa de anuncio en `active_placa`.
+const MODULOS_LANZAR = [
+  {grupo:"Juegos", items:[
+    {id:"rey",     placa:"game_rey",     logo:"/placas/Rey_del_orto-removebg-preview.png",       label:"Rey del Orto",       col:"#FFD600"},
+    {id:"trivia",  placa:"game_trivia",  logo:"/placas/Desafio_demente-removebg-preview.png",    label:"Desafío Demente",    col:"#9B2FFF"},
+    {id:"suma",    placa:"game_suma",    logo:"/placas/Sumate_que_sumamos-removebg-preview.png", label:"Sumate que sumamos", col:"#FF9500"},
+    {id:"palabra", placa:"game_palabra", logo:"/placas/Arma_la_palabra-removebg-preview.png",    label:"Arma la palabra",    col:"#A855F7"},
+  ]},
+  {grupo:"Escenario", items:[
+    {id:"duelo",   placa:"duelo",             logo:"/placas/Duelo_de_talento-removebg-preview.png", label:"Duelo de Talentos", col:"#FF2D78"},
+    {id:"ftl",     placa:"escenario_ftl",     logo:"/placas/Follow_de_leader-removebg-preview.png", label:"Follow the Leader",  col:"#FF9500"},
+    {id:"pt",      placa:"escenario_pt",      logo:"/placas/Personal_Trainer-removebg-preview.png", label:"Personal Trainer",   col:"#00F5A0"},
+    {id:"karaoke", placa:"escenario_karaoke", logo:"/placas/Si_lo_sabe_cante-removebg-preview.png", label:"Si lo sabe cante",   col:"#9B2FFF"},
+  ]},
+];
+
+// Opción tipo pastilla (efecto, destinos). Activa = color lleno.
+function Chip({on, onClick, children, col="#00E5FF"}){
+  return(
+    <button type="button" onClick={onClick} aria-pressed={on} style={{padding:"8px 13px",borderRadius:20,cursor:"pointer",
+      fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700,transition:"all .15s",
+      background:on?`${col}22`:"rgba(240,232,255,.04)",color:on?col:"rgba(240,232,255,.5)",
+      border:`1px solid ${on?col:"rgba(240,232,255,.12)"}`}}>
+      {on?"✓ ":""}{children}
+    </button>
+  );
+}
+
+/**
+ * Popup para escribir un Mensaje o una Promo y elegir dónde se ve: la
+ * pantalla (placa), los celulares (banner en la WebApp + push) o los dos.
+ */
+function EditorMensajeModal({tipo, inicial, busy, onEnviar, onCerrar}){
+  const esPromo = tipo === "promo";
+  const [d, setD] = useState(inicial);
+  const upd = (k,v) => setD(o=>({...o,[k]:v}));
+  const sinDestino = !d.pantalla && !d.celular;
+  const col = esPromo ? "#00E5FF" : "#FFD600";
+
+  useEffect(()=>{
+    const esc = e => { if (e.key === "Escape") onCerrar(d); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  },[d, onCerrar]);
+
+  return(
+    <div role="dialog" aria-modal="true" aria-label={esPromo?"Promo":"Mensaje"} onClick={()=>onCerrar(d)}
+      style={{position:"fixed",inset:0,zIndex:9000,background:"rgba(4,2,10,.72)",backdropFilter:"blur(3px)",
+        display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto",
+        background:"#120A1E",border:`1px solid ${col}55`,borderRadius:16,padding:18,boxShadow:"0 20px 60px rgba(0,0,0,.6)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:800,fontSize:16,color:col}}>
+            {esPromo?"🍺 Promo":"📣 Mensaje"}
+          </div>
+          <button onClick={()=>onCerrar(d)} aria-label="Cerrar" style={{background:"none",border:"none",
+            color:"rgba(240,232,255,.5)",fontSize:20,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+
+        {esPromo&&(
+          <div className="epick">
+            {EMOJIS.map(em=>(
+              <button key={em} className={d.emoji===em?"sel":""} onClick={()=>upd("emoji",em)}>{em}</button>
+            ))}
+          </div>
+        )}
+        <input className="inp" autoFocus placeholder={esPromo?"Nombre de la promo":"Escribí el mensaje"} value={d.texto}
+          onChange={e=>upd("texto",e.target.value.slice(0,80))}/>
+
+        <div className="ctitle" style={{marginTop:6}}>¿Dónde se ve?</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>
+          <Chip on={d.pantalla} col="#00F5A0" onClick={()=>upd("pantalla",!d.pantalla)}>📺 Pantalla</Chip>
+          <Chip on={d.celular}  col="#00F5A0" onClick={()=>upd("celular",!d.celular)}>📱 Celulares</Chip>
+        </div>
+
+        <button className="btn btn-p btn-full" disabled={busy||sinDestino||!d.texto.trim()} onClick={()=>onEnviar(d)}
+          style={esPromo?{background:"linear-gradient(135deg,#00E5FF,#00F5A0)",color:"#08040F"}:undefined}>
+          {busy ? "Enviando…" : sinDestino ? "Elegí pantalla o celulares"
+            : `Enviar a ${[d.pantalla&&"pantalla",d.celular&&"celulares"].filter(Boolean).join(" y ")}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LaunchPanel({sec,gameState,goTo,controls}){
+  const [editando, setEditando] = useState(null);   // "mensaje" | "promo" | null
+  // Lo último escrito queda para la próxima vez que se abre el popup.
+  const [borradores, setBorradores] = useState({
+    mensaje: { texto:"¡En minutos empezamos a jugar!", pantalla:true, celular:false },
+    promo:   { emoji:"🍺", texto:"2×1 en cervezas artesanales", pantalla:true, celular:false },
+  });
+  const [error, setError] = useState(null);
+  const [busy,  setBusy]  = useState(false);
+  // El celular recibe el efecto de Diseñador → Placas junto con el mensaje
+  // (la WebApp no consulta esa configuración).
+  const efectos = usePantallaMensaje();
+
   // Lo que está al aire sale de `game_state`, no de un estado local: así el
-  // cartel dice lo mismo en toda pestaña del admin y sobrevive a un F5.
+  // panel dice lo mismo en toda pestaña del admin y sobrevive a un F5.
   const enVivo = estadoEnVivo(gameState);
-  // Un módulo figura EN VIVO sólo si la base dice que esa capa está puesta.
-  // Abrir su panel para configurarlo no lo enciende.
+  const placaAlAire = gameState?.active_placa || null;
+  // Sólo cuenta un mensaje con la forma de MensajeCliente (id + texto): la
+  // columna puede traer restos de un formato viejo que la WebApp ignora.
+  const banner = gameState?.webapp_banner;
+  const mensajeCelular = banner?.id && banner?.texto ? banner : null;
   const isOn = id =>
     (enVivo?.kind === "game"      && enVivo.id === gameValueOf(id)) ||
     (enVivo?.kind === "escenario" && enVivo.id === id);
+
+  // Corre una acción de `controls`; sólo se muestra algo si falla. El
+  // resultado se ve en el resaltado de las placas (sale de `game_state`).
+  const correr = async (fn) => {
+    setBusy(true); setError(null);
+    try {
+      const r = await fn();
+      if (r?.error) setError(r.error.message || String(r.error));
+      return !r?.error;
+    } catch (e) { setError(e?.message || String(e)); return false; }
+    finally { setBusy(false); }
+  };
+  // Mandar una placa o volver al DJ baja el juego / escenario al aire: se
+  // pide confirmación para no cortar un juego en curso por un clic de más.
+  const confirmaCorte = (que) => !(enVivo?.kind === "game" || enVivo?.kind === "escenario") ||
+    window.confirm(`${enVivo.label} está en vivo.\n\n${que} lo saca de la pantalla. ¿Seguir?`);
+
+  const mandar = (id, label, custom = null) =>
+    confirmaCorte(`Mandar «${label}»`) && correr(()=>controls?.sendPlaca(id, custom));
+  const alDj = () => confirmaCorte("Volver a DJ Democracy") && correr(()=>controls?.volverAlDj());
+
+  const guardarBorrador = useCallback((tipo, d) => setBorradores(b=>({...b,[tipo]:d})), []);
+  const cerrarEditor = useCallback((d) => { guardarBorrador(editando, d); setEditando(null); }, [editando, guardarBorrador]);
+
+  // Mensaje / Promo: a la pantalla (placa), a los celulares (webapp_banner) o a los dos.
+  const enviar = async (d) => {
+    const tipo = editando;
+    const esPromo = tipo === "promo";
+    guardarBorrador(tipo, d);
+    if (d.pantalla) {
+      const ok = await mandar(esPromo ? "promo" : "mensaje_app", esPromo ? "Promo" : "Mensaje",
+        esPromo ? { emoji:d.emoji, title:d.texto }
+                : { title:d.texto });
+      if (!ok) return;
+    }
+    if (d.celular) {
+      const ok = await correr(()=>controls?.setMensajeCliente({ tipo, texto:d.texto,
+        emoji: esPromo ? d.emoji : null, efecto: esPromo ? efectos.efecto_promo : efectos.efecto }));
+      if (!ok) return;
+    }
+    setEditando(null);
+  };
+
+  const placaBtn = (p, activa, onClick) => (
+    <button key={p.id} className="lbtn" disabled={busy} onClick={onClick} title={p.label}
+      style={{background:activa?`${p.col}22`:`${p.col}0D`,
+        border:`1.5px solid ${activa?p.col:`${p.col}40`}`,"--gw":`${p.col}55`}}>
+      {activa&&<div className="achip"/>}
+      {p.img
+        ? <img src={p.img} alt={p.label} style={{height:84,maxWidth:"85%",objectFit:"contain"}}
+            onError={e=>{e.currentTarget.style.display="none";}}/>
+        : <span className="lico" style={{fontSize:44}}>{p.emoji}</span>}
+      {/* Los logos de las placas ya traen el nombre. */}
+      {!p.img && <span className="llbl" style={{color:p.col}}>{p.label}</span>}
+    </button>
+  );
+
   return(
     <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {/* Estado actual — derivado de `game_state` (juego > escenario > placa) */}
+      {error&&<StatusAlert text={`✕ ${error}`} color="#FF2D78" onClose={()=>setError(null)}/>}
+
+      {/* Placas */}
       <div className="card">
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div className="dot-live" style={{background:enVivo?"#EF4444":"rgba(240,232,255,.2)",animation:enVivo?"blink 1.2s infinite":"none"}}/>
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:13,
-            color:enVivo?"#00F5A0":"rgba(240,232,255,.3)",flex:1}}>
-            {enVivo?`${LIVE_KIND_PREFIX[enVivo.kind]}: ${enVivo.label}`:"Pantalla en standby"}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+          <div className="ctitle" style={{margin:0}}>Placas</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {mensajeCelular&&(
+              <button className="btn" disabled={busy} onClick={()=>correr(()=>controls?.setMensajeCliente(null))}
+                title={mensajeCelular.texto}
+                style={{padding:"4px 10px",fontSize:9.5,background:"rgba(0,229,255,.08)",
+                  border:"1px solid rgba(0,229,255,.3)",color:"#00E5FF"}}>
+                ✕ Quitar mensaje de celulares
+              </button>
+            )}
+            {placaAlAire&&(
+              <button className="btn" disabled={busy} onClick={()=>correr(()=>controls?.clearPlaca())}
+                style={{padding:"4px 10px",fontSize:9.5,background:"rgba(255,45,120,.1)",
+                  border:"1px solid rgba(255,45,120,.3)",color:"#FF2D78"}}>
+                ✕ Quitar placa
+              </button>
+            )}
           </div>
+        </div>
+        <div className="lg">
+          {PLACAS_LANZAR.map(p=>p.id==="dj"
+            ? placaBtn(p, !enVivo && !placaAlAire, alDj)
+            : placaBtn(p, placaAlAire===p.id, ()=>mandar(p.id, p.label)))}
+          {PLACAS_EDITABLES.map(p=>placaBtn(p,
+            placaAlAire===(p.id==="mensaje"?"mensaje_app":p.id) || mensajeCelular?.tipo===p.id,
+            ()=>setEditando(p.id)))}
         </div>
       </div>
 
-      {/* Inicio de jornada — lo primero de la noche. Deja la TV en DJ
-          Democracy, la capa base. Deliberadamente NO se dispara al montar
-          /tv: un F5 en medio de un juego tiene que conservarlo. */}
-      <div className="card">
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{flex:1}}>
-            <div className="ctitle" style={{margin:0}}>Arrancar la jornada</div>
-            <div style={{fontSize:10.5,color:"rgba(240,232,255,.4)",marginTop:2}}>
-              Deja la TV en DJ Democracy: baja juego, escenario, placa y video que hayan quedado de la noche anterior.
-            </div>
-          </div>
-          <button className="btn btn-p" style={{padding:"7px 13px",fontSize:10.5,whiteSpace:"nowrap"}}
-            disabled={jornadaBusy} onClick={arrancarJornada}>
-            {jornadaBusy ? "Iniciando…" : "🌅 Iniciar jornada"}
-          </button>
-        </div>
-        {jornadaMsg && (
-          <div style={{marginTop:8,fontSize:10.5,color:jornadaMsg.ok?"#00F5A0":"#FF2D78"}}>
-            {jornadaMsg.ok ? "✓ " : "✕ "}{jornadaMsg.text}
-          </div>
-        )}
-      </div>
-
-      {/* Zócalo */}
-      <div className="card" style={{marginBottom:10}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          {msgCount>0&&(
-            <button onClick={()=>goTo("mensajes")} style={{background:"rgba(0,229,255,.1)",
-              border:"1px solid rgba(0,229,255,.25)",borderRadius:8,padding:"4px 9px",
-              color:"#00E5FF",fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:9.5,cursor:"pointer"}}>
-              💬 {msgCount} pendientes
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Videos pendientes */}
-      {vidCount>0&&(
-        <div className="card" style={{marginBottom:10,borderColor:"rgba(255,45,120,.18)"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:11.5,color:"rgba(240,232,255,.55)"}}>🎵 {vidCount} video{vidCount>1?"s":""} en cola</span>
-            <button onClick={()=>goTo("videos")} className="btn btn-r" style={{padding:"4px 9px",fontSize:9.5}}>Ver cola</button>
-          </div>
-        </div>
+      {editando&&(
+        <EditorMensajeModal key={editando} tipo={editando} inicial={borradores[editando]} busy={busy}
+          onEnviar={enviar} onCerrar={cerrarEditor}/>
       )}
 
-      {/* Accesos a los módulos. Son navegación pura: cada experiencia se lanza
-          desde su propio panel, después de configurarla (premio, preguntas,
-          palabra, participantes, video). Entrar a configurar no es lanzar. */}
+      {/* Módulos: el clic abre su panel (ahí se configura, se anuncia y se
+          lanza; entrar a configurar no es lanzar). El borde y el punto marcan
+          el que está en vivo o anunciado. */}
       <div className="card">
-        <div className="ctitle">Juegos y experiencias — seleccioná un módulo para administrarlo</div>
-        <div className="lg">
-          {ITEMS.map(it=>(
-            <button key={it.id} className="lbtn"
-              style={{background:it.bg,border:`1.5px solid ${isOn(it.id)?it.col:it.bdr}`,"--gw":it.bdr}}
-              onClick={()=>goTo(it.id)}>
-              {isOn(it.id)&&<div className="achip"/>}
-              <span className="lico">{it.icon}</span>
-              <span className="llbl" style={{color:it.col}}>{it.label}</span>
-              <span className="lsts">{isOn(it.id)?"● EN VIVO":"▶ Abrir"}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Placas rápidas */}
-      <div className="card">
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-          <div className="ctitle" style={{margin:0}}>Placas rápidas</div>
-          <button onClick={()=>goTo("placas")} style={{background:"none",border:"none",
-            color:"rgba(0,229,255,.55)",fontSize:9.5,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
-            Ver todas →
-          </button>
-        </div>
-        <div style={{display:"flex",gap:6}}>
-          {[{e:"🎵",l:"Bienvenida",id:"logo_animado",c:"#FFD600"},{e:"⏸️",l:"Break",id:"break",c:"#FF9500"},{e:"🌙",l:"Cierre",id:"cierre",c:"#9B2FFF"}].map((p,i)=>(
-            <button key={i} style={{flex:1,padding:"9px 5px",borderRadius:11,cursor:"pointer",
-              border:`1.5px solid ${p.c}44`,background:`${p.c}0F`,transition:"all .18s",textAlign:"center"}}
-              onClick={()=>controls?.sendPlaca(p.id)}>
-              <div style={{fontSize:18,marginBottom:3}}>{p.e}</div>
-              <div style={{fontSize:9,fontWeight:700,color:p.c}}>{p.l}</div>
-            </button>
-          ))}
-        </div>
+        {MODULOS_LANZAR.map(({grupo,items},gi)=>{
+          const visibles = items.filter(it=>!FROZEN_MODULE_IDS.has(it.id));
+          if(!visibles.length) return null;
+          return(
+            <div key={grupo} style={{marginTop:gi?12:0}}>
+              <div className="ctitle">{grupo}</div>
+              <div className="lg">
+                {visibles.map(it=>{
+                  const resaltado = isOn(it.id) || placaAlAire===it.placa;
+                  return(
+                    <button key={it.id} className="lbtn" onClick={()=>goTo(it.id)} title={it.label}
+                      style={{background:`${it.col}${resaltado?"22":"12"}`,
+                        border:`1.5px solid ${resaltado?it.col:`${it.col}4D`}`}}>
+                      {resaltado&&<div className="achip"/>}
+                      <img src={it.logo} alt={it.label}
+                        style={{height:96,maxWidth:"90%",objectFit:"contain"}}
+                        onError={e=>{e.currentTarget.style.display="none";}}/>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -6062,119 +6174,6 @@ function VideosPanel({sec, vids=[], launched=[], myVotes=[], onApprove, onReject
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// PLACAS
-// ══════════════════════════════════════════════════════════════════════════
-function PlacasPanel({sec, controls}){
-  const [customMsg,  setCustomMsg]  = useState("¡En minutos empezamos a jugar!");
-  const [customSub,  setCustomSub]  = useState("Escaneá el QR · Unite a BizarrApp");
-  const [promoEmoji, setPromoEmoji] = useState("🍺");
-  const [promoTitle, setPromoTitle] = useState("2×1 en cervezas artesanales");
-  const [promoSub,   setPromoSub]   = useState("Solo esta noche · Mostrá la app al staff");
-  const [launched,   setLaunched]   = useState(null);
-  const [selPreset,  setSelPreset]  = useState(null);
-
-  const notify = (txt) => { setLaunched(txt); setTimeout(()=>setLaunched(null),2500); };
-
-  const PRESETS=[
-    {id:"logo_animado", emoji:"🎵",title:"Logo animado del bar",    sub:"Pantalla de espera e inicio de noche",col:"#FFD600"},
-    {id:"game_rey",  emoji:"🎰",title:"Rey del Orto",            sub:"Antes de lanzar el sorteo",          col:"#FFD600"},
-    {id:"game_trivia",emoji:"🧠",title:"Desafío Demente",        sub:"Antes de lanzar la trivia",          col:"#9B2FFF"},
-    {id:"game_suma", emoji:"🔢",title:"Sumate que sumamos",          sub:"Antes de lanzar el juego",           col:"#FF9500"},
-    {id:"game_palabra",  emoji:"🔤",title:"Arma la palabra",        sub:"Antes de lanzar el juego",           col:"#A855F7"},
-    {id:"escenario", emoji:"🎤",title:"Escenario Bizarren",      sub:"Invitación al escenario",            col:"#FF2D78"},
-    {id:"duelo",            emoji:"⚔️", title:"Duelo de Talentos",   sub:"Invitación al duelo",                col:"#FF2D78"},
-    {id:"escenario_ftl",    emoji:"💃",title:"Follow the Leader",    sub:"Invitación a la pista",              col:"#FF9500"},
-    {id:"escenario_pt",     emoji:"🏋️",title:"Personal Trainer",     sub:"A mover el cuerpo",                  col:"#00F5A0"},
-    {id:"escenario_karaoke",emoji:"🎤",title:"Si lo sabe cante",     sub:"Invitación al karaoke",              col:"#9B2FFF"},
-    {id:"break",     emoji:"⏸️", title:"Break / Pausa",          sub:"Volvemos en un momento",             col:"#FF9500"},
-    {id:"cierre",    emoji:"🌙",title:"Cierre de noche",         sub:"¡Gracias por esta noche!",           col:"#9B2FFF"},
-  ].filter(preset => preset.id !== "escenario_karaoke");
-
-  return(
-    <div style={{"--sg":sec.grad,"--gw":sec.glow}}>
-      {launched&&<StatusAlert text={`🖼️ Enviado a pantalla: ${launched}`} color="#00F5A0" onClose={()=>setLaunched(null)}/>}
-
-      {/* Presets */}
-      <div className="card">
-        <div className="ctitle">Placas prediseñadas</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {PRESETS.map(p=>(
-            <div key={p.id} onClick={()=>setSelPreset(selPreset===p.id?null:p.id)}
-              style={{borderRadius:11,padding:"10px 8px",textAlign:"center",cursor:"pointer",
-                background:selPreset===p.id?`${p.col}18`:"rgba(240,232,255,.04)",
-                border:`1.5px solid ${selPreset===p.id?p.col:"rgba(240,232,255,.09)"}`,
-                transition:"all .15s"}}>
-              <div style={{fontSize:22,marginBottom:4}}>{p.emoji}</div>
-              <div style={{fontSize:10,fontWeight:700,color:p.col,lineHeight:1.2}}>{p.title}</div>
-              <div style={{fontSize:8.5,color:"rgba(240,232,255,.28)",marginTop:2}}>{p.sub}</div>
-            </div>
-          ))}
-        </div>
-        {selPreset&&(
-          <button className="btn btn-p btn-full" style={{marginTop:10}}
-            onClick={()=>{ controls?.sendPlaca(selPreset); notify(PRESETS.find(p=>p.id===selPreset)?.title||""); }}>
-            🖼️ Enviar a pantalla gigante
-          </button>
-        )}
-      </div>
-
-      {/* Logo BizarrApp + mensaje */}
-      <div className="card">
-        <div className="ctitle">📱 Logo BizarrApp + mensaje configurable</div>
-        <div style={{padding:"12px",borderRadius:10,textAlign:"center",marginBottom:8,
-          background:"linear-gradient(160deg,#1A0600,#2D1000)",border:"1px solid rgba(255,149,0,.2)"}}>
-          <img src={LOGO} alt="" style={{height:40,objectFit:"contain",marginBottom:6,
-            filter:"drop-shadow(0 0 8px rgba(255,214,0,.4))"}}
-            onError={e=>{e.target.style.display="none";}}/>
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:15,
-            background:"linear-gradient(135deg,#FFD600,#FF9500)",WebkitBackgroundClip:"text",
-            WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-            {customMsg||"Mensaje"}
-          </div>
-          <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>{customSub}</div>
-        </div>
-        <input className="inp" placeholder="Mensaje principal" value={customMsg}
-          onChange={e=>setCustomMsg(e.target.value.slice(0,50))}/>
-        <input className="inp" placeholder="Subtítulo" value={customSub}
-          onChange={e=>setCustomSub(e.target.value.slice(0,60))}/>
-        <button className="btn btn-p btn-full" onClick={()=>{ controls?.sendPlaca("mensaje_app", { title: customMsg, subtitle: customSub }); notify("Logo BizarrApp + mensaje"); }}>
-          🖼️ Enviar a pantalla
-        </button>
-      </div>
-
-      {/* Promo */}
-      <div className="card">
-        <div className="ctitle">🍺 Template de promociones</div>
-        <div style={{padding:"12px",borderRadius:10,textAlign:"center",marginBottom:8,
-          background:"linear-gradient(160deg,#001A1A,#001A2E)",border:"1px solid rgba(0,229,255,.2)"}}>
-          <div style={{fontSize:28,marginBottom:4}}>{promoEmoji}</div>
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:15,
-            background:"linear-gradient(135deg,#00E5FF,#00F5A0)",WebkitBackgroundClip:"text",
-            WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-            {promoTitle||"Tu promo"}
-          </div>
-          <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:3}}>{promoSub}</div>
-        </div>
-        <div className="epick">
-          {EMOJIS.map(em=>(
-            <button key={em} className={promoEmoji===em?"sel":""} onClick={()=>setPromoEmoji(em)}>{em}</button>
-          ))}
-        </div>
-        <input className="inp" placeholder="Nombre de la promo" value={promoTitle}
-          onChange={e=>setPromoTitle(e.target.value.slice(0,50))}/>
-        <input className="inp" placeholder="Condiciones / subtítulo" value={promoSub}
-          onChange={e=>setPromoSub(e.target.value.slice(0,60))}/>
-        <button className="btn btn-full" style={{background:"linear-gradient(135deg,#00E5FF,#00F5A0)",
-          color:"#08040F",fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:12}}
-          onClick={()=>{ controls?.sendPlaca("promo", { emoji: promoEmoji, title: promoTitle, subtitle: promoSub }); notify(`Promo: ${promoTitle}`); }}>
-          🖼️ Enviar promo a pantalla
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════
 // MENÚ DEL BAR
 // ══════════════════════════════════════════════════════════════════════════
 function MenuPanel({sec}){
@@ -6458,7 +6457,8 @@ export default function AdminPanel(){
   // Administrador: todo. Operador: sólo las secciones que le asignaron.
   const esAdminTotal = acceso?.rol === "admin";
   const visibleSecs = SECS.filter(s=>!FROZEN_MODULE_IDS.has(s.id) && (esAdminTotal
-    || (!s.adminOnly && !SECCIONES_SOLO_ADMIN.has(s.id) && !!acceso?.secciones.includes(s.id))));
+    || (!s.adminOnly && !SECCIONES_SOLO_ADMIN.has(s.id)
+        && !!acceso?.secciones.some(id=>(SECCIONES_FUSIONADAS[id]||id)===s.id))));
   const puedeVer = id => visibleSecs.some(s=>s.id===(SUBSECCIONES[id]||id));
   // Orden y visibilidad del sidebar guardados en Ajustes (null = orden base).
   const sidebarConfig = useSidebarConfig(isAdmin === true);
@@ -6477,8 +6477,7 @@ export default function AdminPanel(){
     if(!puedeVer(sec)) return null;
     switch(sec){
       case "launch":    return <LaunchPanel sec={curSec} gameState={gameState}
-                                 zocaloOn={zocaloOn} setZocaloOn={setZocaloOn}
-                                 msgCount={msgCount} vidCount={vidCount} goTo={goTo} controls={controls}/>;
+                                 goTo={goTo} controls={controls}/>;
       case "duelo":     return <DueloPanel sec={curSec} controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo} puedeDisenar={puedeVer("disenoEscenario")}/>;
       case "ftl":       return <JuegoEscenarioPanel sec={curSec} type="ftl" controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo} puedeDisenar={puedeVer("disenoEscenario")}/>;
       case "pt":        return <JuegoEscenarioPanel sec={curSec} type="pt"  controls={controls} sessionId={session?.id ?? null} gameState={gameState} goTo={goTo} puedeDisenar={puedeVer("disenoEscenario")}/>;
@@ -6501,7 +6500,6 @@ export default function AdminPanel(){
         onAddByAdmin={addByAdminVid}
         adminUser={user}
       />;
-      case "placas":    return <PlacasPanel sec={curSec} controls={controls}/>;
       case "menu":      return <MenuPanel sec={curSec}/>;
       case "novedades": return <NovedadesPanel sec={curSec}/>;
       case "pantallaEditor": return <PantallaDjPanel sec={curSec} sessionId={session?.id ?? null} modo="editor" goTo={goTo}/>;
@@ -6512,6 +6510,7 @@ export default function AdminPanel(){
       case "designerTv": return <TvDesigner sessionId="default"/>;
       case "disenoEscenario": return <DisenadorEscenario/>;
       case "disenoJuegos": return <DisenadorJuegos/>;
+      case "disenoPlacas": return <DisenadorPlacas/>;
       case "clientes": return <ClientesPanel/>;
       case "usuarios": return <UsuariosPanel grupos={GRUPOS_SECCIONES}/>;
       case "ajustes":  return <AjustesPanel config={sidebarConfig} secs={SECS} visibleSecs={visibleSecs}

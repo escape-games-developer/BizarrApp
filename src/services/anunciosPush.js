@@ -49,6 +49,30 @@ export async function pushAnuncio(sessionId, placa) {
 }
 
 /**
+ * Mensaje o promo del operador al celular (Lanzar → Mensaje / Promo). La
+ * WebApp ya lo muestra adentro (`webapp_banner`); esto avisa además a quien
+ * tenga la app cerrada y el push activado. Tag = id del mensaje.
+ */
+export async function pushMensaje(sessionId, mensaje) {
+  if (!sessionId || !mensaje?.texto) return;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.functions.invoke("send-push", {
+      body: {
+        session_id: sessionId,
+        title: `${mensaje.emoji || "📣"} ${mensaje.texto}`.slice(0, 80),
+        body:  mensaje.subtitulo || "Bizarren Miusik Bar",
+        url:   "/?view=novedades",
+        tag:   `mensaje-${mensaje.id}`,
+      },
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+    });
+  } catch (e) {
+    console.warn("[pushMensaje]", e?.message || e);
+  }
+}
+
+/**
  * Convocatoria abierta de un juego de Escenario (FTL / PT): la ÚNICA
  * notificación del juego, y lleva directo a la pantalla de postularse.
  * El tag cambia en cada apertura para que el navegador vuelva a avisar.

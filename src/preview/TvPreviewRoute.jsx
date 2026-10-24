@@ -15,6 +15,7 @@ import { clientNavItems, CLIENT_LOGO_URL, NAV_ID_BY_DESIGN_SECTION } from "../cl
 import JuegosView from "../views/Juegos/JuegosView";
 import EscenarioView from "../views/Escenario/EscenarioView";
 import { celularDe, USUARIO_DEMO } from "./celularDemo";
+import MensajeCliente from "../client/anuncios/MensajeCliente";
 import { isTvPreviewMessage, tvPreviewMessage } from "./tvPreviewContract";
 
 /**
@@ -167,6 +168,49 @@ function Celular({ escena }) {
 
 const noop = () => {};
 
+// Placas de Lanzar (Diseñador → Placas): `active_placa` y el texto de ejemplo.
+const PLACAS = {
+  break:   { activa: "break" },
+  cierre:  { activa: "cierre" },
+  mensaje: { activa: "mensaje_app", custom: { title: "¡En minutos empezamos a jugar!" } },
+  promo:   { activa: "promo", custom: { emoji: "🍺", title: "2×1 en cervezas artesanales" } },
+};
+
+/**
+ * Una placa de Lanzar: en la TV, el mismo PlacaScreen de /tv (QR, logo y
+ * efecto los lee de la config pública); en el celular, el banner que ve el
+ * cliente (Mensaje / Promo) arriba de la app.
+ */
+function Placa({ escena }) {
+  const p = PLACAS[escena.placa];
+  if (!p) return null;
+  if (escena.vista !== "celular") return (
+    <Capa><PlacaScreen logo="/logo.png" gameState={{ active_placa: p.activa, placa_custom: p.custom ?? null }}/></Capa>
+  );
+  const promo = escena.placa === "promo";
+  const mensaje = p.custom && {
+    id: `preview-${escena.placa}-${escena.efecto}`, tipo: promo ? "promo" : "mensaje",
+    texto: p.custom.title, subtitulo: p.custom.subtitle,
+    emoji: promo ? p.custom.emoji : null, efecto: escena.efecto,
+  };
+  return (
+    <>
+      <style>{globalCss}</style>
+      <div className="app-root">
+        <ClientShell logoSrc={CLIENT_LOGO_URL} notificationSlot={null}
+          navItems={clientNavItems({ isLoggedIn: true, isRestricted: false })}
+          activeNavId={NAV_ID_BY_DESIGN_SECTION.novedades} onNavigate={noop}>
+          {mensaje ? <MensajeCliente key={mensaje.id} mensaje={mensaje}/> : (
+            <div style={{ padding: "40px 16px", textAlign: "center", color: "rgba(245,230,192,.5)", fontSize: 13, lineHeight: 1.5 }}>
+              Esta placa no se muestra en el celular.
+            </div>
+          )}
+        </ClientShell>
+      </div>
+    </>
+  );
+}
+
 export default function TvPreviewRoute() {
   const [escena, setEscena] = useState(null);
 
@@ -187,13 +231,17 @@ export default function TvPreviewRoute() {
     if (rev == null) return;
     refrescarPantallaVisibilidad("qr");
     refrescarPantallaVisibilidad("logo");
+    refrescarPantallaVisibilidad("mensaje");
     refrescarDueloPantalla();
   }, [rev]);
 
-  if (escena?.vista === "celular") return <Celular escena={escena}/>;
+  if (escena?.placa) {
+    if (escena.vista === "celular") return <Placa escena={escena}/>;
+  } else if (escena?.vista === "celular") return <Celular escena={escena}/>;
 
   let contenido = null;
-  if (escena?.juego === "ftl" || escena?.juego === "pt") contenido = <Escenario escena={escena}/>;
+  if (escena?.placa) contenido = <Placa escena={escena}/>;
+  else if (escena?.juego === "ftl" || escena?.juego === "pt") contenido = <Escenario escena={escena}/>;
   else if (escena?.juego === "duelo") contenido = <Duelo escena={escena}/>;
   else if (escena && JUEGOS[escena.juego]) contenido = <Juego escena={escena}/>;
 

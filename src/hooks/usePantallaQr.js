@@ -27,7 +27,23 @@ export const JUEGOS_CON_QR = [
   { id: "pt",      seccion: "Escenario", nombre: "Personal Trainer",   icono: "🏋️" },
 ];
 
-export const QR_POR_DEFECTO = Object.freeze(Object.fromEntries(JUEGOS_CON_QR.map(({ id }) => [id, true])));
+// Placas de Admin → Lanzar (migración 20261023180000). Se editan en el
+// Diseñador de pantalla TV; mismas filas y mismo default (visible).
+export const PLACAS_CON_QR = [
+  { id: "break",   nombre: "Break",   icono: "⏸️" },
+  { id: "cierre",  nombre: "Cierre",  icono: "🌙" },
+  { id: "mensaje", nombre: "Mensaje", icono: "📣" },
+  { id: "promo",   nombre: "Promo",   icono: "🍺" },
+];
+
+/** `active_placa` de Lanzar → clave de la configuración. */
+export const QR_DE_PLACA = Object.freeze({
+  break: "break", cierre: "cierre", mensaje_app: "mensaje", promo: "promo",
+});
+
+const CLAVES = [...JUEGOS_CON_QR, ...PLACAS_CON_QR].map(({ id }) => id);
+
+export const QR_POR_DEFECTO = Object.freeze(Object.fromEntries(CLAVES.map((id) => [id, true])));
 
 /** `game_state.active_game` → id de juego. */
 export const QR_DE_JUEGO = Object.freeze({
@@ -45,18 +61,37 @@ export const PLACA_DE_JUEGO = Object.freeze({
   escenario_pt:  { id: "pt",      vista: "escenario" },
 });
 
-const TIPOS = {
-  qr:   { clave: "pantalla_qr",   rpc: "pantalla_qr_config",   que: "el QR",
-          migracion: "20261019230000_pantalla_qr" },
-  logo: { clave: "pantalla_logo", rpc: "pantalla_logo_config", que: "el logo",
-          migracion: "20261020030000_pantalla_logo" },
-};
+/** Efectos del texto de la placa «Mensaje» (Diseñador de pantalla TV). */
+export const EFECTOS_MENSAJE = [
+  { id: "fijo",   label: "Fijo" },
+  { id: "banda",  label: "Banda horizontal" },
+  { id: "latido", label: "Latido" },
+  { id: "neon",   label: "Neón" },
+];
+// `efecto` = Mensaje, `efecto_promo` = Promo (migración 20261023200000).
+const MENSAJE_POR_DEFECTO = Object.freeze({ efecto: "fijo", efecto_promo: "fijo" });
+const efectoValido = (e) => (EFECTOS_MENSAJE.some((x) => x.id === e) ? e : "fijo");
+const normalizarMensaje = (v) => ({ efecto: efectoValido(v?.efecto), efecto_promo: efectoValido(v?.efecto_promo) });
 
 const TABLA = "admin_ui_config";
 const VERSION = 1;
 
-const normalizar = (v) => Object.fromEntries(JUEGOS_CON_QR.map(({ id }) =>
+const normalizarVisibilidad = (v) => Object.fromEntries(CLAVES.map((id) =>
   [id, typeof v?.[id] === "boolean" ? v[id] : QR_POR_DEFECTO[id]]));
+
+// Cada tipo es una fila de admin_ui_config con su RPC pública de lectura.
+// `mensaje` (migración 20261023190000) no es visibilidad: guarda el efecto.
+const TIPOS = {
+  qr:      { clave: "pantalla_qr",      rpc: "pantalla_qr_config",      que: "el QR",
+             migracion: "20261019230000_pantalla_qr",
+             normalizar: normalizarVisibilidad, porDefecto: QR_POR_DEFECTO },
+  logo:    { clave: "pantalla_logo",    rpc: "pantalla_logo_config",    que: "el logo",
+             migracion: "20261020030000_pantalla_logo",
+             normalizar: normalizarVisibilidad, porDefecto: QR_POR_DEFECTO },
+  mensaje: { clave: "pantalla_mensaje", rpc: "pantalla_mensaje_config", que: "el efecto del mensaje",
+             migracion: "20261023190000_pantalla_mensaje",
+             normalizar: normalizarMensaje, porDefecto: MENSAJE_POR_DEFECTO },
+};
 
 // ── Lectura compartida ──────────────────────────────────────────────────────
 // Una pantalla monta varios componentes que leen lo mismo (placa, QR del
@@ -72,7 +107,7 @@ function leerStore(tipo) {
   // RPC pública: el cliente anónimo sirve en la TV y en el Admin.
   return supabaseAnon.rpc(TIPOS[tipo].rpc).then(({ data, error }) => {
     if (error) { console.error(`[usePantallaVisibilidad:${tipo}]`, error); return; }
-    const nuevo = normalizar(data);
+    const nuevo = TIPOS[tipo].normalizar(data);
     if (JSON.stringify(nuevo) === JSON.stringify(s.valor)) return;
     s.valor = nuevo;
     s.subs.forEach((fn) => fn(nuevo));
@@ -80,7 +115,7 @@ function leerStore(tipo) {
 }
 
 function suscribir(tipo, fn) {
-  const s = stores[tipo] ||= { valor: QR_POR_DEFECTO, subs: new Set(), timer: null };
+  const s = stores[tipo] ||= { valor: TIPOS[tipo].porDefecto, subs: new Set(), timer: null };
   s.subs.add(fn);
   if (!s.timer) {
     leerStore(tipo);
@@ -98,7 +133,7 @@ export function refrescarPantallaVisibilidad(tipo) {
 }
 
 function usePantallaVisibilidad(tipo) {
-  const [config, setConfig] = useState(() => stores[tipo]?.valor || QR_POR_DEFECTO);
+  const [config, setConfig] = useState(() => stores[tipo]?.valor || TIPOS[tipo].porDefecto);
   useEffect(() => suscribir(tipo, setConfig), [tipo]);
   return config;
 }
@@ -107,10 +142,12 @@ function usePantallaVisibilidad(tipo) {
 export const usePantallaQr   = () => usePantallaVisibilidad("qr");
 /** `{ <juego>: bool }` → true = se muestra el logo de BizarrApp. */
 export const usePantallaLogo = () => usePantallaVisibilidad("logo");
+/** `{ efecto, efecto_promo }` del texto de las placas «Mensaje» y «Promo». */
+export const usePantallaMensaje = () => usePantallaVisibilidad("mensaje");
 
-/** Admin (Diseñador → QR y logo): lee la fila de `tipo` ('qr' | 'logo') y la guarda. */
+/** Admin (Diseñador): lee la fila de `tipo` ('qr' | 'logo' | 'mensaje') y la guarda. */
 export function usePantallaVisibilidadAdmin(tipo) {
-  const { clave, que, migracion } = TIPOS[tipo];
+  const { clave, que, migracion, normalizar } = TIPOS[tipo];
   const [config, setConfig] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [error, setError] = useState(null);
@@ -129,7 +166,7 @@ export function usePantallaVisibilidadAdmin(tipo) {
     }
     setConfig(normalizar(data.value));
     setUpdatedAt(data.updated_at);
-  }, [clave, que, migracion]);
+  }, [clave, que, migracion, normalizar]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const guardar = useCallback(async (nueva) => {
@@ -149,7 +186,7 @@ export function usePantallaVisibilidadAdmin(tipo) {
     setConfig(normalizar(data[0].value));
     setUpdatedAt(data[0].updated_at);
     refrescarPantallaVisibilidad(tipo);
-  }, [clave, que, updatedAt, cargar, tipo]);
+  }, [clave, que, updatedAt, cargar, tipo, normalizar]);
 
   return { config, error, guardar, recargar: cargar };
 }

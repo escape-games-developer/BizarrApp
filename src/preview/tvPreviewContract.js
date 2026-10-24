@@ -16,6 +16,8 @@
  *   estado: id del estado dentro de la vista (p. ej. 'ganador'), opcional,
  *   rev:    sube con cada guardado del Admin → el iframe relee la config ya,
  *   listo, qr, logo: sólo FTL / PT, la config que el Admin tiene en memoria,
+ *   placa:  'break'|'cierre'|'mensaje'|'promo' (Diseñador → Placas, en lugar
+ *           de `juego`), con vista 'pantalla'|'celular' y `efecto` del Mensaje,
  * }
  */
 
