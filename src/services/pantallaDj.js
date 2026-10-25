@@ -351,10 +351,11 @@ export async function saveVotePowers(eventId, rows) {
 export const resolveTv = (code, token) =>
   rpc("pantalla_resolve_tv", { _code: code, _token: token }, supabaseAnon);
 
-export const tvReport = (eventId, token, currentTime, duration) =>
+/** `itemId`: la canción de la que es el tiempo (el cierre de la votación no toma el de otra). */
+export const tvReport = (eventId, token, currentTime, duration, itemId = null) =>
   rpc("pantalla_tv_report", {
     _event_id: eventId, _token: token,
-    _current_time: currentTime ?? null, _duration: duration ?? null,
+    _current_time: currentTime ?? null, _duration: duration ?? null, _item_id: itemId,
   }, supabaseAnon);
 
 /**

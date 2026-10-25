@@ -218,6 +218,10 @@ const aPantallaCompleta = (block) => ({
  * El lienzo se estira para llenar la ventana (`llenar`), igual que una TV
  * 16:9 aunque la ventana de Chrome no lo sea: las cajas van en % de la ventana.
  */
+// El cierre de la votación cae justo al final de la canción, cuando entra el GIF
+// de la transición (que tapa todo): este aviso va en una capa por encima.
+const SOBRE_LA_TRANSICION = new Set(["djVotacionCerrada"]);
+
 const enPorcentaje = (el) => ({ x: (el.x / ANCHO) * 100, y: (el.y / ALTO) * 100, w: (el.w / ANCHO) * 100, h: (el.h / ALTO) * 100 });
 
 function capasDelLienzoDj(pantalla, bloqueVideo, marca) {
@@ -238,7 +242,9 @@ function capasDelLienzoDj(pantalla, bloqueVideo, marca) {
   const video = iv >= 0 ? els[iv] : null;
   return {
     debajo: { fondo, elementos: dibujables(iv >= 0 ? els.slice(0, iv) : []) },
-    encima: { fondo, elementos: dibujables(iv >= 0 ? els.slice(iv + 1) : els) },
+    encima: { fondo, elementos: dibujables(iv >= 0 ? els.slice(iv + 1) : els).filter((e) => !(e.tipo === "dato" && SOBRE_LA_TRANSICION.has(e.dato))) },
+    // Lo que tiene que verse aunque esté pasando la transición (va arriba de todo).
+    arriba: { fondo, elementos: dibujables(els).filter((e) => e.tipo === "dato" && SOBRE_LA_TRANSICION.has(e.dato)) },
     // Oculto en el editor = invisible, pero montado: sigue siendo la salida de audio.
     video: video ? {
       ...bloqueVideo, ...enPorcentaje(video), visible: true, z: 1, radius: 0,
@@ -900,6 +906,12 @@ export default function PantallaTV({ modo = "tv" }) {
             <LienzoPantalla pantalla={capasDj.encima} datos={datosLienzoDj} sinFondo llenar/>
           </div>
         )}
+        {capasDj && !soloVideo && capasDj.arriba.elementos.length > 0 && (
+          // Por encima de la transición (zIndex 100): ver SOBRE_LA_TRANSICION.
+          <div data-tv-lienzo="arriba" style={{ position: "absolute", inset: 0, zIndex: 101, pointerEvents: "none" }}>
+            <LienzoPantalla pantalla={capasDj.arriba} datos={datosLienzoDj} sinFondo llenar/>
+          </div>
+        )}
 
         {!soloVideo && !capasDj && <>
         <ConfiguredBlock id="logo" block={bloqueLogo}>
@@ -997,7 +1009,7 @@ export default function PantallaTV({ modo = "tv" }) {
         )}
 
         {ftlPerformance && !hasLiveLayer && !hasPlaca && (
-          <FtlOverlay participante={participanteFtl}
+          <FtlOverlay participante={participanteFtl} juego={juegoEsc}
             pct={modoVotacion === "toques" ? energiaFtl
               : modoVotacion === "votos" ? (votosFtl.up_pct ?? 0)
               : modoVotacion === "pelea" ? peleaFtl.pct

@@ -6,6 +6,9 @@ import { EFECTOS_LIENZO_CSS, efectoLienzo } from "./efectos";
 import { marcarLienzo } from "./lienzoActivo";
 import { DATOS_JUEGOS, DATOS_JUEGOS_CSS } from "./datosJuegos";
 import { DATOS_DJ } from "./datosDj";
+import { DATOS_PLACAS, DATOS_PLACAS_CSS } from "./datosPlacas";
+import { DATOS_ESCENARIO } from "./datosEscenario";
+import { DATOS_DUELO } from "./datosDuelo";
 
 /**
  * Dibuja una pantalla del editor (ver modelo.js). El fondo ocupa todo el
@@ -150,6 +153,9 @@ export const DATOS = {
   qr:                { nombre: "QR a la app",           Componente: Qr,                ayuda: "Lleva al celular a la app. Su texto se edita, va arriba o abajo, o se oculta.", leyenda: true, sinFichas: true },
   ...DATOS_JUEGOS,
   ...DATOS_DJ,
+  ...DATOS_PLACAS,
+  ...DATOS_ESCENARIO,
+  ...DATOS_DUELO,
 };
 
 function Contenido({ el, datos }) {
@@ -219,11 +225,11 @@ export function useEscalaLienzo({ ancho, alto }, soloAncho = false) {
   return [ref, escala, ejes];
 }
 
-export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS + DATOS_JUEGOS_CSS;
+export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS + DATOS_JUEGOS_CSS + DATOS_PLACAS_CSS;
 
 /**
  * `juego`: avisa que esa pantalla trae su propio QR (ver lienzoActivo.js).
- * `formato`: "tv" (por defecto) o "celular".
+ * `formato`: "tv" (por defecto), "celular" o "banner" (los dos al ancho de la app).
  * `sinFondo`: sólo los elementos, sobre lo que haya debajo (la TV del DJ dibuja
  *   el fondo en otra capa, debajo del video).
  * `llenar` (TV): el escenario se estira para llenar el contenedor aunque no
@@ -232,7 +238,7 @@ export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS + DATOS_JUEGOS_CSS;
  */
 export default function LienzoPantalla({ pantalla, datos, juego, formato = "tv", sinFondo = false, llenar = false }) {
   const fmt = FORMATOS[formato] || FORMATOS.tv;
-  const cel = fmt.id === "celular";
+  const cel = fmt.id !== "tv";   // celular o banner: del ancho de la app
   const [ref, escala, ejes] = useEscalaLienzo(fmt, cel);
   const estirar = llenar && !cel;
   useEffect(() => {

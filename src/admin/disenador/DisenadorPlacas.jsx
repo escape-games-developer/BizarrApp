@@ -3,13 +3,15 @@ import { EFECTOS_MENSAJE, usePantallaVisibilidadAdmin } from "../../hooks/usePan
 import { ErrorCarga, useGuardado } from "../juegos/AjustesDelJuego";
 import { SeccionConfig, AvisoGuardado } from "../juegos/SeccionConfig";
 import Toggle from "../juegos/Toggle";
-import PreviewTv from "./PreviewTv";
 import SolapasJuegos from "./SolapasJuegos";
+import EditorLienzo from "../../lienzo/editor/EditorLienzo";
+import { PANTALLAS_PLACAS, PANTALLAS_PLACAS_CEL, PLACAS_POR_DEFECTO } from "../../lienzo/juegos/placas";
 
 /**
  * Diseñador → Placas: las placas que se mandan desde Admin → Lanzar (Break,
- * Cierre, Mensaje, Promo), cada una en Pantalla gigante y Celular, con su vista
- * previa. Misma estructura que el Diseñador de Juegos (VistasJuego).
+ * Cierre, Mensaje, Promo), cada una en Pantalla gigante y Celular, en el
+ * editor libre de pantallas (src/lienzo, fila `lienzo_placas`), igual que el
+ * Diseñador de Juegos. Arriba siguen los ajustes de siempre de cada placa.
  *
  * Lo editable:
  *  - QR y logo de BizarrApp de cada placa → filas `pantalla_qr` / `pantalla_logo`
@@ -56,6 +58,7 @@ const CSS = `
   .dp-vista[aria-selected="true"]{cursor:default;color:var(--dp-col);border-color:var(--dp-col);
     background:color-mix(in srgb,var(--dp-col) 14%,transparent);}
   .dp-cuerpo{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:14px;align-items:start;}
+  .dp-ajustes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0 12px;align-items:start;margin-bottom:6px;}
   .dp-preview{position:sticky;top:0;min-width:0;}
   @media (max-width:1100px){
     .dp-cuerpo{grid-template-columns:1fr;}
@@ -137,18 +140,25 @@ function EfectoTexto({ clave, col, msj, onGuardado }) {
   );
 }
 
+// Texto de ejemplo del operador mientras se diseña (el real se escribe en Lanzar).
+const TEXTO_EJEMPLO = { mensaje: "¡EN MINUTOS EMPEZAMOS A JUGAR!", promo: "2×1 EN CERVEZAS ARTESANALES" };
+
 function VistasPlaca({ placa, col, nav }) {
   const qr   = usePantallaVisibilidadAdmin("qr");
   const logo = usePantallaVisibilidadAdmin("logo");
   const msj  = usePantallaVisibilidadAdmin("mensaje");
   const [vista, setVista] = useState("pantalla");
-  const [rev, setRev] = useState(0);
-  const guardado = () => setRev((r) => r + 1);
+  const guardado = () => {};
 
   const celular = vista === "celular";
   const claveEfecto = placa === "promo" ? "efecto_promo" : "efecto";
-  const escena = { placa, vista, rev, efecto: msj.config?.[claveEfecto] || "fijo" };
   const conTexto = placa === "mensaje" || placa === "promo";
+  const datos = { qrUrl: `${window.location.origin}/`, efecto: msj.config?.[claveEfecto] || "fijo",
+    texto: TEXTO_EJEMPLO[placa], emoji: placa === "promo" ? "🍺" : null, subtitulo: null };
+  // Lo que el editor muestra pero hoy no sale en la TV (interruptor apagado).
+  const avisos = qr.config && qr.config[placa] === false
+    ? { qr: "el QR de esta placa está apagado en «QR y logo» (arriba)." } : null;
+  const pantallasCel = PANTALLAS_PLACAS_CEL[placa];
 
   return (
     <div style={{ "--dp-col": col }}>
@@ -166,35 +176,25 @@ function VistasPlaca({ placa, col, nav }) {
         </div>
       </div>
 
-      <div className="dp-cuerpo">
-        <div>
-          {!celular && <QrLogoPlaca placa={placa} col={col} qr={qr} logo={logo} onGuardado={guardado}/>}
-          {conTexto && <EfectoTexto clave={claveEfecto} col={col} msj={msj} onGuardado={guardado}/>}
-          {celular && !conTexto && (
-            <div className="card" style={{ marginBottom: 10 }}>
-              <div style={nota}>Esta placa todavía no tiene pantalla en el celular. Cuando se cree, su diseño se arma acá.</div>
-            </div>
-          )}
-          {celular && placa === "promo" && (
-            <div className="card" style={{ marginBottom: 10 }}>
-              <div style={nota}>La promo llega como banner arriba de cualquier sección, con su emoji y su efecto. El cliente la puede cerrar.</div>
-            </div>
-          )}
-          {conTexto && (
-            <div style={{ ...nota, padding: "0 4px" }}>
-              El texto se escribe al mandarla, en Lanzar. La vista previa usa un texto de ejemplo.
-            </div>
-          )}
-        </div>
-
-        <div className="dp-preview">
-          <PreviewTv key={celular ? "celular" : "tv"} escena={escena} dispositivo={celular ? "celular" : "tv"}/>
-          <div title={TEXTO_VISTA[vista][placa]} style={{ ...nota, marginTop: 6, textAlign: "center",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {TEXTO_VISTA[vista][placa]} · Se actualiza al guardar.
+      {/* Los ajustes de siempre de la placa, arriba del editor. */}
+      <div className="dp-ajustes">
+        {!celular && <QrLogoPlaca placa={placa} col={col} qr={qr} logo={logo} onGuardado={guardado}/>}
+        {conTexto && <EfectoTexto clave={claveEfecto} col={col} msj={msj} onGuardado={guardado}/>}
+        <div className="card" style={{ marginBottom: 10 }}>
+          <div style={nota}>
+            {TEXTO_VISTA[vista][placa]}
+            {conTexto && " El texto se escribe al mandarla, en Lanzar: acá se ve uno de ejemplo."}
           </div>
         </div>
       </div>
+
+      {celular && !pantallasCel ? (
+        <div className="card"><div style={nota}>Esta placa todavía no tiene pantalla en el celular.</div></div>
+      ) : (
+        <EditorLienzo key={`${placa}-${vista}`} juego="placas" formato={celular ? "banner" : "tv"}
+          pantallas={celular ? pantallasCel : PANTALLAS_PLACAS[placa]} porDefecto={PLACAS_POR_DEFECTO}
+          datos={datos} avisos={avisos}/>
+      )}
     </div>
   );
 }

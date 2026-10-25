@@ -21,7 +21,9 @@ import { VISTAS, VISTAS_POR_JUEGO } from "./vistasJuegos";
  * sola (FTL / PT).
  *
  * `editor(vista)`: si devuelve algo, esa vista se edita en el editor libre de
- * pantallas (src/lienzo) en lugar de controles + vista previa.
+ * pantallas (src/lienzo) en lugar de la vista previa. Los ajustes propios de
+ * la vista (QR y logo, cartel del participante listo, barómetro, vestuario…)
+ * siguen arriba del editor: nada de lo que tenía cada diseñador se pierde.
  */
 
 const CSS = `
@@ -40,6 +42,7 @@ const CSS = `
     background:color-mix(in srgb,var(--vj-col) 18%,transparent);}
   .vj-cuerpo{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:14px;align-items:start;}
   .vj-preview{position:sticky;top:0;min-width:0;}
+  .vj-ajustes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 12px;align-items:start;margin-bottom:6px;}
   @media (max-width:1100px){
     .vj-cuerpo{grid-template-columns:1fr;}
     .vj-preview{position:static;order:-1;}
@@ -112,6 +115,12 @@ export default function VistasJuego({ juego, col, nav, controles, escenaExtra, e
         </div>
       </div>
 
+      {editorLibre && (vista === "convocatoria" || propios) && (
+        <div className="vj-ajustes">
+          {vista === "convocatoria" && <QrLogoJuego juego={juego} col={col} qr={qr} logo={logo} onGuardado={guardado}/>}
+          {propios}
+        </div>
+      )}
       {editorLibre}
       {!editorLibre && <div className="vj-cuerpo">
         <div>{panelControles}</div>

@@ -927,7 +927,9 @@ const PALETA_PLACA = {
 };
 
 // Placa de anuncio → juego cuyo lienzo trae la Convocatoria editada.
-const LIENZO_DE_PLACA = { game_rey: "rey", game_trivia: "trivia", game_suma: "suma", game_palabra: "palabra" };
+const LIENZO_DE_PLACA = { game_rey: "rey", game_trivia: "trivia", game_suma: "suma", game_palabra: "palabra", duelo: "duelo" };
+// Placa de Lanzar → su pantalla en el lienzo de las placas.
+const PANTALLA_DE_PLACA = { break: "break", cierre: "cierre", mensaje_app: "mensaje", promo: "promo" };
 
 export function PlacaScreen({ logo, gameState }) {
   // gameState.active_placa: id de la placa
@@ -936,6 +938,9 @@ export function PlacaScreen({ logo, gameState }) {
   // Diseñador → Juegos → <juego> → Convocatoria: pantalla del editor.
   const juegoPlaca = LIENZO_DE_PLACA[gameState?.active_placa] || null;
   const lienzoPlaca = useLienzo(juegoPlaca);
+  // Diseñador → Placas: Break, Cierre, Mensaje y Promo editadas (fila lienzo_placas).
+  const estadoLanzar = PANTALLA_DE_PLACA[gameState?.active_placa] || null;
+  const lienzoLanzar = useLienzo(estadoLanzar ? "placas" : null);
 
   const PLACAS = {
     logo_animado: { emoji:null, useLogoAnimado:true,
@@ -1007,9 +1012,23 @@ export function PlacaScreen({ logo, gameState }) {
   const efecto = placaId === "mensaje_app" ? efectos.efecto
     : placaId === "promo" ? efectos.efecto_promo : "fijo";
 
+  // Placa de Lanzar editada: el texto, subtítulo y emoji del envío, el efecto
+  // de «Efecto del texto», y el QR / logo respetan además sus interruptores.
+  if (estadoLanzar && lienzoLanzar[estadoLanzar]) {
+    const pantalla = lienzoLanzar[estadoLanzar];
+    const conInterruptores = { ...pantalla, elementos: pantalla.elementos.map((e) =>
+      (e.id === "qr" && !verQrApp) || (e.id === "logo-app" && !verLogoApp) ? { ...e, visible: false } : e) };
+    return (
+      <LienzoPantalla pantalla={conInterruptores} datos={{ vivo: true, texto: placa.title, subtitulo: placa.subtitle,
+        emoji: placa.emoji, efecto, qrUrl: `${window.location.origin}/` }}/>
+    );
+  }
+
+  // La convocatoria editada de un juego: QR y logo respetan sus interruptores.
   if (juegoPlaca && lienzoPlaca.convocatoria) return (
-    <LienzoPantalla pantalla={lienzoPlaca.convocatoria} juego={juegoPlaca}
-      datos={{ vivo: true, qrUrl: `${window.location.origin}/?view=games` }}/>
+    <LienzoPantalla pantalla={{ ...lienzoPlaca.convocatoria, elementos: lienzoPlaca.convocatoria.elementos.map((e) =>
+      (e.id === "qr" && !verQr) || (e.id === "logo-app" && !verLogo) ? { ...e, visible: false } : e) }} juego={juegoPlaca}
+      datos={{ vivo: true, qrUrl: `${window.location.origin}/?view=${deJuego?.vista || "games"}` }}/>
   );
 
   return (

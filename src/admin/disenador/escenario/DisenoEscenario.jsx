@@ -7,9 +7,14 @@ import { AvisoGuardado } from "../../juegos/SeccionConfig";
 import VistasJuego from "../VistasJuego";
 import EditorListo from "./EditorListo";
 import EditorBarometro from "./EditorBarometro";
+import EditorLienzo from "../../../lienzo/editor/EditorLienzo";
+import { ESCENARIO_POR_DEFECTO, PANTALLAS_ESCENARIO, PANTALLAS_ESCENARIO_CEL } from "../../../lienzo/juegos/escenario";
+import { usePantallaVisibilidadAdmin } from "../../../hooks/usePantallaQr";
 
 /**
- * Follow the Leader / Personal Trainer en sus cuatro vistas.
+ * Follow the Leader / Personal Trainer en sus cuatro vistas, en el editor libre
+ * de pantallas (fila `lienzo_<tipo>`). Arriba de cada vista siguen sus ajustes
+ * de siempre: el cartel del participante listo, el barómetro y el vestuario.
  *
  * Una sola instancia de `useEscenarioListoAdmin` para toda la fila
  * `escenario_listo` (cartel + barómetro): dos instancias guardando por
@@ -61,8 +66,26 @@ export default function DisenoEscenario({ tipo, nav }) {
     );
   };
 
+  // Lo que el editor muestra pero hoy no se ve en la TV / el celular.
+  const qr = usePantallaVisibilidadAdmin("qr");
+  const avisos = {
+    ...(votacion === "off" ? {
+      escBarometro: "el juego no tiene votación del público (panel del juego → 🗳️).",
+      escVotacion: "el juego no tiene votación del público (panel del juego → 🗳️).",
+    } : {}),
+    ...(j && j.previa === false ? { escListo: "la pantalla del participante listo está apagada: la TV pasa de la convocatoria al video." } : {}),
+    ...(qr.config && qr.config[tipo] === false ? { qr: "el QR del juego está apagado en «QR y logo» (arriba)." } : {}),
+  };
+  const datos = { listo: j, juego: ESCENARIO_JUEGOS[tipo], qrUrl: `${window.location.origin}/?view=escenario` };
+  const editor = (vista) => {
+    const pantallas = vista === "celular" ? PANTALLAS_ESCENARIO_CEL : PANTALLAS_ESCENARIO.filter((x) => x.vista === vista);
+    if (!pantallas.length) return null;
+    return <EditorLienzo key={vista} juego={tipo} formato={vista === "celular" ? "celular" : "tv"} pantallas={pantallas}
+      porDefecto={ESCENARIO_POR_DEFECTO[tipo]} datos={datos} avisos={avisos}/>;
+  };
+
   return (
-    <VistasJuego juego={tipo} col={col} nav={nav} controles={controles}
+    <VistasJuego juego={tipo} col={col} nav={nav} controles={controles} editor={editor}
       escenaExtra={({ qr, logo }) => (j ? {
         listo: j,
         qr:   qr.config   ? qr.config[tipo]   !== false : true,

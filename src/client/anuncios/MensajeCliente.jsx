@@ -1,4 +1,6 @@
 import { useState } from "react";
+import LienzoPantalla from "../../lienzo/LienzoPantalla";
+import { useLienzo } from "../../lienzo/useLienzo";
 
 /**
  * Mensaje o promo que el operador manda al celular (Admin → Lanzar → Mensaje /
@@ -10,6 +12,10 @@ import { useState } from "react";
  *
  * Forma: { id, tipo: "mensaje"|"promo", texto, subtitulo?, emoji?, efecto? }
  * `efecto`: fijo | banda | latido | neon.
+ *
+ * Diseñador → Placas → Celular: si el banner está editado en el lienzo
+ * (`cel-mensaje` / `cel-promo` en lienzo_placas) se dibuja ése, con los
+ * datos del envío; si no, el de siempre.
  */
 const CERRADO_KEY = "bizarrapp.mensajeCerrado";
 
@@ -24,6 +30,7 @@ const CSS = `
 
 export default function MensajeCliente({ mensaje }) {
   const [cerrado, setCerrado] = useState(leerCerrado);
+  const lienzo = useLienzo(mensaje?.id ? "placas" : null, { cada: 30000 });
   if (!mensaje?.id || !mensaje.texto || cerrado === mensaje.id) return null;
 
   const promo  = mensaje.tipo === "promo";
@@ -35,6 +42,15 @@ export default function MensajeCliente({ mensaje }) {
     try { localStorage.setItem(CERRADO_KEY, mensaje.id); } catch { /* sin storage: sólo en memoria */ }
     setCerrado(mensaje.id);
   };
+
+  const editado = lienzo[promo ? "cel-promo" : "cel-mensaje"];
+  if (editado) return (
+    <div role="status" style={{ marginBottom: 14, animation: "mcEntra .3s ease" }}>
+      <style>{CSS}</style>
+      <LienzoPantalla formato="banner" pantalla={editado} datos={{ vivo: true, texto: mensaje.texto,
+        subtitulo: mensaje.subtitulo, emoji: mensaje.emoji, efecto, cerrar }}/>
+    </div>
+  );
 
   const textoGrad = { background: grad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" };
   const titulo = efecto === "banda" ? (

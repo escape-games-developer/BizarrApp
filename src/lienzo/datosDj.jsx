@@ -78,6 +78,16 @@ function useFactorAjuste(activo, claves, relleno) {
   return { cajaRef, espacioRef, medidaRef, factor };
 }
 
+/**
+ * Formato del artista (texto secundario): el propio del elemento (`estilo2`),
+ * o, si todavía no se tocó, el del título más chico (`proporcion`), sin
+ * negrita ni efectos y en el color «Artista» (Sonando) o gris (Próximas).
+ */
+const artistaDerivado = (el, color) => ({ ...el.estilo, tamano: Math.round(el.estilo.tamano * el.proporcion), peso: 400,
+  color, degradado: null, sombra: null, brillo: null, contorno: null });
+export const estiloArtistaSonando = (el) => el.estilo2 || artistaDerivado(el, el.ficha.acento);
+export const estiloArtistaProximas = (el) => el.estilo2 || artistaDerivado(el, "rgba(240,232,255,.35)");
+
 const CORTE = {
   cortar:  { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   lineas:  { overflow: "hidden", whiteSpace: "normal", overflowWrap: "anywhere" },
@@ -92,25 +102,26 @@ const CORTE = {
 function Sonando({ el, datos }) {
   const s = datos?.sonando || (datos?.vivo ? null : SONANDO_EJEMPLO);
   const t = el.estilo.tamano;
-  const prop = el.proporcion;
+  const e2 = estiloArtistaSonando(el);
   const ajustar = el.ajusteTexto === "ajustar";
   const relleno = t * 0.5;
   const { cajaRef, espacioRef, medidaRef, factor } = useFactorAjuste(ajustar,
-    [s?.title, s?.artist, t, prop, el.portada, el.estilo.fuente, el.estilo.peso, el.estilo.espaciado, el.w, el.h], relleno);
+    [s?.title, s?.artist, JSON.stringify(el.estilo), JSON.stringify(e2), el.portada, el.w, el.h], relleno);
   if (!s) return null;
   const css = cssDeTexto(el.estilo);
+  const css2 = cssDeTexto(e2);
   const portada = el.portada && (s.cover_url || (s.youtube_id ? `https://i.ytimg.com/vi/${s.youtube_id}/hqdefault.jpg` : null));
   const corte = CORTE[el.ajusteTexto] || CORTE.cortar;
-  const artista = { ...css, ...sinDegradado(el.ficha.acento), fontWeight: 400, textShadow: "none" };
+  // Cada renglón con su alineación: título según su formato, artista según el suyo.
   const lineas = (f) => (<>
-    <div style={{ ...css, fontSize: t * f, ...corte }}>{s.title}</div>
-    {s.artist && <div style={{ ...artista, fontSize: t * prop * f, marginTop: t * 0.15 * f, ...corte }}>{s.artist}</div>}
+    <div style={{ ...css, fontSize: t * f, textAlign: el.estilo.alinear, ...corte }}>{s.title}</div>
+    {s.artist && <div style={{ ...css2, fontSize: e2.tamano * f, textAlign: e2.alinear, marginTop: t * 0.15 * f, ...corte }}>{s.artist}</div>}
   </>);
   return (
-    <div ref={cajaRef} style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: JUST[el.estilo.alinear],
+    <div ref={cajaRef} style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center",
       gap: t * 0.6, padding: relleno, boxSizing: "border-box", borderRadius: t * 0.4, background: el.ficha.fondo, border: `1px solid ${el.ficha.borde}`, overflow: "hidden" }}>
       {portada && <img src={portada} alt="" style={{ height: "78%", aspectRatio: "1", borderRadius: t * 0.3, objectFit: "cover", flexShrink: 0 }}/>}
-      <div ref={espacioRef} style={{ minWidth: 0, textAlign: el.estilo.alinear, ...(ajustar || el.ajusteTexto === "lineas" ? { flex: 1 } : {}) }}>
+      <div ref={espacioRef} style={{ flex: 1, minWidth: 0 }}>
         {lineas(ajustar ? factor : 1)}
       </div>
       {/* Medida del texto a su tamaño de base, sin cortes (sólo «Ajustar»). */}
@@ -135,11 +146,12 @@ function Proximas({ el, datos }) {
   const ajustar = el.ajusteTexto === "ajustar";
   const relleno = t * 0.7;
   const { cajaRef, espacioRef, medidaRef, factor } = useFactorAjuste(ajustar,
-    [lista.map((x) => `${x.id}${x.title}${x.artist}${x.score}`).join("|"), el.texto, t, el.proporcion, el.cantidad,
+    [lista.map((x) => `${x.id}${x.title}${x.artist}${x.score}`).join("|"), el.texto, t, el.proporcion, el.cantidad, JSON.stringify(el.estilo2),
       el.estilo.fuente, el.estilo.peso, el.estilo.espaciado, el.w, el.h], relleno);
   const css = cssDeTexto(el.estilo);
   const corte = CORTE[el.ajusteTexto] || CORTE.cortar;
   const color = (c) => ({ ...css, ...sinDegradado(c), fontVariantNumeric: "tabular-nums" });
+  const e2 = estiloArtistaProximas(el);
   const contenido = (f) => (<>
     {el.texto && <div style={{ ...color(el.ficha.acento), fontSize: t * 1.05 * f, lineHeight: 1.1, flexShrink: 0,
       ...(el.ajusteTexto === "cortar" ? {} : corte) }}>{el.texto}</div>}
@@ -151,7 +163,7 @@ function Proximas({ el, datos }) {
         <span style={{ ...color(i === 0 ? "#FFD600" : "rgba(240,232,255,.28)"), fontSize: t * f, minWidth: t * 1.2 * f, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
         <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
           <div style={{ ...css, fontSize: t * f, ...corte }}>{item.title}</div>
-          <div style={{ ...color("rgba(240,232,255,.35)"), fontSize: t * el.proporcion * f, fontWeight: 400, ...corte }}>{item.artist || "—"}</div>
+          <div style={{ ...cssDeTexto(e2), fontVariantNumeric: "tabular-nums", fontSize: e2.tamano * f, textAlign: e2.alinear, ...corte }}>{item.artist || "—"}</div>
         </div>
         <span style={{ ...color(item.score > 0 ? "#00F5A0" : item.score < 0 ? "#FF2D78" : "rgba(240,232,255,.25)"), fontSize: t * f,
           flexShrink: 0 }}>{item.score > 0 ? `+${item.score}` : item.score}</span>
@@ -403,11 +415,12 @@ export const DATOS_DJ = {
   djTransicion: { nombre: "Transición entre canciones", Componente: area("✨", "Transición entre canciones", "rgba(155,47,255,.15)", "rgba(155,47,255,.7)"),
                   sinFichas: true, sinTexto: true, sinEfecto: true,
                   ayuda: "Dónde aparece el GIF entre canciones. Si está oculta, el GIF cubre el área del video." },
-  djSonando:    { nombre: "Sonando ahora", Componente: Sonando, acento: true, acentoNombre: "Artista", portada: true, ajusteTexto: true,
-                  secundario: "Tamaño del artista", formato: "Formato del texto",
-                  ayuda: "Portada, título y artista de la canción al aire. El formato es el del título." },
+  djSonando:    { nombre: "Sonando ahora", Componente: Sonando, portada: true, ajusteTexto: true,
+                  formato: "Formato del título", secundario: "Formato del artista", estiloSecundario: estiloArtistaSonando,
+                  ayuda: "Portada, título y artista de la canción al aire. El título y el artista tienen cada uno su formato: tipografía, tamaño, color y alineación." },
   djProximas:   { nombre: "Próximas canciones", Componente: Proximas, acento: true, acentoNombre: "Título", titulo: true,
-                  ajusteTexto: true, secundario: "Tamaño del artista", formato: "Formato del texto", cantidad: true,
+                  ajusteTexto: true, formato: "Formato de las canciones", secundario: "Formato del artista",
+                  estiloSecundario: estiloArtistaProximas, cantidad: true,
                   ayuda: "Las próximas canciones de la lista con su puntaje (hasta 8). Todo el texto usa el formato del elemento." },
   djEvento:     { nombre: "Nombre del evento", Componente: textoEnVivo((d) => (d.evento ? `${d.evento.nombre} · ${d.evento.codigo}` : null),
                   "Pantalla Bizarren · LDR4X3"), plantilla: true, sinFichas: true, ayuda: "El nombre y el código del evento." },

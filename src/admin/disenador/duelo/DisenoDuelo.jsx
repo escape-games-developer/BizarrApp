@@ -7,6 +7,10 @@ import SliderPantalla from "../../juegos/SliderPantalla";
 import SelectorEfecto from "../../juegos/SelectorEfecto";
 import { SeccionConfig, AvisoGuardado } from "../../juegos/SeccionConfig";
 import { ErrorCarga } from "../../juegos/AjustesDelJuego";
+import EditorLienzo from "../../../lienzo/editor/EditorLienzo";
+import { DUELO_POR_DEFECTO, PANTALLAS_DUELO, PANTALLAS_DUELO_CEL } from "../../../lienzo/juegos/duelo";
+import { useDueloPantalla } from "../../../hooks/useDueloPantalla";
+import { usePantallaVisibilidadAdmin } from "../../../hooks/usePantallaQr";
 
 /**
  * Diseño de la pantalla del Duelo (`admin_ui_config` 'duelo_pantalla').
@@ -211,9 +215,25 @@ function ControlesDuelo({ onGuardado }) {
 }
 
 /** Duelo de Talentos en sus cuatro vistas; el diseño de la pantalla, en Performance. */
+/**
+ * Las vistas del Duelo en el editor libre de pantallas (fila `lienzo_duelo`).
+ * Arriba de la Performance siguen los ajustes de «Pantalla del duelo» (fondo,
+ * logo del centro, paneles, barómetro, porcentajes): el logo del centro y el
+ * fondo del editor salen de ahí.
+ */
 export default function DisenoDuelo({ nav }) {
+  const pantalla = useDueloPantalla();
+  const qr = usePantallaVisibilidadAdmin("qr");
+  const datos = { centro: pantalla, qrUrl: `${window.location.origin}/?view=games&game=duelo` };
+  const avisos = qr.config && qr.config.duelo === false ? { qr: "el QR del Duelo está apagado en «QR y logo» (arriba)." } : null;
+  const editor = (vista) => {
+    const pantallas = vista === "celular" ? PANTALLAS_DUELO_CEL : PANTALLAS_DUELO.filter((x) => x.vista === vista);
+    if (!pantallas.length) return null;
+    return <EditorLienzo key={vista} juego="duelo" formato={vista === "celular" ? "celular" : "tv"} pantallas={pantallas}
+      porDefecto={DUELO_POR_DEFECTO} datos={datos} avisos={avisos}/>;
+  };
   return (
-    <VistasJuego juego="duelo" col={COL} nav={nav}
+    <VistasJuego juego="duelo" col={COL} nav={nav} editor={editor}
       controles={(vista, { guardado }) => (vista === "performance" ? <ControlesDuelo onGuardado={guardado}/> : null)}/>
   );
 }

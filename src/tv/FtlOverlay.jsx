@@ -1,4 +1,6 @@
 import FtlBarometro from "../components/FtlBarometro";
+import LienzoPantalla from "../lienzo/LienzoPantalla";
+import { useLienzo } from "../lienzo/useLienzo";
 
 /**
  * Overlay de Follow the Leader sobre el video del participante.
@@ -27,8 +29,18 @@ const C = { gold: "#FFD600", white: "#F0E8FF" };
 // Ubicación de hoy, si no llega configuración.
 const BARO_BASE = { ancho: 100, alto: 70, x: 8, y: 61 };
 
-export default function FtlOverlay({ participante, pct = null, decae = true, barometro = BARO_BASE }) {
+/**
+ * `juego` (FTL / PT): con la pantalla «Performance» guardada en el editor libre
+ * (Diseñador → Escenario) se dibuja ésa, transparente sobre el video.
+ */
+export default function FtlOverlay({ participante, pct = null, decae = true, barometro = BARO_BASE, juego = null }) {
+  const editada = useLienzo(juego?.type || null).performance;
   if (!participante) return null;
+  if (editada) return (
+    <div data-tv-ftl style={{ position: "absolute", inset: 0, zIndex: 50, pointerEvents: "none" }}>
+      <LienzoPantalla pantalla={editada} datos={{ vivo: true, participante, pct, decae }} sinFondo llenar/>
+    </div>
+  );
 
   const emoji = participante.avatar_emoji || "🎤";
   const nombre = participante.name || "Participante";

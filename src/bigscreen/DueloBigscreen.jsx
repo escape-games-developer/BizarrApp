@@ -6,9 +6,18 @@ import FtlBarometro from "../components/FtlBarometro";
 import { usePantallaLogo, usePantallaQr } from "../hooks/usePantallaQr";
 import { useDueloRound } from "../hooks/realtime/useDueloRound";
 import { useDueloPantalla, efectoDuelo, escalaDeZoom, EFECTOS_CSS } from "../hooks/useDueloPantalla";
+import LienzoPantalla from "../lienzo/LienzoPantalla";
+import { useLienzo } from "../lienzo/useLienzo";
+import { AREAS_DUELO } from "../lienzo/datosDuelo";
 import {
   faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj,
 } from "../services/duelo";
+
+// Diseñador → Escenario → Duelo (editor libre, fila lienzo_duelo).
+const enPorcentaje = (el) => ({ left: `${(el.x / 1920) * 100}%`, top: `${(el.y / 1080) * 100}%`,
+  width: `${(el.w / 1920) * 100}%`, height: `${(el.h / 1080) * 100}%` });
+// Las columnas usan sus anchos/altos de siempre como variables: adentro de su caja, la caja entera.
+const VARIABLES_CAJA = { "--izq-ancho": "100%", "--izq-alto": "100%", "--der-ancho": "100%", "--der-alto": "100%" };
 
 const P1_COLOR = "#ff1688"; // Participante 1 — fucsia
 const P2_COLOR = "#ff8a00"; // Participante 2 — naranja
@@ -616,6 +625,7 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
   const efecto = efectoDuelo(pantalla.efecto);
   const estiloEfecto = { animation: efecto.anim, transformOrigin: efecto.origen || "50% 50%",
     willChange: efecto.id === "ninguno" ? "auto" : "transform" };
+  const lienzo = useLienzo("duelo");
   const currentRound = demo ? demo.round : live.round;
   const counts = demo ? (demo.counts || { p1: 0, p2: 0 }) : live.counts;
   const nowMs = demo ? Date.now() : live.now;
@@ -754,6 +764,12 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
   // ── RESULTADO — `result` lo persistió duelo_finish_round ────────────────────
   if (fase === "result") {
     const result = currentRound?.result;
+    const editada = result ? lienzo[result === "tie" ? "empate" : "ganador"] : null;
+    if (editada) return (
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+        <LienzoPantalla pantalla={editada} datos={{ vivo: true, d1: s1, d2: s2, pct, result }} llenar/>
+      </div>
+    );
     const empate = result === "tie";
     const ganador = result === "p1" ? s1 : result === "p2" ? s2 : null;
     const colGanador = result === "p1" ? P1_COLOR : P2_COLOR;
@@ -834,6 +850,45 @@ export default function TalentDuelScreen({ gameState, sessionId, webappUrl, demo
   const alinear = { arriba: "flex-start", centro: "center", abajo: "flex-end" }[pantalla.logoPos];
   const altoLogo = pantalla.logoPos === "centro" ? "100%" : "45%";
   const escala = escalaDeZoom(pantalla.zoom);
+
+  // Votación editada en el lienzo: el video y las columnas (áreas) en sus
+  // cajas, dibujados como siempre; el resto del diseño encima.
+  if (lienzo.votacion) {
+    const els = lienzo.votacion.elementos;
+    const areaDe = (d) => els.find((e) => e.tipo === "dato" && e.dato === d && e.visible) || null;
+    const aVideo = areaDe("duVideo"), aCol1 = areaDe("duColumna1"), aCol2 = areaDe("duColumna2");
+    const encima = { ...lienzo.votacion, elementos: els
+      .filter((e) => !(e.tipo === "dato" && AREAS_DUELO.has(e.dato)))
+      .map((e) => (e.id === "logo-app" && !mostrarLogo ? { ...e, visible: false } : e)) };
+    const columna = (a, slot) => a && (
+      <div style={{ position: "absolute", ...enPorcentaje(a), zIndex: 10, ...VARIABLES_CAJA }}>
+        <ContestantColumn side={slot === 1 ? "left" : "right"} name={(slot === 1 ? s1 : s2)?.name || "—"}
+          color={slot === 1 ? P1_COLOR : P2_COLOR} avatar={slot === 1 ? s1 : s2} percent={slot === 1 ? pct.p1 : pct.p2}
+          conPorcentaje={pantalla.porcentajes}
+          leader={slot === 1 ? c1 > c2 : c2 > c1} avatarRef={avatarRefs[slot]} pulse={slot === 1 ? pulse1 : pulse2}
+          popups={popups.filter((p) => p.slot === slot)}
+          particles={particles.filter((p) => p.slot === slot)} onParticleDone={onParticleDone} />
+      </div>
+    );
+    return (
+      <div className="duel-screen" style={layout}>
+        {keyframes}
+        {duelStyles}
+        <style>{EFECTOS_CSS}</style>
+        {aVideo && (
+          <div className="duel-fondo" style={{ inset: "auto", ...enPorcentaje(aVideo),
+            ...(!hasVideo && pantalla.fondo ? { backgroundImage: `url("${pantalla.fondo}")` } : {}) }}>
+            {hasVideo && <YouTubeVideoPlayer video={video} />}
+          </div>
+        )}
+        {columna(aCol1, 1)}
+        {columna(aCol2, 2)}
+        <div style={{ position: "absolute", inset: 0, zIndex: 12, pointerEvents: "none" }}>
+          <LienzoPantalla pantalla={encima} datos={{ vivo: true, centro: pantalla, seg, d1: s1, d2: s2, pct }} sinFondo llenar/>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="duel-screen" style={layout}>

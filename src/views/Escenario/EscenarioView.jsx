@@ -10,6 +10,8 @@ import { ESCENARIO_JUEGOS }                from "../../constants/escenarioJuegos
 import CatalogoJuegos, { ESCENARIO_CATALOGO } from "../../components/CatalogoJuegos";
 import ContenedorPostulacion           from "../../components/ContenedorPostulacion";
 import DueloVistaCompleta                  from "../Juegos/DueloVistaCompleta";
+import LienzoPantalla from "../../lienzo/LienzoPantalla";
+import { useLienzo } from "../../lienzo/useLienzo";
 
 // ─── Standby ─────────────────────────────────────────────────────────────────
 function EscenarioStandby() {
@@ -316,10 +318,36 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
   const turnId  = participante?.turn_id || null;
   const soyYo   = !!participante?.user_id && participante.user_id === user?.id;
 
+  // La votación del público del modo del juego (la misma con o sin editor).
+  const votacion = !turnId ? null
+    : modoVotacion === "toques" ? <ToquesFtl turnId={turnId} enVivo={!!participante.playing} demo={demo?.votacion}/>
+    : modoVotacion === "votos" ? <VotacionFtl turnId={turnId} userId={user?.id ?? null} demo={demo?.votacion}/>
+    : modoVotacion === "pelea" ? <PeleaFtl turnId={turnId} enVivo={!!participante.playing} demo={demo?.votacion}/>
+    : null;
+
+  // Diseñador → Escenario → FTL / PT → Celular (editor libre, `cel-<estado>` en
+  // lienzo_<juego>): la pantalla editada de cada estado, con las mismas piezas
+  // vivas (botones, votación, vestuario). La app relee cada 30 s y al instante
+  // cuando se guarda.
+  const lienzo = useLienzo(juego.type, { cada: 30000 });
+  const editada = (id) => {
+    const pantalla = lienzo[id];
+    if (!pantalla) return null;
+    const conVestuario = mostrarVestuario ? pantalla
+      : { ...pantalla, elementos: pantalla.elementos.map((e) => (e.dato === "escVestuario" ? { ...e, visible: false } : e)) };
+    return (
+      <div>
+        {error && <ErrorNota texto={error}/>}
+        <LienzoPantalla formato="celular" pantalla={conVestuario} datos={{ vivo: true, participante, juego, votacion,
+          postular: () => enroll(user), salir: leave, cargando: loading, desafio: miDesafio?.title }}/>
+      </div>
+    );
+  };
+
   // El staff me llamó: es la fase que importa mostrar, y llega por Realtime.
   // El protagonista no vota — el RPC lo rechazaría igual, pero ni siquiera se
   // le ofrecen los botones.
-  if (soyYo || myEntry?.status === "called") return (
+  if (soyYo || myEntry?.status === "called") return editada("cel-en-escenario") || (
     <EnrolledCard
       color="#FDBA74" border="rgba(255,149,0,.45)" bg="rgba(255,149,0,.12)"
       icon="🎤" title="🎤 Estás en el escenario" video={miDesafio}
@@ -329,7 +357,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
   );
 
   // Turno de otro: el público mira, y vota si el juego tiene votación.
-  if (turnId) return (
+  if (turnId) return editada("cel-votando") || (
     <div>
       <div className="sec-hdr"><span style={{ fontSize: 20 }}>{juego.icon}</span><h3>{juego.label}</h3></div>
       <div style={{
@@ -354,13 +382,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
       </div>
 
       {/* Modo de votación elegido en el panel del juego (Admin, 🗳️). */}
-      {modoVotacion === "toques"
-        ? <ToquesFtl turnId={turnId} enVivo={!!participante.playing} demo={demo?.votacion}/>
-        : modoVotacion === "votos"
-        ? <VotacionFtl turnId={turnId} userId={user?.id ?? null} demo={demo?.votacion}/>
-        : modoVotacion === "pelea"
-        ? <PeleaFtl turnId={turnId} enVivo={!!participante.playing} demo={demo?.votacion}/>
-        : (
+      {votacion || (
           <div style={{ marginTop: 16, textAlign: "center", fontSize: 12,
             color: "rgba(245,230,192,.35)", lineHeight: 1.6 }}>
             ¡Seguilo desde tu lugar! 🕺
@@ -369,7 +391,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
     </div>
   );
 
-  if (isEnrolled) return (
+  if (isEnrolled) return editada("cel-anotado") || (
     <>
       {error && <ErrorNota texto={error}/>}
       <EnrolledCard
@@ -384,7 +406,7 @@ function JuegoEscenarioView({ juego, user, sessionId, participante, videoElegido
   // Postulación pura: sin catálogo, sin thumbnails, sin buscador. El desafío
   // lo define el operador cuando llama al participante.
   // Ocupa toda la sección; el botón va adentro del contenedor (ContenedorPostulacion).
-  return (
+  return editada("cel-postulacion") || (
     <ContenedorPostulacion
       id={juego.type} logo={juego.placa} alt={juego.label} titulo={juego.titulo}
       textoBoton={juego.botonPostular} cargando={loading} onPostular={() => enroll(user)}

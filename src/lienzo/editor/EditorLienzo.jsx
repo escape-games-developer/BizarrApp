@@ -23,7 +23,8 @@ import { nota } from "./controles";
  * ≤ 3 s. Un estado sin diseño guardado arranca desde `porDefecto`; guardar una
  * pantalla igual a la de fábrica borra su entrada.
  *
- * `formato`: "tv" (1920 × 1080) o "celular" (390 × 640, la sección de la app).
+ * `formato`: "tv" (1920 × 1080), "celular" (390 × 640, la sección de la app) o
+ * "banner" (390 × 110, el aviso arriba de la app).
  * `datos`: los datos de ejemplo de los elementos «dato», o una función
  * `(estado) => datos` cuando cambian según la pantalla (p. ej. la respuesta
  * revelada del Desafío).
@@ -36,7 +37,8 @@ const TIRADORES = [
   ["se", 100, 100, "nwse-resize"], ["s", 50, 100, "ns-resize"], ["sw", 0, 100, "nesw-resize"], ["w", 0, 50, "ew-resize"],
 ];
 const IMAN_PX = 8;         // px de pantalla: distancia a la que una guía «engancha»
-const GRILLAS = { tv: [20, 40, 60, 120], celular: [5, 10, 20, 40] };
+const ZONA_MIN = 20;       // px de pantalla: lo mínimo que mide la zona de clic de un elemento
+const GRILLAS = { tv: [20, 40, 60, 120], celular: [5, 10, 20, 40], banner: [5, 10, 20, 40] };
 const PREF_AYUDAS = "bizarrapp.lienzo.ayudas";
 // Ayudas de alineación (preferencia del navegador): guías inteligentes y cuadrícula.
 const leerAyudas = () => {
@@ -64,7 +66,7 @@ const esCampo = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" |
 export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefecto, datos, formato = "tv", avisos = null }) {
   const fmt = FORMATOS[formato] || FORMATOS.tv;
   const { ancho: ANCHO, alto: ALTO } = fmt;
-  const cel = fmt.id === "celular";
+  const cel = fmt.id !== "tv";   // celular o banner: del ancho de la app
   const grillas = GRILLAS[fmt.id];
   const admin = useLienzoAdmin(juego);
   const [estado, setEstado] = useState(listaPantallas[0].id);
@@ -356,13 +358,30 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
             props={{
               onPointerDown: (e) => empezar(e, el, "mover"),
               onDoubleClick: () => { if (el.tipo === "texto") setEnfocar((n) => n + 1); },
-              // Oculto: se ve translúcido y punteado para poder elegirlo y mostrarlo de nuevo.
-              style: { cursor: "move", opacity: el.visible ? el.opacidad : el.opacidad * 0.25,
+              // Oculto: tapado (rayado, «OCULTO») y punteado, para poder elegirlo y mostrarlo de nuevo.
+              style: { cursor: "move", opacity: el.opacidad,
                 outline: sel === el.id ? `${2 / (escala || 1)}px solid #FFD600`
                   : !el.visible ? `${1.5 / (escala || 1)}px dashed rgba(240,232,255,.6)`
                   : el.tipo === "dato" && avisos?.[el.dato] ? `${2 / (escala || 1)}px dashed #FFB020` : undefined,
                 outlineOffset: 0 },
             }}>
+            {/* Un elemento finito (una barra de 12 px son ~4 px en el editor) se
+                agarra igual: zona de clic invisible de al menos ZONA_MIN px. */}
+            {escala > 0 && (el.h * escala < ZONA_MIN || el.w * escala < ZONA_MIN) && (
+              <span aria-hidden="true" style={{ position: "absolute",
+                top: -Math.max(0, (ZONA_MIN / escala - el.h) / 2), bottom: -Math.max(0, (ZONA_MIN / escala - el.h) / 2),
+                left: -Math.max(0, (ZONA_MIN / escala - el.w) / 2), right: -Math.max(0, (ZONA_MIN / escala - el.w) / 2) }}/>
+            )}
+            {/* Oculto: rayado y con su cartel, para que no se confunda con uno visible. */}
+            {!el.visible && escala > 0 && (
+              <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 4,
+                background: "rgba(8,4,15,.72)",
+                backgroundImage: `repeating-linear-gradient(135deg, rgba(240,232,255,.35) 0 ${2 / escala}px, transparent ${2 / escala}px ${10 / escala}px)` }}>
+                <span style={{ position: "absolute", left: "50%", top: "50%", transform: `translate(-50%,-50%) scale(${1 / escala})`,
+                  padding: "2px 8px", borderRadius: 999, background: "#08040F", border: "1px solid rgba(240,232,255,.6)",
+                  color: "#F0E8FF", font: "700 11px 'Space Grotesk',sans-serif", letterSpacing: ".08em", whiteSpace: "nowrap" }}>OCULTO</span>
+              </span>
+            )}
             {sel === el.id && TIRADORES.map(([modo, l, t, cursor]) => (
               <span key={modo} onPointerDown={(e) => empezar(e, el, modo)}
                 style={{ position: "absolute", left: `${l}%`, top: `${t}%`, width: 14 / (escala || 1), height: 14 / (escala || 1),

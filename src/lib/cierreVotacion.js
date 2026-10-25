@@ -16,6 +16,8 @@ export function segundosRestantes(ev, ahora = Date.now()) {
   if (!ev?.current_item_id || !(Number(ev.tv_duration) > 0) || !ev.tv_reported_at) return null;
   const reportado = Date.parse(ev.tv_reported_at);
   if (!Number.isFinite(reportado) || ahora - reportado > VIGENCIA_MS) return null;
+  // El reporte es de otra canción (la TV todavía en el cruce): no cuenta.
+  if (ev.tv_reported_item && ev.tv_reported_item !== ev.current_item_id) return null;
   if (ev.current_started_at && reportado < Date.parse(ev.current_started_at)) return null;
   const corriendo = ev.is_playing !== false ? (ahora - reportado) / 1000 : 0;
   return Number(ev.tv_duration) - (Number(ev.tv_current_time) || 0) - corriendo;

@@ -871,7 +871,7 @@ export function useContinuousTvPlayers({ current, eventId, token, unlocked, mute
       const player = playersRef.current[index];
       const item   = displayedItemRef.current;
       if (!reportarRef.current || !player || !item || slotsRef.current[index].itemId !== item.id) return;
-      tvReport(eventId, token, safeTime(player), effectiveEndOf(item, safeDuration(player))).catch(() => {});
+      tvReport(eventId, token, safeTime(player), effectiveEndOf(item, safeDuration(player)), item.id).catch(() => {});
     }, REPORT_MS);
 
     controllerRef.current = { handleCurrent };

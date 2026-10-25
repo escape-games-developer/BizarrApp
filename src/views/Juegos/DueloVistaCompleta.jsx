@@ -5,6 +5,8 @@ import ContenedorPostulacion from "../../components/ContenedorPostulacion";
 import {
   faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, modoDeRonda, anchoBarraP1,
 } from "../../services/duelo";
+import LienzoPantalla from "../../lienzo/LienzoPantalla";
+import { useLienzo } from "../../lienzo/useLienzo";
 
 // Cómo se vota en cada modo (ver MODOS_DUELO).
 const TEXTO_MODO = {
@@ -83,6 +85,19 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   const modo = modoDeRonda(round);
   const bloqueo = modo === "votos" ? voto.bloqueo : toques.bloqueo;
 
+  // Diseñador → Escenario → Duelo → Celular (editor libre, `cel-<estado>` en
+  // lienzo_duelo): la pantalla editada de cada estado, con las mismas piezas
+  // vivas (botones para votar / tocar, marcador). Relee cada 30 s y al guardar.
+  const lienzo = useLienzo("duelo", { cada: 30000 });
+  const editada = (id, extra = {}) => (lienzo[id] ? (
+    <div>
+      {error && <div style={{ marginBottom: 10, padding: "9px 11px", borderRadius: 10, background: "rgba(239,68,68,.1)",
+        border: "1px solid rgba(239,68,68,.3)", color: "#FCA5A5", fontSize: 11.5, textAlign: "center" }}>{error}</div>}
+      <LienzoPantalla formato="celular" pantalla={lienzo[id]}
+        datos={{ vivo: true, d1, d2, pct, result: round?.result ?? null, ...extra }}/>
+    </div>
+  ) : null);
+
   const header = (
     // data-titulo-seccion: se oculta con Ajustes → General → títulos apagado.
     <div data-titulo-seccion style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
@@ -149,6 +164,23 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
 
     // El duelista ve el marcador, sin botones: no vota (lo impide el backend).
     if (soyDuelista || bloqueo === "DUELIST_CANNOT_VOTE") {
+      const marcador = (<>
+        <div style={{ display: "flex", gap: 10 }}>
+          {lados.map(({ slot, s, color, pct: valor }) => (
+            <div key={slot} style={{
+              flex: 1, padding: "16px 8px", borderRadius: 18, textAlign: "center",
+              border: `2px solid ${color}55`, background: `${color}10`,
+            }}>
+              <SlotFace slot={s} color={color} />
+              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color, marginTop: 8 }}>{s?.name}</div>
+              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26, color: "#F0E8FF", marginTop: 4 }}>{valor}%</div>
+            </div>
+          ))}
+        </div>
+        <SplitBar p1={anchoBarraP1(pct)} />
+      </>);
+      const enEscenario = editada("cel-en-escenario", { seg, panel: marcador });
+      if (enEscenario) return enEscenario;
       return (
         <div>
           {header}
@@ -205,6 +237,42 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
     else if (toques.limite != null) saldo = `Te quedan ${toques.restante} toque${toques.restante === 1 ? "" : "s"}`;
     else saldo = toques.mios > 0 ? `Llevás ${toques.mios} toque${toques.mios === 1 ? "" : "s"}` : "Toques sin límite";
 
+    const botones = (<>
+      <style>{`
+        @keyframes dueloTapPop { 0%{transform:scale(1)} 45%{transform:scale(.95)} 100%{transform:scale(1)} }
+        .duelo-tap:active:not(:disabled) { animation: dueloTapPop .16s ease-out; }
+      `}</style>
+      <div style={{ display: "flex", gap: 10 }}>
+        {lados.map(({ slot, s, color, pct: valor }) => {
+          const elegido = modo === "votos" && voto.miVoto === slot;
+          return (
+            <button key={slot} className="duelo-tap" disabled={deshabilitado} onClick={() => votarA(slot)}
+              aria-label={`${modo === "votos" ? "Votar a" : "Tocar a"} ${s?.name || `participante ${slot}`}`}
+              style={{
+                flex: 1, padding: "20px 8px", borderRadius: 18,
+                cursor: deshabilitado ? "default" : "pointer", opacity: deshabilitado ? 0.55 : 1,
+                border: `${elegido ? 3 : 2}px solid ${color}`, background: elegido ? `${color}33` : `${color}14`,
+                boxShadow: elegido ? `0 0 18px ${color}88` : "none",
+                WebkitTapHighlightColor: "transparent", touchAction: "manipulation", userSelect: "none",
+              }}>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color, marginBottom: 6 }}>
+                {elegido ? "✓ TU VOTO" : `PARTICIPANTE ${slot}`}
+              </div>
+              <SlotFace slot={s} color={color} />
+              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color, marginTop: 8 }}>{s?.name}</div>
+              <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 26, color: "#F0E8FF", marginTop: 4 }}>{valor}%</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color, marginTop: 6 }}>
+                {modo === "votos" ? (elegido ? "Tu voto" : "Votar") : "¡Tocá!"}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <SplitBar p1={anchoBarraP1(pct)} />
+    </>);
+    const enVotacion = editada("cel-votacion", { seg, panel: botones, saldo, consigna: TEXTO_MODO[modo].consigna });
+    if (enVotacion) return enVotacion;
+
     return (
       <div>
         {header}
@@ -258,6 +326,23 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   if (fase === "result") {
     const empate = round.result === "tie";
     const ganador = round.result === "p1" ? d1 : round.result === "p2" ? d2 : null;
+    const tarjetas = (
+      <div style={{ display: "flex", gap: 10 }}>
+        {[{ slot: 1, s: d1, color: PINK, valor: pct.p1, gano: round.result === "p1" },
+          { slot: 2, s: d2, color: ORANGE, valor: pct.p2, gano: round.result === "p2" }].map(({ slot, s, color, valor, gano }) => (
+          <div key={slot} style={{
+            flex: 1, padding: "14px 8px", borderRadius: 16, textAlign: "center",
+            background: `${color}10`, border: `2px solid ${gano ? color : `${color}44`}`,
+          }}>
+            <SlotFace slot={s} color={color} size={52} />
+            <div style={{ fontSize: 12.5, fontWeight: 700, color, marginTop: 6 }}>{s?.name}</div>
+            <div style={{ fontFamily: "Syne, sans-serif", fontWeight: 900, fontSize: 20, color: "#F0E8FF", marginTop: 2 }}>{valor}%</div>
+          </div>
+        ))}
+      </div>
+    );
+    const enResultado = editada("cel-resultado", { panel: tarjetas });
+    if (enResultado) return enResultado;
     return (
       <div>
         {header}
@@ -301,6 +386,8 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
   };
 
   if (!misPostulacion) {
+    const enPostulacion = editada("cel-postulacion", { postular: handlePostularme, cargando: enviando });
+    if (enPostulacion) return enPostulacion;
     // Mismo contenedor que FTL y PT: toda la sección, botón adentro.
     return (
       <ContenedorPostulacion
@@ -329,6 +416,11 @@ export default function DueloVistaCompleta({ sessionId, user, activeEscenario, g
       </div>
     );
   }
+
+  const enPostulado = editada("cel-postulado", { estado: misPostulacion.status === "selected"
+    ? "¡Te eligieron! Preparate para subir al escenario."
+    : "Esperando que el staff elija a los participantes…" });
+  if (enPostulado) return enPostulado;
 
   // waiting, o selected justo antes de que arranque la votación. Al terminar
   // la ronda la base BORRA la postulación de los dos que subieron (migración

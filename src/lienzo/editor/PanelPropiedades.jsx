@@ -65,10 +65,15 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
               <Opcion key={v} on={el.leyenda === v} onClick={() => set({ leyenda: v })}>{t}</Opcion>
             ))}
           </Fila>
-          {el.leyenda !== "oculta" && (
+          {el.leyenda !== "oculta" && (<>
             <input className="inp" value={el.texto} maxLength={120} onChange={(e) => set({ texto: e.target.value })}
               placeholder="Sin texto" style={{ margin: 0 }}/>
-          )}
+            <Fila label="Tamaño">
+              <Num value={el.estilo.tamano} min={8} max={200} step={1} ancho={58}
+                onChange={(v) => set({ estilo: { ...el.estilo, tamano: v } })}/>
+              <span style={nota}>px</span>
+            </Fila>
+          </>)}
         </Seccion>
       )}
 
@@ -109,12 +114,7 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
               <Slider value={el.cantidad} min={1} max={8} onChange={(v) => set({ cantidad: v })} mostrar={(v) => `${v}`}/>
             </Fila>
           )}
-          {dato.secundario && (
-            <Fila label={dato.secundario}>
-              <Slider value={Math.round(el.proporcion * 100)} min={30} max={150} onChange={(v) => set({ proporcion: v / 100 })}
-                mostrar={(v) => `${v}% del título`}/>
-            </Fila>
-          )}
+
         </Seccion>
       )}
 
@@ -164,6 +164,9 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
       {(el.tipo === "texto" || (esDato && !dato?.sinTexto)) && (
         <ControlesTexto estilo={el.estilo} onCambiar={(estilo) => set({ estilo })}
           titulo={!esDato ? "Formato" : dato?.formato || (dato?.leyenda || dato?.plantilla ? "Formato del texto" : "Formato de las letras")}/>
+      )}
+      {dato?.estiloSecundario && (
+        <ControlesTexto estilo={dato.estiloSecundario(el)} onCambiar={(estilo2) => set({ estilo2 })} titulo={dato.secundario}/>
       )}
 
       {esDato && !dato?.sinFichas && (

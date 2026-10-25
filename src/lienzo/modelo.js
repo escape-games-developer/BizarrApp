@@ -38,6 +38,8 @@ export const ALTO = 1080;
 export const FORMATOS = {
   tv:      { id: "tv",      ancho: ANCHO, alto: ALTO, transparente: false },
   celular: { id: "celular", ancho: 390,   alto: 640,  transparente: true },
+  // Banner arriba de la app (Mensaje / Promo de Lanzar al celular).
+  banner:  { id: "banner",  ancho: 390,   alto: 110,  transparente: true },
 };
 export const MAX_ELEMENTOS = 40;
 const TEXTO_MAX = 300;
@@ -137,6 +139,9 @@ export function normalizarElemento(el, i = 0) {
     ajusteTexto: ["cortar", "lineas", "ajustar"].includes(el.ajusteTexto) ? el.ajusteTexto : "cortar",
     proporcion: num(el.proporcion, 0.3, 1.5, 0.65),
     cantidad: Math.round(num(el.cantidad, 1, 8, 8)),
+    // Formato propio del texto secundario (el artista): sin él, se deriva del
+    // principal con `proporcion` y el color «Artista» (ver datosDj.jsx).
+    estilo2: el.estilo2 && typeof el.estilo2 === "object" ? normalizarEstilo(el.estilo2) : null,
     leyenda: ["arriba", "abajo", "oculta"].includes(el.leyenda) ? el.leyenda : "arriba",
     ficha: { fondo: color(el.ficha?.fondo, "rgba(168,85,247,.12)"), borde: color(el.ficha?.borde, "rgba(168,85,247,.5)"),
       acento: color(el.ficha?.acento, "#00F5A0") },
