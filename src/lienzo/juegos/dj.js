@@ -1,0 +1,69 @@
+import { LOGO_APP, pantalla } from "./piezas";
+
+/**
+ * Diseño de fábrica de la pantalla del DJ Democracy en el editor: calca el
+ * diseño del Diseñador TV que estaba en vivo en el bar (evento LDR4X3, en %
+ * de pantalla → px sobre 1920 × 1080). Fila `lienzo_dj`.
+ *
+ * Sin pantalla guardada la TV sigue con el diseño viejo del evento
+ * (`pantalla_events.tv_canvas_config`).
+ */
+
+export const PANTALLAS_DJ = [
+  { id: "dj", nombre: "Pantalla del DJ" },
+];
+
+const dato = (id, d, nombre, x, y, w, h, extra = {}) => ({ id, tipo: "dato", dato: d, nombre, x, y, w, h, ...extra });
+
+export const DJ_POR_DEFECTO = {
+  dj: pantalla(
+    dato("video", "djVideo", "Video del DJ", 0, 0, 1920, 1080),
+    // El logo del evento (Personalización visual) reemplaza a éste en la TV.
+    { id: "logo", tipo: "imagen", nombre: "Logo", src: LOGO_APP, ajuste: "contain", x: 24, y: 8, w: 317, h: 196 },
+    dato("qr", "qr", "QR para votar", 0, 721, 307, 378, {
+      texto: "ESCANEÁ PARA VOTAR", leyenda: "arriba",
+      estilo: { fuente: "grotesk", tamano: 18, peso: 900, color: "#FFD600", espaciado: 0.08 },
+    }),
+    { id: "fondo-proximas", tipo: "forma", nombre: "Fondo de próximas", x: 1564, y: 741, w: 365, h: 378,
+      relleno: { color: "rgba(17,17,17,.65)" }, borde: { color: "transparent", ancho: 0 }, radio: 15 },
+    dato("proximas", "djProximas", "Próximas canciones", 1564, 741, 365, 378, {
+      texto: "PRÓXIMAS CANCIONES", proporcion: 0.8, cantidad: 8,
+      estilo: { fuente: "poppins", tamano: 22, peso: 700, color: "#F0E8FF", alinear: "left" },
+      ficha: { fondo: "rgba(240,232,255,.03)", borde: "rgba(240,232,255,.06)", acento: "#00E5FF" },
+    }),
+    dato("evento", "djEvento", "Nombre del evento", 1517, 22, 365, 86, {
+      estilo: { fuente: "grotesk", tamano: 17, peso: 700, color: "#F0E8FF" },
+    }),
+    dato("sonando", "djSonando", "Sonando ahora", 1279, 8, 644, 212, {
+      estilo: { fuente: "grotesk", tamano: 51, peso: 700, color: "#FFD600", alinear: "left", sombra: { color: "#000", x: 0, y: 2, blur: 14 } },
+      ficha: { fondo: "transparent", borde: "transparent", acento: "rgba(240,232,255,.6)" },
+    }),
+    // Los cinco del DJ Democracy original que el Diseñador TV viejo tenía pero la
+    // TV nunca dibujaba; mismas cajas que en el diseño en vivo.
+    dato("progreso", "djProgreso", "Barra de progreso", 384, 160, 860, 12, {
+      texto: "", estilo: { fuente: "grotesk", tamano: 18, peso: 700, color: "#F0E8FF" },
+      ficha: { fondo: "rgba(255,255,255,.15)", borde: "transparent", acento: "#FFD600" },
+    }),
+    dato("estado", "djEstado", "Pastillas de estado", 1528, 374, 365, 86, {
+      estilo: { fuente: "grotesk", tamano: 16, peso: 700, color: "#F0E8FF", espaciado: 0.06 },
+      ficha: { fondo: "rgba(8,4,15,.6)", borde: "rgba(240,232,255,.15)" },
+    }),
+    dato("equipos", "djEquipos", "Marcador de equipos", 1517, 500, 365, 124, {
+      estilo: { fuente: "grotesk", tamano: 20, peso: 700, color: "#F0E8FF" },
+      ficha: { fondo: "rgba(8,4,15,.6)", borde: "rgba(240,232,255,.15)", acento: "#FFD600" },
+    }),
+    dato("gif-premio", "djGifPremio", "GIF a pantalla (premio)", 38, 270, 307, 346, {
+      texto: "🎞 {}", estilo: { fuente: "grotesk", tamano: 22, peso: 700, color: "#FFD600" },
+      ficha: { fondo: "rgba(8,4,15,.6)", borde: "rgba(255,214,0,.35)" },
+    }),
+    dato("votacion-cerrada", "djVotacionCerrada", "Aviso de votación cerrada", 422, 929, 1037, 108, {
+      texto: "❄ VOTACIÓN CERRADA — PREPARANDO PRÓXIMA", estilo: { fuente: "grotesk", tamano: 44, peso: 700, color: "#FFFFFF" },
+      ficha: { fondo: "rgba(8,4,15,.72)", borde: "rgba(255,214,0,.35)" },
+    }),
+    dato("contador", "djContador", "Contador Sacar tema", 614, 810, 691, 86, {
+      texto: "👎 SACAR TEMA · {}", estilo: { fuente: "syne", tamano: 26, peso: 900, color: "#FFFFFF", espaciado: 0.04 },
+      ficha: { fondo: "#ef4444", borde: "rgba(255,255,255,.3)", acento: "#FFFFFF" },
+    }),
+    { ...dato("transicion", "djTransicion", "Transición entre canciones", 672, 378, 576, 270), visible: false },
+  ),
+};

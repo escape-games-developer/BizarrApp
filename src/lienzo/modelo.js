@@ -127,7 +127,16 @@ export function normalizarElemento(el, i = 0) {
     return { ...base, src: el.src, ajuste: el.ajuste === "cover" ? "cover" : "contain",
       efecto: IDS_EF_IMG.includes(el.efecto) ? el.efecto : "ninguno" };
   }
+  // `portada`: se ve la imagen del dato (la tapa de la canción). `ajusteTexto`:
+  // qué hace el texto que no entra en la caja — "cortar" (…), "lineas" (baja de
+  // renglón) o "ajustar" (el tamaño se acomoda a la caja). `proporcion`: el
+  // texto secundario (el artista) respecto del principal. `cantidad`: cuántos
+  // renglones muestra una lista (las próximas canciones).
   return { ...base, dato: str(el.dato), estilo: normalizarEstilo(el.estilo), texto: str(el.texto).slice(0, TEXTO_MAX),
+    portada: el.portada !== false,
+    ajusteTexto: ["cortar", "lineas", "ajustar"].includes(el.ajusteTexto) ? el.ajusteTexto : "cortar",
+    proporcion: num(el.proporcion, 0.3, 1.5, 0.65),
+    cantidad: Math.round(num(el.cantidad, 1, 8, 8)),
     leyenda: ["arriba", "abajo", "oculta"].includes(el.leyenda) ? el.leyenda : "arriba",
     ficha: { fondo: color(el.ficha?.fondo, "rgba(168,85,247,.12)"), borde: color(el.ficha?.borde, "rgba(168,85,247,.5)"),
       acento: color(el.ficha?.acento, "#00F5A0") },

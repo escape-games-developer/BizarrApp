@@ -8,6 +8,38 @@ const MODOS = [
   { value: "rank", titulo: "Votación Rank", texto: "Votá 👍 o 👎 en cada canción" },
 ];
 
+/**
+ * Cierre automático: en los últimos N segundos de cada canción la votación se
+ * cierra sola (la base rechaza los votos) y la TV muestra «❄ VOTACIÓN CERRADA —
+ * PREPARANDO PRÓXIMA» con la cuenta regresiva. 0 = sin cierre.
+ */
+function CierreVotacion({ event, refresh }) {
+  const [seg, setSeg] = useState(event.vote_close_seconds ?? 15);
+  useEffect(() => { setSeg(event.vote_close_seconds ?? 15); }, [event.vote_close_seconds]);
+  const { estado, guardar } = useGuardado(async (valor) => {
+    await saveEventFields(event.id, { vote_close_seconds: valor });
+    await refresh();
+  });
+  const cambiado = Number(seg) !== Number(event.vote_close_seconds ?? 15);
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="pdj-overview-label" style={{ textAlign: "left", marginBottom: 6 }}>CIERRE DE LA VOTACIÓN</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input className="pdj-input" type="number" min={0} max={120} value={seg} aria-label="Segundos antes del final"
+          onChange={(e) => setSeg(Math.max(0, Math.min(120, Math.round(Number(e.target.value) || 0))))}
+          style={{ width: 80, padding: "6px 8px", fontSize: 12 }}/>
+        <span style={{ fontSize: 11, color: P.tenue2 }}>segundos antes del final de cada canción</span>
+        <button type="button" className="pdj-mini pdj-mini-p" disabled={!cambiado || estado === "guardando"}
+          onClick={() => guardar(Number(seg))}>{estado === "guardando" ? "Guardando…" : "Guardar"}</button>
+      </div>
+      <div style={{ fontSize: 10.5, color: P.tenue2, marginTop: 6, lineHeight: 1.5 }}>
+        En esos últimos segundos no se puede votar: se prepara la próxima y la TV muestra la cuenta regresiva.
+        En 0, la votación queda abierta hasta el final.
+      </div>
+    </div>
+  );
+}
+
 export default function SeccionVotacion({ event, refresh }) {
   const [modo, setModo] = useState(event.voting_mode || "best");
   const { estado, guardar } = useGuardado(async (valor) => {
@@ -46,6 +78,7 @@ export default function SeccionVotacion({ event, refresh }) {
           );
         })}
       </div>
+      <CierreVotacion event={event} refresh={refresh}/>
     </section>
   );
 }

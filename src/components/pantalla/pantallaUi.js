@@ -82,6 +82,7 @@ const ERRORES = {
   "not authenticated":             "Necesitás iniciar sesión para votar.",
   "not authorized":                "No tenés permisos para hacer esto.",
   "voting disabled":               "El DJ desactivó la votación por un rato.",
+  "voting closed":                 "La votación de este tema cerró: se está preparando la próxima canción.",
   "kick disabled":                 "Sacar Tema está deshabilitado en este evento.",
   "kick hidden":                   "Todavía no hay suficiente gente conectada para sacar temas.",
   "already voted":                 "Ya votaste en este tema.",

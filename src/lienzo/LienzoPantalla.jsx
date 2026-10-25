@@ -5,6 +5,7 @@ import { FUENTES_CSS, cssDeTexto } from "./estilosTexto";
 import { EFECTOS_LIENZO_CSS, efectoLienzo } from "./efectos";
 import { marcarLienzo } from "./lienzoActivo";
 import { DATOS_JUEGOS, DATOS_JUEGOS_CSS } from "./datosJuegos";
+import { DATOS_DJ } from "./datosDj";
 
 /**
  * Dibuja una pantalla del editor (ver modelo.js). El fondo ocupa todo el
@@ -148,6 +149,7 @@ export const DATOS = {
   miLetra:           { nombre: "Tu letra",              Componente: MiLetra,           ayuda: "La letra que le tocó a este cliente.", sinFichas: true },
   qr:                { nombre: "QR a la app",           Componente: Qr,                ayuda: "Lleva al celular a la app. Su texto se edita, va arriba o abajo, o se oculta.", leyenda: true, sinFichas: true },
   ...DATOS_JUEGOS,
+  ...DATOS_DJ,
 };
 
 function Contenido({ el, datos }) {
@@ -195,21 +197,26 @@ export function ElementoLienzo({ el, datos, props, children, z }) {
 
 /**
  * Escala del escenario dentro del contenedor. `soloAncho`: escala al ancho
- * (celular); si no, entra entero (TV).
+ * (celular); si no, entra entero (TV). También devuelve `{ sx, sy }`: lo que
+ * hay que estirar en cada eje para llenar el contenedor (`llenar`).
  */
 export function useEscalaLienzo({ ancho, alto }, soloAncho = false) {
   const ref = useRef(null);
   const [escala, setEscala] = useState(0);
+  const [ejes, setEjes] = useState({ sx: 0, sy: 0 });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
-    const medir = () => setEscala(soloAncho ? el.clientWidth / ancho : Math.min(el.clientWidth / ancho, el.clientHeight / alto));
+    const medir = () => {
+      setEscala(soloAncho ? el.clientWidth / ancho : Math.min(el.clientWidth / ancho, el.clientHeight / alto));
+      setEjes({ sx: el.clientWidth / ancho, sy: el.clientHeight / alto });
+    };
     medir();
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
   }, [ancho, alto, soloAncho]);
-  return [ref, escala];
+  return [ref, escala, ejes];
 }
 
 export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS + DATOS_JUEGOS_CSS;
@@ -217,11 +224,17 @@ export const LIENZO_CSS = FUENTES_CSS + EFECTOS_LIENZO_CSS + DATOS_JUEGOS_CSS;
 /**
  * `juego`: avisa que esa pantalla trae su propio QR (ver lienzoActivo.js).
  * `formato`: "tv" (por defecto) o "celular".
+ * `sinFondo`: sólo los elementos, sobre lo que haya debajo (la TV del DJ dibuja
+ *   el fondo en otra capa, debajo del video).
+ * `llenar` (TV): el escenario se estira para llenar el contenedor aunque no
+ *   sea 16:9 (una ventana de Chrome), en vez de entrar entero con franjas. En
+ *   una pantalla 16:9 es lo mismo.
  */
-export default function LienzoPantalla({ pantalla, datos, juego, formato = "tv" }) {
+export default function LienzoPantalla({ pantalla, datos, juego, formato = "tv", sinFondo = false, llenar = false }) {
   const fmt = FORMATOS[formato] || FORMATOS.tv;
   const cel = fmt.id === "celular";
-  const [ref, escala] = useEscalaLienzo(fmt, cel);
+  const [ref, escala, ejes] = useEscalaLienzo(fmt, cel);
+  const estirar = llenar && !cel;
   useEffect(() => {
     if (!juego) return undefined;
     marcarLienzo(juego, true);
@@ -232,9 +245,10 @@ export default function LienzoPantalla({ pantalla, datos, juego, formato = "tv" 
       ? { position: "relative", width: "100%", height: fmt.alto * escala, overflow: "hidden" }
       : { position: "absolute", inset: 0, overflow: "hidden" }}>
       <style>{LIENZO_CSS}</style>
-      <FondoLienzo fondo={pantalla.fondo} transparente={fmt.transparente}/>
+      {!sinFondo && <FondoLienzo fondo={pantalla.fondo} transparente={fmt.transparente}/>}
       <div style={{ position: "absolute", width: fmt.ancho, height: fmt.alto,
         ...(cel ? { left: 0, top: 0, transformOrigin: "0 0", transform: `scale(${escala})` }
+          : estirar ? { left: 0, top: 0, transformOrigin: "0 0", transform: `scale(${ejes.sx}, ${ejes.sy})` }
           : { left: "50%", top: "50%", transform: `translate(-50%,-50%) scale(${escala})` }),
         visibility: escala ? "visible" : "hidden" }}>
         {pantalla.elementos.map((el, i) => el.visible && <ElementoLienzo key={el.id} el={el} datos={datos} z={i + 1}/>)}

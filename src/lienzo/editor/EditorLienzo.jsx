@@ -27,6 +27,8 @@ import { nota } from "./controles";
  * `datos`: los datos de ejemplo de los elementos «dato», o una función
  * `(estado) => datos` cuando cambian según la pantalla (p. ej. la respuesta
  * revelada del Desafío).
+ * `avisos`: { <id de dato>: texto } — los datos que el evento en vivo hoy no
+ * deja ver en la TV; en el editor se marcan (contorno ámbar, ⚠ en Capas).
  */
 
 const TIRADORES = [
@@ -59,7 +61,7 @@ const HISTORIAL_MAX = 80;
 
 const esCampo = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
 
-export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefecto, datos, formato = "tv" }) {
+export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefecto, datos, formato = "tv", avisos = null }) {
   const fmt = FORMATOS[formato] || FORMATOS.tv;
   const { ancho: ANCHO, alto: ALTO } = fmt;
   const cel = fmt.id === "celular";
@@ -135,6 +137,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
     const siguiente = { ...actual, [estado]: fn(actual[estado]) };
     if (historial) setHist((h) => ({ pasado: [...h.pasado.slice(-HISTORIAL_MAX), actual], futuro: [] }));
     setDoc(siguiente);
+    setAviso(null);   // «Guardada» deja de valer apenas se cambia algo.
   }, [estado]);
 
   const cambiarElemento = useCallback((id, patch, opts) => cambiar((p) => ({
@@ -145,6 +148,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
     const h = histRef.current;
     if (!h.pasado.length) return;
     setHist({ pasado: h.pasado.slice(0, -1), futuro: [docRef.current, ...h.futuro] });
+    setAviso(null);
     setDoc(h.pasado[h.pasado.length - 1]);
   }, []);
   const rehacer = useCallback(() => {
@@ -152,6 +156,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
     if (!h.futuro.length) return;
     const [prox, ...resto] = h.futuro;
     setHist({ pasado: [...h.pasado, docRef.current], futuro: resto });
+    setAviso(null);
     setDoc(prox);
   }, []);
 
@@ -354,7 +359,8 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
               // Oculto: se ve translúcido y punteado para poder elegirlo y mostrarlo de nuevo.
               style: { cursor: "move", opacity: el.visible ? el.opacidad : el.opacidad * 0.25,
                 outline: sel === el.id ? `${2 / (escala || 1)}px solid #FFD600`
-                  : el.visible ? undefined : `${1.5 / (escala || 1)}px dashed rgba(240,232,255,.6)`,
+                  : !el.visible ? `${1.5 / (escala || 1)}px dashed rgba(240,232,255,.6)`
+                  : el.tipo === "dato" && avisos?.[el.dato] ? `${2 / (escala || 1)}px dashed #FFB020` : undefined,
                 outlineOffset: 0 },
             }}>
             {sel === el.id && TIRADORES.map(([modo, l, t, cursor]) => (
@@ -439,7 +445,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
           <PanelPropiedades pantalla={pantalla} sel={sel} enfocarTexto={enfocar} formato={fmt}
             onCambiarElemento={cambiarElemento}
             onCambiarFondo={(fondo) => cambiar((p) => ({ ...p, fondo }))}
-            onAccion={accion} onElegir={setSel} onPedirImagen={setLibPara}/>
+            onAccion={accion} onElegir={setSel} onPedirImagen={setLibPara} avisos={avisos}/>
         </div>
       </div>
 

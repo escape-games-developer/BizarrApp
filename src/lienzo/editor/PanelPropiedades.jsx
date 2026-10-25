@@ -14,6 +14,10 @@ export const nombreDe = (el) => el.nombre
     : el.tipo === "forma" ? "Forma" : DATOS[el.dato]?.nombre || "Dato");
 
 const ICONO = { texto: "T", imagen: "▣", dato: "◆", forma: "▢" };
+/** Lo que el evento en vivo dice de ese dato (p. ej. «los equipos están apagados»), o null. */
+const avisoDe = (avisos, el) => (el.tipo === "dato" ? avisos?.[el.dato] : null) || null;
+const AVISO = { fontSize: 10.5, lineHeight: 1.5, color: "#FFD27A", padding: "8px 10px", marginBottom: 8, borderRadius: 8,
+  background: "rgba(255,170,0,.1)", border: "1px solid rgba(255,170,0,.35)" };
 
 function Efectos({ lista, valor, onCambiar }) {
   return (
@@ -23,7 +27,7 @@ function Efectos({ lista, valor, onCambiar }) {
   );
 }
 
-function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen, formato }) {
+function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen, formato, aviso }) {
   const area = useRef(null);
   useEffect(() => { if (enfocarTexto && area.current) { area.current.focus(); area.current.select(); } }, [enfocarTexto]);
   const set = (patch) => onCambiar(patch);
@@ -51,6 +55,7 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
             onChange={(e) => set({ texto: e.target.value })} style={{ margin: 0, resize: "vertical" }}/>
         </Seccion>
       )}
+      {aviso && <div role="note" style={AVISO}>⚠ Ahora no se ve en la TV: {aviso}</div>}
       {!el.visible && <div style={{ ...nota, color: "#FFD600", paddingBottom: 8 }}>Oculto: no se ve en la pantalla. En el editor aparece translúcido.</div>}
       {esDato && <div style={{ ...nota, paddingBottom: 8 }}>{dato?.ayuda} Lo llena el juego en vivo: podés moverlo, cambiarle el tamaño, el formato u ocultarlo.</div>}
       {dato?.leyenda && (
@@ -67,11 +72,49 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
         </Seccion>
       )}
 
+      {dato?.titulo && (
+        <Seccion titulo="Título">
+          <input className="inp" value={el.texto} maxLength={120} onChange={(e) => set({ texto: e.target.value })}
+            placeholder="Sin título" style={{ margin: 0 }}/>
+        </Seccion>
+      )}
       {dato?.plantilla && (
         <Seccion titulo="Texto">
           <input className="inp" value={el.texto} maxLength={120} onChange={(e) => set({ texto: e.target.value })}
             placeholder="{}" style={{ margin: 0 }}/>
           <div style={nota}>{"{}"} es el dato del juego: «Premio: {"{}"}» se ve «Premio: 2×1». Vacío = sólo el dato.</div>
+        </Seccion>
+      )}
+
+      {dato?.portada && (
+        <Seccion titulo="Portada">
+          <Interruptor on={el.portada} onClick={() => set({ portada: !el.portada })}>Mostrar la foto de la canción</Interruptor>
+        </Seccion>
+      )}
+      {dato?.ajusteTexto && (
+        <Seccion titulo="Texto largo">
+          <Fila>
+            {[["cortar", "Cortar con …"], ["lineas", "Varias líneas"], ["ajustar", "Ajustar a la caja"]].map(([v, t]) => (
+              <Opcion key={v} on={el.ajusteTexto === v} onClick={() => set({ ajusteTexto: v })}>{t}</Opcion>
+            ))}
+          </Fila>
+          <div style={nota}>
+            {el.ajusteTexto === "ajustar"
+              ? "Si el texto no entra, se achica solo hasta entrar en la caja. Nunca pasa del «Tamaño» de «Formato del texto»: un título corto se ve a ese tamaño."
+              : el.ajusteTexto === "lineas" ? "El texto que no entra baja al renglón siguiente."
+                : "El texto que no entra se corta con «…». El tamaño es el de «Formato del texto»."}
+          </div>
+          {dato.cantidad && (
+            <Fila label="Canciones">
+              <Slider value={el.cantidad} min={1} max={8} onChange={(v) => set({ cantidad: v })} mostrar={(v) => `${v}`}/>
+            </Fila>
+          )}
+          {dato.secundario && (
+            <Fila label={dato.secundario}>
+              <Slider value={Math.round(el.proporcion * 100)} min={30} max={150} onChange={(v) => set({ proporcion: v / 100 })}
+                mostrar={(v) => `${v}% del título`}/>
+            </Fila>
+          )}
         </Seccion>
       )}
 
@@ -112,7 +155,7 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
         </Seccion>
       )}
 
-      {el.tipo !== "forma" && (
+      {el.tipo !== "forma" && !dato?.sinEfecto && (
         <Seccion titulo="Efecto">
           <Efectos lista={el.tipo === "imagen" ? EFECTOS_IMAGEN : EFECTOS_TEXTO} valor={el.efecto} onCambiar={(v) => set({ efecto: v })}/>
         </Seccion>
@@ -120,7 +163,7 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
 
       {(el.tipo === "texto" || (esDato && !dato?.sinTexto)) && (
         <ControlesTexto estilo={el.estilo} onCambiar={(estilo) => set({ estilo })}
-          titulo={!esDato ? "Formato" : dato?.leyenda || dato?.plantilla ? "Formato del texto" : "Formato de las letras"}/>
+          titulo={!esDato ? "Formato" : dato?.formato || (dato?.leyenda || dato?.plantilla ? "Formato del texto" : "Formato de las letras")}/>
       )}
 
       {esDato && !dato?.sinFichas && (
@@ -203,7 +246,7 @@ function PanelFondo({ fondo, onCambiar, onElegirImagen }) {
   );
 }
 
-function Capas({ elementos, sel, onElegir, onCambiar }) {
+function Capas({ elementos, sel, onElegir, onCambiar, avisos }) {
   return (
     <Seccion titulo="Capas">
       <div style={{ display: "grid", gap: 3 }}>
@@ -213,6 +256,7 @@ function Capas({ elementos, sel, onElegir, onCambiar }) {
               background: sel === el.id ? "rgba(155,47,255,.22)" : "rgba(240,232,255,.03)",
               border: `1px solid ${sel === el.id ? "#9B2FFF" : "transparent"}`, opacity: el.visible ? 1 : .5 }}>
             <span style={{ width: 18, textAlign: "center", fontSize: 11, color: "rgba(240,232,255,.5)" }}>{ICONO[el.tipo]}</span>
+            {avisoDe(avisos, el) && <span title={`Ahora no se ve en la TV: ${avisoDe(avisos, el)}`} style={{ color: "#FFB020", fontSize: 11 }}>⚠</span>}
             <span style={{ flex: 1, fontSize: 11.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombreDe(el)}</span>
             <button type="button" title={el.visible ? "Ocultar" : "Mostrar"}
               onClick={(e) => { e.stopPropagation(); onCambiar(el.id, { visible: !el.visible }); }}
@@ -226,19 +270,23 @@ function Capas({ elementos, sel, onElegir, onCambiar }) {
   );
 }
 
+/**
+ * `avisos` = { <id de dato>: texto }: lo que el evento en vivo hace que hoy no
+ * se vea en la TV (equipos apagados, votación abierta…). Se marca con ⚠.
+ */
 export default function PanelPropiedades({ pantalla, sel, onCambiarElemento, onCambiarFondo, onAccion, onElegir,
-  enfocarTexto, onPedirImagen, formato }) {
+  enfocarTexto, onPedirImagen, formato, avisos }) {
   const el = pantalla.elementos.find((x) => x.id === sel);
   return (
     <div>
       {el ? (
-        <PanelElemento key={el.id} el={el} enfocarTexto={enfocarTexto} formato={formato}
+        <PanelElemento key={el.id} el={el} enfocarTexto={enfocarTexto} formato={formato} aviso={avisoDe(avisos, el)}
           onCambiar={(patch) => onCambiarElemento(el.id, patch)} onAccion={onAccion}
           onCambiarImagen={() => onPedirImagen("cambiar")}/>
       ) : (
         <PanelFondo fondo={pantalla.fondo} onCambiar={onCambiarFondo} onElegirImagen={() => onPedirImagen("fondo")}/>
       )}
-      <Capas elementos={pantalla.elementos} sel={sel} onElegir={onElegir} onCambiar={onCambiarElemento}/>
+      <Capas elementos={pantalla.elementos} sel={sel} onElegir={onElegir} onCambiar={onCambiarElemento} avisos={avisos}/>
     </div>
   );
 }

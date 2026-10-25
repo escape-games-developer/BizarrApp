@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { TEAMS } from "../constants/theme";
 
 /**
  * Módulo Pantalla/Escenario — configuración avanzada del evento.
@@ -40,20 +41,24 @@ const borrar = async (tabla, filtro) => {
 const ahora = () => new Date().toISOString();
 
 // ── Equipos (4.7) ────────────────────────────────────────────────────────────
-// Hasta 6 equipos por evento; `points` lo lleva el motor, el panel no lo toca.
-export const MAX_EQUIPOS = 6;
+// Los equipos del DJ son los de la app (profiles.team): Team Batata y Team
+// Membrillo, los mismos del Desafío Demente. El motor (migración
+// 20261025010000) suma en `pantalla_team_scores` lo que vale cada acción; el
+// panel sólo lee el marcador y lo puede poner en cero.
+export const EQUIPOS_DJ = ["batata", "membrillo"];
 
-export const fetchTeams = (eventId) => leer("pantalla_teams", eventId, "position");
+/** Filas de pantalla_team_scores → los dos equipos, con nombre, ícono y color de la app. */
+export const marcadorEquipos = (filas = []) => EQUIPOS_DJ.map((id) => ({
+  id, name: TEAMS[id].name, icon: TEAMS[id].emoji, color: TEAMS[id].color,
+  points: filas.find((f) => f.team === id)?.points ?? 0,
+}));
 
-export const createTeam = (eventId, { name, icon, position }) =>
-  escribir(supabase.from("pantalla_teams")
-    .insert({ event_id: eventId, name, icon, position }).select("id"));
+export const fetchTeamScores = async (eventId) => marcadorEquipos(await leer("pantalla_team_scores", eventId));
 
-export const updateTeam = (id, patch) =>
-  escribir(supabase.from("pantalla_teams").update(patch).eq("id", id).select("id"));
-
-export const deleteTeam = (id) =>
-  borrar("pantalla_teams", supabase.from("pantalla_teams").delete().eq("id", id));
+export async function resetTeamScores(eventId) {
+  const { error } = await supabase.rpc("pantalla_reset_team_scores", { _event_id: eventId });
+  if (error) throw new Error(error.message);
+}
 
 // ── Regalos periódicos para VIP (4.6) ────────────────────────────────────────
 // PK (event_id, gift_type). Los cuatro tipos los fija un CHECK en la tabla.

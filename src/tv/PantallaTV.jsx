@@ -21,6 +21,12 @@ import { marcaDelEvento, colorConMarca } from "../constants/marcaEvento";
 import { loadTvConfig, normalizeTvConfig } from "../designers/lib/persistence";
 import { DEFAULT_TV_CONFIG } from "../designers/defaults";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
+import LienzoPantalla from "../lienzo/LienzoPantalla";
+import { useLienzo } from "../lienzo/useLienzo";
+import { AREAS_DJ } from "../lienzo/datosDj";
+import { ANCHO, ALTO } from "../lienzo/modelo";
+import { marcadorEquipos } from "../services/pantallaConfig";
+import { esKickDual } from "../constants/kickModos";
 
 /**
  * MODO TV — el motor de reproducción del módulo Pantalla/Escenario.
@@ -201,6 +207,120 @@ const aPantallaCompleta = (block) => ({
   shadow: { ...block.shadow, enabled: false },
 });
 
+/**
+ * Diseñador → DJ Democracy (editor libre, fila `lienzo_dj`) → las capas de la
+ * TV. Los reproductores no pueden entrar al lienzo: desmontarlos corta la
+ * música. Por eso el elemento «Video del DJ» sólo da la caja (en % de la
+ * pantalla) del bloque de video de siempre, y el resto se parte en lo que va
+ * DEBAJO del video (con el fondo) y lo que va ENCIMA. Las áreas (contador de
+ * Sacar tema, transición) tampoco se dibujan: dan la caja de sus overlays.
+ *
+ * El lienzo se estira para llenar la ventana (`llenar`), igual que una TV
+ * 16:9 aunque la ventana de Chrome no lo sea: las cajas van en % de la ventana.
+ */
+const enPorcentaje = (el) => ({ x: (el.x / ANCHO) * 100, y: (el.y / ALTO) * 100, w: (el.w / ANCHO) * 100, h: (el.h / ALTO) * 100 });
+
+function capasDelLienzoDj(pantalla, bloqueVideo, marca) {
+  const els = pantalla.elementos;
+  const iv = els.findIndex((e) => e.tipo === "dato" && e.dato === "djVideo");
+  const area = (dato) => {
+    const el = els.find((e) => e.tipo === "dato" && e.dato === dato && e.visible);
+    return el ? enPorcentaje(el) : null;
+  };
+  // El logo de fábrica cede ante el del evento (Personalización visual).
+  const dibujables = (lista) => lista
+    .filter((e) => !(e.tipo === "dato" && AREAS_DJ.has(e.dato)))
+    .map((e) => (e.tipo === "imagen" && e.src === LOGO_POR_DEFECTO && marca.logo ? { ...e, src: marca.logo } : e));
+  // Sin fondo elegido, el de la personalización del evento.
+  const fondo = pantalla.fondo.tipo !== "ninguno" ? pantalla.fondo
+    : marca.fondoImagen ? { ...pantalla.fondo, tipo: "imagen", imagen: marca.fondoImagen, ajuste: "cover" }
+    : { ...pantalla.fondo, tipo: "color", color: marca.fondo || C.bg };
+  const video = iv >= 0 ? els[iv] : null;
+  return {
+    debajo: { fondo, elementos: dibujables(iv >= 0 ? els.slice(0, iv) : []) },
+    encima: { fondo, elementos: dibujables(iv >= 0 ? els.slice(iv + 1) : els) },
+    // Oculto en el editor = invisible, pero montado: sigue siendo la salida de audio.
+    video: video ? {
+      ...bloqueVideo, ...enPorcentaje(video), visible: true, z: 1, radius: 0,
+      opacity: video.visible ? video.opacidad : 0,
+      bg: { ...bloqueVideo.bg, mode: "none", image: null, opacity: 0 },
+      border: { ...bloqueVideo.border, enabled: false }, shadow: { ...bloqueVideo.shadow, enabled: false },
+    } : bloqueVideo,
+    contador: area("djContador"),
+    transicion: area("djTransicion"),
+  };
+}
+
+/**
+ * Marcador de Team Batata y Team Membrillo para el «Marcador de equipos»
+ * (pantalla_team_scores, lectura pública; lo suma el motor de la base). Sólo
+ * con equipos activados; se relee cada 10 s.
+ */
+const EQUIPOS_CADA_MS = 10_000;
+function useEquiposTv(eventId, activo) {
+  const [equipos, setEquipos] = useState([]);
+  useEffect(() => {
+    if (!eventId || !activo) { setEquipos([]); return undefined; }
+    let vivo = true;
+    const leer = () => supabaseAnon.from("pantalla_team_scores").select("team, points").eq("event_id", eventId)
+      .then(({ data, error }) => {
+        if (error) { console.warn("[PantallaTV] equipos:", error.message); return; }
+        if (vivo) setEquipos(marcadorEquipos(data || []));
+      });
+    leer();
+    const id = setInterval(leer, EQUIPOS_CADA_MS);
+    return () => { vivo = false; clearInterval(id); };
+  }, [eventId, activo]);
+  return equipos;
+}
+
+/**
+ * Votos para sacar el tema y cuántos hacen falta (Clásico y Tomatazo), para el
+ * «Contador Sacar tema». Relee al llegar un voto (`clave` cambia con
+ * kick_votes_current y la canción) y cada 5 s, porque «necesarios» depende de
+ * cuánta gente hay conectada.
+ */
+const KICK_CADA_MS = 5_000;
+function useKickTv(eventId, clave) {
+  const [kick, setKick] = useState(null);
+  useEffect(() => {
+    if (!eventId) { setKick(null); return undefined; }
+    let vivo = true;
+    const leer = () => supabaseAnon.rpc("pantalla_get_kick_status", { _event_id: eventId })
+      .then(({ data, error }) => {
+        if (error) { console.warn("[PantallaTV] Sacar tema:", error.message); return; }
+        if (vivo) setKick(data || null);
+      });
+    leer();
+    const id = setInterval(leer, KICK_CADA_MS);
+    return () => { vivo = false; clearInterval(id); };
+  }, [eventId, clave]);
+  return kick;
+}
+
+/**
+ * El GIF del premio «GIF a pantalla» que está al aire, o null
+ * (pantalla_gif_en_pantalla: el último usado, mientras dure). Cada 3 s.
+ */
+const GIF_CADA_MS = 3_000;
+function useGifPremioTv(eventId) {
+  const [gif, setGif] = useState(null);
+  useEffect(() => {
+    if (!eventId) { setGif(null); return undefined; }
+    let vivo = true;
+    const leer = () => supabaseAnon.rpc("pantalla_gif_en_pantalla", { _event_id: eventId })
+      .then(({ data, error }) => {
+        if (error) { console.warn("[PantallaTV] GIF del premio:", error.message); return; }
+        if (!vivo) return;
+        setGif((prev) => (prev?.url === data?.url && prev?.hasta === data?.hasta ? prev : data || null));
+      });
+    leer();
+    const id = setInterval(leer, GIF_CADA_MS);
+    return () => { vivo = false; clearInterval(id); };
+  }, [eventId]);
+  return gif;
+}
+
 function ConfiguredBlock({ id, block, children, contentStyle }) {
   if (!block?.visible) return null;
   return (
@@ -341,6 +461,22 @@ export default function PantallaTV({ modo = "tv" }) {
   const marca = useMemo(() => marcaDelEvento(event), [event]);
   // El logo del evento reemplaza al de BizarrApp que trae el bloque por defecto;
   // si en el Diseñador se eligió otra imagen, queda esa.
+  // Diseño del editor libre (Diseñador → DJ Democracy). Sin él, el de arriba.
+  const lienzoDj = useLienzo("dj").dj || null;
+  const equiposDj = useEquiposTv(lienzoDj ? eventId : null, !!event?.teams_enabled);
+  // Sólo se consulta si la pantalla editada tiene el GIF del premio a la vista.
+  const conGifPremio = !!lienzoDj?.elementos.some((e) => e.tipo === "dato" && e.dato === "djGifPremio" && e.visible);
+  const gifPremio = useGifPremioTv(conGifPremio ? eventId : null);
+  // El contador sólo se consulta en Clásico / Tomatazo y si está a la vista.
+  const kickPorcentaje = event?.kick_enabled === true && !esKickDual(event?.kick_style);
+  const conContador = kickPorcentaje
+    && !!lienzoDj?.elementos.some((e) => e.tipo === "dato" && e.dato === "djContador" && e.visible);
+  const kickEstado = useKickTv(conContador ? eventId : null, `${event?.kick_votes_current}|${event?.current_item_id}`);
+  // Cuándo llegó el último tiempo reportado (para adelantar la barra de progreso).
+  const progresoAl = useMemo(() => Date.now(), [event?.tv_current_time]); // eslint-disable-line react-hooks/exhaustive-deps
+  const capasDj = useMemo(() => (lienzoDj ? capasDelLienzoDj(lienzoDj, canvasConfig.blocks.video, marca) : null),
+    [lienzoDj, canvasConfig.blocks.video, marca]);
+  const bloqueVideo = capasDj ? capasDj.video : canvasConfig.blocks.video;
   const bloqueLogo = useMemo(() => {
     const b = canvasConfig.blocks.logo;
     return marca.logo && b?.bg?.image === LOGO_POR_DEFECTO ? { ...b, bg: { ...b.bg, image: marca.logo } } : b;
@@ -526,13 +662,16 @@ export default function PantallaTV({ modo = "tv" }) {
     : TRANSICION_APAGADA), [transicionGif, fadeInMs, holdMs, fadeOutMs, fundidoAudio]);
   // Dónde se dibuja: el bloque «Transición entre canciones» del Diseñador TV
   // si está visible; si no, el área del video.
-  const areaTransicion = canvasConfig.blocks.transition?.visible
-    ? canvasConfig.blocks.transition : canvasConfig.blocks.video;
+  const areaTransicion = capasDj ? (capasDj.transicion || bloqueVideo)
+    : canvasConfig.blocks.transition?.visible ? canvasConfig.blocks.transition : canvasConfig.blocks.video;
 
   // `displayedId` lo consumía la transición de FTL, que ya no existe: el motor
   // lo sigue exponiendo para quien lo necesite, pero acá no hay nada que esperar.
   const { playerIds, visiblePlayer, transitionPhase, cargando, playerError, readyCount } =
-    useContinuousTvPlayers({ current: fuente, eventId, token, unlocked,
+    // Los players se crean sobre sus <div>, que recién existen con el evento
+    // cargado (antes se ve «Conectando…»). La Telepronter arranca desbloqueada:
+    // sin esta espera los creaba sobre la nada y quedaba en negro.
+    useContinuousTvPlayers({ current: fuente, eventId, token, unlocked: unlocked && !!eventId && !loading,
       muted: telepronter || !screenAudioOn || muteDj,
       playing: reproduciendo,
       // La performance no es la canción del evento: si la TV pidiera avanzar
@@ -595,6 +734,26 @@ export default function PantallaTV({ modo = "tv" }) {
       window.removeEventListener("bizarr-tv-config-saved", refreshCanvas);
     };
   }, []);
+
+  const datosLienzoDj = {
+    vivo: true, qrUrl: guestUrl(event?.code || code), sonando: current, proximas: candidates,
+    evento: { nombre: event?.name || "Pantalla Bizarren", codigo: event?.code || code },
+    // Lo que la TV reportó de la canción; la barra se adelanta sola entre reportes.
+    progreso: current && event?.tv_duration > 0 ? {
+      actual: Number(event.tv_current_time) || 0, total: Number(event.tv_duration), al: progresoAl,
+      sonando: reproduciendo && !cargando,
+    } : null,
+    enVivo: event?.status === "live",
+    // Las pastillas y el aviso de cierre calculan la votación con la fila del evento.
+    cierreEvento: event,
+    equipos: event?.teams_enabled ? equiposDj : [],
+    gifPremio,
+    kick: esKickDual(event?.kick_style) ? { modo: "dual" }
+      : kickPorcentaje && kickEstado ? {
+        modo: "porcentaje", votos: kickEstado.votes ?? 0, necesarios: kickEstado.needed ?? 1,
+        visible: kickEstado.enabled !== false && kickEstado.visible !== false,
+      } : null,
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   const css = `
@@ -682,8 +841,13 @@ export default function PantallaTV({ modo = "tv" }) {
           : canvasConfig.screen.backgroundMode === "none" && marca.fondoImagen ? `url(${marca.fondoImagen})` : "none",
         backgroundSize: "cover", backgroundPosition: "center",
       }}>
+        {capasDj && !soloVideo && (
+          <div data-tv-lienzo="debajo" style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+            <LienzoPantalla pantalla={capasDj.debajo} datos={datosLienzoDj} llenar/>
+          </div>
+        )}
         <ConfiguredBlock id="video"
-          block={soloVideo ? aPantallaCompleta(canvasConfig.blocks.video) : canvasConfig.blocks.video}>
+          block={soloVideo ? aPantallaCompleta(bloqueVideo) : bloqueVideo}>
           {/* Players A/B permanentes: el standby nunca usa display:none. */}
           {playerIds.map((playerId, index) => (
             <div key={playerId} className="tv-player-layer" style={{
@@ -731,7 +895,13 @@ export default function PantallaTV({ modo = "tv" }) {
           )}
         </ConfiguredBlock>
 
-        {!soloVideo && <>
+        {capasDj && !soloVideo && (
+          <div data-tv-lienzo="encima" style={{ position: "absolute", inset: 0, zIndex: 2, pointerEvents: "none" }}>
+            <LienzoPantalla pantalla={capasDj.encima} datos={datosLienzoDj} sinFondo llenar/>
+          </div>
+        )}
+
+        {!soloVideo && !capasDj && <>
         <ConfiguredBlock id="logo" block={bloqueLogo}>
           <EditableOverlayText block={canvasConfig.blocks.logo}/>
         </ConfiguredBlock>
@@ -777,7 +947,7 @@ export default function PantallaTV({ modo = "tv" }) {
         </ConfiguredBlock>)}
         </>}
 
-        {!soloVideo && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
+        {!soloVideo && !capasDj && canvasConfig.screen.overlay.enabled && canvasConfig.screen.overlay.url && <img src={canvasConfig.screen.overlay.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: canvasConfig.screen.overlay.opacity, pointerEvents: "none", zIndex: 2147483647 }}/>}
 
         {/* Placa de anuncio. Reusa el PlacaScreen de /pantalla — mismo catálogo,
             mismos assets de /placas — en vez de duplicar el diseño. Va debajo
@@ -870,7 +1040,7 @@ export default function PantallaTV({ modo = "tv" }) {
       {/* Amor y Odio / Guns & Roses: medidor en el bloque «Contador Sacar Tema»
           del Diseñador, flores, tomates y balas. Mismas reglas que el Tomatazo. */}
       {!soloVideo && !hasLiveLayer && !hasPlaca && (
-        <KickDualOverlay event={event} area={canvasConfig.blocks.kickCounter}/>
+        <KickDualOverlay event={event} area={capasDj ? capasDj.contador : canvasConfig.blocks.kickCounter}/>
       )}
     </div>
   );

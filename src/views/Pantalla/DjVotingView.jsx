@@ -4,6 +4,7 @@ import Icono from "../../components/iconos/Icono";
 import djVotingCss from "./djVotingStyles";
 import { marcaDelEvento, hayMarca, rgba } from "../../constants/marcaEvento";
 import { esKickDual } from "../../constants/kickModos";
+import { useCierreVotacion } from "../../hooks/useCierreVotacion";
 
 /**
  * Cliente — Pantalla › 🎧 Música.
@@ -329,6 +330,9 @@ export default function DjVotingView({
 }) {
   const [flash, setFlash] = useState(null);
   const anterior = useRef(null);
+  // Últimos segundos de la canción: la votación se cierra sola (la base
+  // rechaza los votos) mientras se prepara la próxima.
+  const cierre = useCierreVotacion(event);
 
   // Avisito cuando cambia el tema: hace visible el realtime.
   useEffect(() => {
@@ -375,6 +379,8 @@ export default function DjVotingView({
   // sigue en false y así queda — no le escribimos nada a la base para esto.
   const puedeVotar = !isRestricted && (Boolean(user?.registered) || isGuest)
                      && !event.voting_disabled;
+  // Reacciones y Sacar tema siguen; lo que cierra es el voto de los temas.
+  const puedeVotarTemas = puedeVotar && !cierre.cerrada;
 
   const aviso = isGuest
     ? null
@@ -426,6 +432,12 @@ export default function DjVotingView({
         {event.voting_disabled && (
           <div className="djv-aviso djv-aviso-info">El DJ pausó la votación por un rato.</div>
         )}
+        {!event.voting_disabled && cierre.cerrada && (
+          <div className="djv-aviso djv-aviso-info" role="status">
+            ❄ Votación cerrada — preparando la próxima canción
+            {cierre.restante > 0 && ` · ${Math.ceil(cierre.restante)}s`}
+          </div>
+        )}
       </div>
 
       <div className="djv-lista">
@@ -441,13 +453,13 @@ export default function DjVotingView({
             item={item}
             index={i}
             miVoto={cli.voteOn(item.id)}
-            puedeUp={up.enabled && puedeVotar}
+            puedeUp={up.enabled && puedeVotarTemas}
             pesoUp={up.value}
-            puedeDown={down.enabled && puedeVotar}
+            puedeDown={down.enabled && puedeVotarTemas}
             pesoDown={down.value}
-            puedeSuper={super_.enabled && puedeVotar}
+            puedeSuper={super_.enabled && puedeVotarTemas}
             pesoSuper={super_.value}
-            puedeHate={hate.enabled && puedeVotar}
+            puedeHate={hate.enabled && puedeVotarTemas}
             pesoHate={hate.value}
             superLeft={cli.superLeft ?? (cli.superUsed ? 0 : 1)}
             superEnTema={cli.superOn?.(item.id) ?? null}

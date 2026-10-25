@@ -15,7 +15,7 @@ import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
 import { usePantallaMensaje } from "../hooks/usePantallaQr";
 import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
-import TvDesigner from "../designers/tv/TvDesigner";
+import DisenadorDj from "./disenador/DisenadorDj";
 import ClientDesignerPanel from "./designer-client/ClientDesignerPanel";
 import UsuariosPanel from "./UsuariosPanel";
 import ClientesPanel from "./ClientesPanel";
@@ -6523,7 +6523,7 @@ export default function AdminPanel(){
       case "dashboard": return <DashboardPanel sec={curSec} connectedCount={connectedCount}/>;
       case "playlists": return <PlaylistsPanel/>;
       case "designerClient": return <ClientDesignerPanel/>;
-      case "designerTv": return <TvDesigner sessionId="default"/>;
+      case "designerTv": return <DisenadorDj/>;
       case "disenoEscenario": return <DisenadorEscenario/>;
       case "disenoJuegos": return <DisenadorJuegos/>;
       case "disenoPlacas": return <DisenadorPlacas/>;

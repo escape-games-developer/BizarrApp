@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { saveEventFields } from "../../../services/pantallaDj";
-import {
-  fetchTeams, createTeam, updateTeam, deleteTeam, MAX_EQUIPOS, CLAVES_PREMIO,
-} from "../../../services/pantallaConfig";
+import { fetchTeamScores, resetTeamScores, CLAVES_PREMIO } from "../../../services/pantallaConfig";
 import { P } from "../../../components/pantalla/pantallaUi";
 import PanelSection from "../PanelSection";
 import {
@@ -12,12 +10,11 @@ import {
 /**
  * Equipos: la competencia paralela a la votación.
  *
- * Dos cosas distintas conviven acá y por eso hay dos guardados:
- *  - la configuración del evento (`pantalla_events`), con un botón propio;
- *  - los equipos en sí (`pantalla_teams`), que se crean y borran de a uno.
- *
- * `points` lo lleva el motor a medida que la gente interactúa: el panel define
- * cuánto vale cada acción, no toca el marcador.
+ * Los equipos son los de la app: Team Batata y Team Membrillo (el equipo del
+ * perfil de cada cliente, el mismo del Desafío Demente). Cada voto, súper
+ * voto, súper odio, reacción y GIF a pantalla suma a su equipo lo que vale acá
+ * (el motor vive en la base: migración 20261025010000). El panel guarda la
+ * configuración del evento, muestra el marcador y lo puede poner en cero.
  */
 
 const ACCIONES = [
@@ -42,8 +39,6 @@ const PREMIOS = [
 
 export default function SeccionEquipos({ event, refresh, onError }) {
   const [equipos, setEquipos] = useState([]);
-  const [nombre,  setNombre]  = useState("");
-  const [icono,   setIcono]   = useState("🐯");
   const [ocupado, setOcupado] = useState(false);
 
   const [b, set] = useBorrador(
@@ -52,7 +47,7 @@ export default function SeccionEquipos({ event, refresh, onError }) {
   );
 
   const cargar = useCallback(async () => {
-    try { setEquipos(await fetchTeams(event.id)); }
+    try { setEquipos(await fetchTeamScores(event.id)); }
     catch (err) { onError?.(err); }
   }, [event.id, onError]);
 
@@ -81,83 +76,43 @@ export default function SeccionEquipos({ event, refresh, onError }) {
     finally { setOcupado(false); }
   };
 
-  const agregar = () => {
-    const n = nombre.trim();
-    if (!n) return;
-    correr(async () => {
-      await createTeam(event.id, { name: n, icon: icono || "🐯", position: equipos.length });
-      setNombre("");
-    });
-  };
-
   const off = !b.teams_enabled;
 
   return (
-    <PanelSection id="equipos" title="Equipos" icon="🏆" badge={equipos.length || null}
+    <PanelSection id="equipos" title="Equipos" icon="🏆"
       status="pendiente"
-      aviso={"Los equipos y sus puntajes se guardan, pero el motor que suma puntos todavía no "
-        + "existe: nadie queda asignado a un equipo y el marcador nunca se mueve."}>
+      aviso={"Los puntos ya se suman solos. Las rondas (duración, premio y cartel) todavía "
+        + "no tienen motor: el marcador corre de corrido hasta que lo pongas en cero."}>
       <CampoSwitch label="Equipos habilitados" checked={!!b.teams_enabled}
         onChange={(v) => set("teams_enabled", v)} />
 
-      {/* ── Los equipos ─────────────────────────────────────────────── */}
+      {/* ── Marcador ─────────────────────────────────────────────────── */}
       <div style={{ marginTop: 12, opacity: off ? .55 : 1 }}>
         <div style={{ fontSize: 10.5, fontWeight: 800, color: P.tenue, marginBottom: 6 }}>
-          EQUIPOS ({equipos.length}/{MAX_EQUIPOS})
+          MARCADOR
         </div>
-
         {equipos.map((t) => (
           <div key={t.id} style={{
-            display: "flex", alignItems: "center", gap: 6, marginBottom: 5,
-            padding: "6px 8px", borderRadius: 10,
+            display: "flex", alignItems: "center", gap: 8, marginBottom: 5,
+            padding: "7px 10px", borderRadius: 10,
             background: "rgba(240,232,255,.035)", border: "1px solid rgba(240,232,255,.08)",
           }}>
-            <input className="pdj-input" defaultValue={t.icon} maxLength={4} disabled={ocupado || off}
-              aria-label={`Ícono de ${t.name}`}
-              onBlur={(e) => {
-                const v = e.target.value.trim() || "🐯";
-                if (v !== t.icon) correr(() => updateTeam(t.id, { icon: v }));
-              }}
-              style={{ width: 46, flexShrink: 0, textAlign: "center", fontSize: 15, padding: "5px 4px" }} />
-            <input className="pdj-input" defaultValue={t.name} disabled={ocupado || off}
-              aria-label={`Nombre de ${t.name}`}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v && v !== t.name) correr(() => updateTeam(t.id, { name: v }));
-              }}
-              style={{ flex: 1, minWidth: 0, padding: "5px 8px", fontSize: 11.5 }} />
-            <span style={{
-              fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 12,
-              color: P.amarillo, flexShrink: 0, minWidth: 30, textAlign: "right",
-            }} title="Puntos acumulados — los lleva el motor">{t.points ?? 0}</span>
-            <button type="button" className="pdj-ico pdj-ico-peligro" disabled={ocupado || off}
-              title={`Eliminar ${t.name}`} aria-label={`Eliminar ${t.name}`}
-              onClick={() => {
-                if (window.confirm(`¿Eliminar el equipo "${t.name}"?\n\nSe pierde su puntaje.`)) {
-                  correr(() => deleteTeam(t.id));
-                }
-              }}>✕</button>
+            <span style={{ fontSize: 16 }}>{t.icon}</span>
+            <span style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: t.color }}>{t.name}</span>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 700, fontSize: 13, color: P.amarillo }}
+              title="Puntos acumulados — los suma el motor">{t.points}</span>
           </div>
         ))}
-
-        {equipos.length < MAX_EQUIPOS && (
-          <div style={{ display: "flex", gap: 5, marginTop: 7 }}>
-            <input className="pdj-input" value={icono} maxLength={4} disabled={ocupado || off}
-              aria-label="Ícono del equipo nuevo"
-              onChange={(e) => setIcono(e.target.value)}
-              style={{ width: 46, flexShrink: 0, textAlign: "center", fontSize: 15, padding: "6px 4px" }} />
-            <input className="pdj-input" value={nombre} placeholder="Nombre del equipo"
-              disabled={ocupado || off} aria-label="Nombre del equipo nuevo"
-              onChange={(e) => setNombre(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregar(); } }}
-              style={{ flex: 1, minWidth: 0, padding: "6px 8px", fontSize: 11.5 }} />
-            <button type="button" className="pdj-mini pdj-mini-p" disabled={ocupado || off || !nombre.trim()}
-              onClick={agregar}>+ Agregar</button>
-          </div>
-        )}
-        {equipos.length >= MAX_EQUIPOS && (
-          <div className="pdj-campo-hint">Llegaste al máximo de {MAX_EQUIPOS} equipos.</div>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
+          <button type="button" className="pdj-mini" disabled={ocupado}
+            onClick={() => {
+              if (window.confirm("¿Poner el marcador de los dos equipos en cero?")) correr(() => resetTeamScores(event.id));
+            }}>Poner en cero</button>
+          <button type="button" className="pdj-mini" disabled={ocupado} onClick={cargar}>↻ Actualizar</button>
+        </div>
+        <div className="pdj-campo-hint">
+          Cada cliente suma para el equipo que eligió en su perfil. Sin equipo elegido, no suma.
+        </div>
       </div>
 
       {/* ── Valores de interacción ──────────────────────────────────── */}
