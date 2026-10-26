@@ -38,16 +38,19 @@ export default function PanelAnfitrion({ juegos, juegoAlAire, alAire, conectados
           Todavía no tenés juegos habilitados. Pedile a un administrador que te los asigne en Usuarios del sistema.
         </div>
       ) : (<>
-        <nav className="anf-tabs">
-          {grupos.map(([grupo, lista]) => (
+        {/* Una fila de pestañas: ocupa lo de un botón y, si no entran, se desliza. */}
+        <nav className="anf-tabs" role="tablist">
+          {grupos.map(([grupo, lista], gi) => (
             <div key={grupo} className="anf-grupo">
-              <div className="anf-grupo-t">{grupo}</div>
+              {gi > 0 && <span className="anf-sep" aria-hidden="true"/>}
+              <span className="anf-grupo-t">{grupo}</span>
               {lista.map((j) => (
-                <button key={j.id} type="button" className={`anf-tab${j.id === actual?.id ? " sel" : ""}`}
+                <button key={j.id} type="button" role="tab" aria-selected={j.id === actual?.id}
+                  className={`anf-tab${j.id === actual?.id ? " sel" : ""}`} title={j.label}
                   style={{ "--sg": j.grad, "--gw": j.glow }} onClick={() => setElegido(j.id)}>
                   <span className="anf-tab-i">{j.icon}</span>
-                  <span className="anf-tab-l">{j.label}</span>
-                  {j.id === juegoAlAire && <span className="anf-tab-aire">● al aire</span>}
+                  <span className="anf-tab-l">{CORTO[j.id] || j.label}</span>
+                  {j.id === juegoAlAire && <span className="anf-tab-aire" title="Al aire"/>}
                 </button>
               ))}
             </div>
@@ -60,6 +63,10 @@ export default function PanelAnfitrion({ juegos, juegoAlAire, alAire, conectados
     </div>
   );
 }
+
+// Nombres cortos para las pestañas (el completo queda en el `title`).
+const CORTO = { rey: "Rey del Orto", suma: "Sumate", palabra: "Palabra", trivia: "Desafío",
+  duelo: "Duelo", ftl: "Follow the Leader", pt: "Personal Trainer" };
 
 // Encima del CSS del Admin (que define .card, .btn, los *-split…): todo más
 // grande y táctil. Botones de 64 px o más, letra legible a un brazo de distancia.
@@ -81,20 +88,23 @@ const CSS = `
     background:rgba(240,232,255,.05);color:rgba(240,232,255,.7);font:700 13px 'DM Sans',sans-serif;}
   .anf-vacio{margin:40px auto;max-width:420px;text-align:center;font-size:16px;line-height:1.5;color:rgba(240,232,255,.5);}
 
-  .anf-tabs{display:flex;flex-direction:column;gap:8px;padding:12px 16px;flex-shrink:0;}
-  .anf-grupo{display:flex;gap:10px;align-items:stretch;}
-  .anf-grupo-t{width:74px;flex-shrink:0;display:flex;align-items:center;font-size:11px;font-weight:800;
-    letter-spacing:1.2px;text-transform:uppercase;color:rgba(240,232,255,.4);}
-  .anf-grupo .anf-tab{flex:1;min-width:0;}
-  .anf-tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:76px;
-    padding:10px;border-radius:18px;cursor:pointer;color:#F0E8FF;font-family:'DM Sans',sans-serif;
-    background:rgba(240,232,255,.04);border:2px solid rgba(240,232,255,.1);transition:transform .12s,border-color .15s;}
+  .anf-tabs{display:flex;align-items:center;gap:6px;padding:8px 16px;flex-shrink:0;overflow-x:auto;
+    scrollbar-width:none;border-bottom:1px solid rgba(240,232,255,.07);}
+  .anf-tabs::-webkit-scrollbar{display:none;}
+  .anf-grupo{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .anf-sep{width:1px;height:28px;margin:0 6px;background:rgba(240,232,255,.12);}
+  .anf-grupo-t{font-size:10px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+    color:rgba(240,232,255,.35);margin-right:2px;}
+  .anf-tab{position:relative;display:flex;align-items:center;gap:7px;height:46px;padding:0 14px;flex-shrink:0;
+    border-radius:12px;cursor:pointer;color:rgba(240,232,255,.65);font-family:'DM Sans',sans-serif;white-space:nowrap;
+    background:rgba(240,232,255,.04);border:1.5px solid rgba(240,232,255,.1);transition:border-color .15s,color .15s;}
   .anf-tab:active{transform:scale(.97);}
-  .anf-tab.sel{border-color:transparent;background:linear-gradient(#120A20,#120A20) padding-box,var(--sg) border-box;
-    box-shadow:0 4px 22px var(--gw);}
-  .anf-tab-i{font-size:28px;line-height:1;}
-  .anf-tab-l{font-size:15px;font-weight:800;text-align:center;}
-  .anf-tab-aire{position:absolute;top:7px;right:10px;font-size:10.5px;font-weight:800;color:#FF2D78;}
+  .anf-tab.sel{color:#F0E8FF;border-color:transparent;
+    background:linear-gradient(#1A0D2E,#1A0D2E) padding-box,var(--sg) border-box;box-shadow:0 2px 14px var(--gw);}
+  .anf-tab-i{font-size:20px;line-height:1;}
+  .anf-tab-l{font-size:14px;font-weight:800;}
+  .anf-tab-aire{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;
+    background:#FF2D78;box-shadow:0 0 8px #FF2D78;animation:pulse 1.2s infinite;}
 
   .anf-body{flex:1;overflow-y:auto;padding:4px 16px 24px;}
   .anf .card{padding:16px 18px;border-radius:18px;margin-bottom:14px;}
@@ -139,9 +149,6 @@ const CSS = `
     .anf .pal-split > div:last-child > .card:first-child,.anf .dd-split > div:last-child > .card:first-child{order:-2;}
     .anf .card-error{order:-1;}
   }
-  @media (max-width:760px){
-    .anf-grupo{flex-wrap:wrap;}
-    .anf-grupo-t{width:100%;}
-    .anf-grupo .anf-tab{flex:1 1 40%;}
-  }
+  /* Angosto: sin los títulos de grupo; el separador alcanza. */
+  @media (max-width:760px){ .anf-grupo-t{display:none;} }
 `;
