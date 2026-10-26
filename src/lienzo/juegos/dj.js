@@ -1,4 +1,4 @@
-import { LOGO_APP, pantalla } from "./piezas";
+import { LOGO_APP, pantalla, qr } from "./piezas";
 
 /**
  * Diseño de fábrica de la pantalla del DJ Democracy en el editor: calca el
@@ -45,10 +45,8 @@ export const DJ_POR_DEFECTO = {
     dato("video", "djVideo", "Video del DJ", 0, 0, 1920, 1080),
     // El logo del evento (Personalización visual) reemplaza a éste en la TV.
     { id: "logo", tipo: "imagen", nombre: "Logo", src: LOGO_APP, ajuste: "contain", x: 24, y: 8, w: 317, h: 196 },
-    dato("qr", "qr", "QR para votar", 0, 721, 307, 378, {
-      texto: "ESCANEÁ PARA VOTAR", leyenda: "arriba",
-      estilo: { fuente: "grotesk", tamano: 18, peso: 900, color: "#FFD600", espaciado: 0.08 },
-    }),
+    // El mismo QR de los juegos (lugar, tamaño y leyenda); lleva a votar.
+    { ...qr("Escaneá para votar"), nombre: "QR para votar", leyenda: "arriba" },
     { id: "fondo-proximas", tipo: "forma", nombre: "Fondo de próximas", x: 1564, y: 741, w: 365, h: 378,
       relleno: { color: "rgba(17,17,17,.65)" }, borde: { color: "transparent", ancho: 0 }, radio: 15 },
     ...separarTitulo(dato("proximas", "djProximas", "Próximas canciones", 1564, 741, 365, 378, {
