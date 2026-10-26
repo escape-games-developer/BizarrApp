@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import EditorLienzo from "../../lienzo/editor/EditorLienzo";
-import { DJ_POR_DEFECTO, PANTALLAS_DJ } from "../../lienzo/juegos/dj";
+import { DJ_POR_DEFECTO, PANTALLAS_DJ, separarProximas } from "../../lienzo/juegos/dj";
 import { guestUrl } from "../../services/pantallaDj";
 import { fetchGifs, fetchTeamScores } from "../../services/pantallaConfig";
 import { usePantallaEvent } from "../../hooks/realtime/usePantallaEvent";
@@ -79,5 +79,6 @@ export default function DisenadorDj() {
   const avisos = useMemo(() => avisosDelEvento(event, { current, candidates, gifsPremio: gifs.length }),
     [event, current, candidates, gifs.length]);
 
-  return <EditorLienzo juego="dj" pantallas={PANTALLAS_DJ} porDefecto={DJ_POR_DEFECTO} datos={datos} avisos={avisos}/>;
+  return <EditorLienzo juego="dj" pantallas={PANTALLAS_DJ} porDefecto={DJ_POR_DEFECTO} datos={datos} avisos={avisos}
+    migrar={(id, p) => separarProximas(p)}/>;
 }

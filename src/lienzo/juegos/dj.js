@@ -15,6 +15,31 @@ export const PANTALLAS_DJ = [
 
 const dato = (id, d, nombre, x, y, w, h, extra = {}) => ({ id, tipo: "dato", dato: d, nombre, x, y, w, h, ...extra });
 
+/**
+ * El título de «Próximas canciones» era parte de la lista (`texto`, en el
+ * color «Título»). Ahora es un texto suelto: se edita, se formatea y se mueve
+ * aparte. Lo deja donde se veía y la lista empieza debajo, así un diseño
+ * guardado no se mueve (separarProximas).
+ */
+function separarTitulo(el) {
+  if (el.tipo !== "dato" || el.dato !== "djProximas" || !el.texto) return [el];
+  const t = el.estilo?.tamano || 22;
+  const relleno = Math.round(t * 0.7), altoTitulo = Math.round(t * 1.05 * 1.3), corrimiento = altoTitulo + Math.round(t * 0.45);
+  const acento = el.ficha?.acento || "#00F5A0";
+  const titulo = {
+    id: `${el.id}-titulo`, tipo: "texto", nombre: "Título de próximas", texto: el.texto,
+    x: el.x + relleno, y: el.y + relleno, w: Math.max(40, el.w - relleno * 2), h: altoTitulo, visible: el.visible !== false,
+    estilo: { ...el.estilo, tamano: Math.round(t * 1.05), interlineado: 1.1, color: acento, degradado: null },
+  };
+  return [titulo, { ...el, texto: "", y: el.y + corrimiento, h: Math.max(40, el.h - corrimiento) }];
+}
+
+/** Pone al día una pantalla del DJ guardada con el título dentro de la lista. */
+export function separarProximas(p) {
+  if (!p?.elementos?.some((e) => e.tipo === "dato" && e.dato === "djProximas" && e.texto)) return p;
+  return { ...p, elementos: p.elementos.flatMap(separarTitulo) };
+}
+
 export const DJ_POR_DEFECTO = {
   dj: pantalla(
     dato("video", "djVideo", "Video del DJ", 0, 0, 1920, 1080),
@@ -26,11 +51,11 @@ export const DJ_POR_DEFECTO = {
     }),
     { id: "fondo-proximas", tipo: "forma", nombre: "Fondo de próximas", x: 1564, y: 741, w: 365, h: 378,
       relleno: { color: "rgba(17,17,17,.65)" }, borde: { color: "transparent", ancho: 0 }, radio: 15 },
-    dato("proximas", "djProximas", "Próximas canciones", 1564, 741, 365, 378, {
+    ...separarTitulo(dato("proximas", "djProximas", "Próximas canciones", 1564, 741, 365, 378, {
       texto: "PRÓXIMAS CANCIONES", proporcion: 0.8, cantidad: 8,
       estilo: { fuente: "poppins", tamano: 22, peso: 700, color: "#F0E8FF", alinear: "left" },
       ficha: { fondo: "rgba(240,232,255,.03)", borde: "rgba(240,232,255,.06)", acento: "#00E5FF" },
-    }),
+    })),
     dato("evento", "djEvento", "Nombre del evento", 1517, 22, 365, 86, {
       estilo: { fuente: "grotesk", tamano: 17, peso: 700, color: "#F0E8FF" },
     }),

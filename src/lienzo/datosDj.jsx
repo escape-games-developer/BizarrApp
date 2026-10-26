@@ -134,9 +134,10 @@ function Sonando({ el, datos }) {
 }
 
 /**
- * Las próximas canciones con su puntaje. `texto` es el título de la lista (en
- * el color «Título»). TODO el texto usa el formato del elemento — título,
- * números, canciones y puntajes —; sólo cambian los colores. `proporcion` es
+ * Las próximas canciones con su puntaje. El título va aparte, como texto
+ * suelto (separarProximas en juegos/dj.js); `texto` sólo lo traen diseños
+ * viejos todavía sin separar. Números, canciones y puntajes usan el formato
+ * del elemento; sólo cambian los colores. `proporcion` es
  * el tamaño del artista, `cantidad` cuántas canciones y `ajusteTexto` qué hace
  * el texto que no entra (como en «Sonando ahora»).
  */
@@ -418,10 +419,10 @@ export const DATOS_DJ = {
   djSonando:    { nombre: "Sonando ahora", Componente: Sonando, portada: true, ajusteTexto: true,
                   formato: "Formato del título", secundario: "Formato del artista", estiloSecundario: estiloArtistaSonando,
                   ayuda: "Portada, título y artista de la canción al aire. El título y el artista tienen cada uno su formato: tipografía, tamaño, color y alineación." },
-  djProximas:   { nombre: "Próximas canciones", Componente: Proximas, acento: true, acentoNombre: "Título", titulo: true,
+  djProximas:   { nombre: "Próximas canciones", Componente: Proximas,
                   ajusteTexto: true, formato: "Formato de las canciones", secundario: "Formato del artista",
                   estiloSecundario: estiloArtistaProximas, cantidad: true,
-                  ayuda: "Las próximas canciones de la lista con su puntaje (hasta 8). Todo el texto usa el formato del elemento." },
+                  ayuda: "Las próximas canciones de la lista con su puntaje (hasta 8). El título «Próximas canciones» es un texto aparte: se edita y se mueve solo." },
   djEvento:     { nombre: "Nombre del evento", Componente: textoEnVivo((d) => (d.evento ? `${d.evento.nombre} · ${d.evento.codigo}` : null),
                   "Pantalla Bizarren · LDR4X3"), plantilla: true, sinFichas: true, ayuda: "El nombre y el código del evento." },
   djCodigo:     { nombre: "Código del evento", Componente: textoEnVivo((d) => d.evento?.codigo, "LDR4X3"), plantilla: true, sinFichas: true,

@@ -24,7 +24,8 @@ import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import LienzoPantalla from "../lienzo/LienzoPantalla";
 import { useLienzo } from "../lienzo/useLienzo";
 import { AREAS_DJ } from "../lienzo/datosDj";
-import { ANCHO, ALTO } from "../lienzo/modelo";
+import { separarProximas } from "../lienzo/juegos/dj";
+import { ANCHO, ALTO, normalizarPantalla } from "../lienzo/modelo";
 import { marcadorEquipos } from "../services/pantallaConfig";
 import { esKickDual } from "../constants/kickModos";
 
@@ -474,7 +475,10 @@ export default function PantallaTV({ modo = "tv" }) {
   // El logo del evento reemplaza al de BizarrApp que trae el bloque por defecto;
   // si en el Diseñador se eligió otra imagen, queda esa.
   // Diseño del editor libre (Diseñador → DJ Democracy). Sin él, el de arriba.
-  const lienzoDj = useLienzo("dj").dj || null;
+  // Los diseños guardados con el título dentro de «Próximas canciones» se
+  // separan al dibujar (igual que al abrirlos en el editor).
+  const lienzoDjGuardado = useLienzo("dj").dj || null;
+  const lienzoDj = useMemo(() => (lienzoDjGuardado ? normalizarPantalla(separarProximas(lienzoDjGuardado)) : null), [lienzoDjGuardado]);
   const equiposDj = useEquiposTv(lienzoDj ? eventId : null, !!event?.teams_enabled);
   // Sólo se consulta si la pantalla editada tiene el GIF del premio a la vista.
   const conGifPremio = !!lienzoDj?.elementos.some((e) => e.tipo === "dato" && e.dato === "djGifPremio" && e.visible);
