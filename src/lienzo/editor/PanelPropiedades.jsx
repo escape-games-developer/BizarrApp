@@ -27,7 +27,7 @@ function Efectos({ lista, valor, onCambiar }) {
   );
 }
 
-function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen, formato, aviso }) {
+function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen, onElegirMarco, formato, aviso }) {
   const area = useRef(null);
   useEffect(() => { if (enfocarTexto && area.current) { area.current.focus(); area.current.select(); } }, [enfocarTexto]);
   const set = (patch) => onCambiar(patch);
@@ -46,7 +46,8 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
           disabled={esDato} title={esDato ? "Es parte del juego: hay uno solo" : "Duplicar (Ctrl+D)"}>Duplicar</button>
         <button type="button" className="btn" style={{ padding: "4px 9px", fontSize: 10.5, background: "rgba(255,45,120,.1)",
           border: "1px solid rgba(255,45,120,.3)", color: "#FF2D78" }} onClick={() => onAccion("borrar")}
-          disabled={esDato} title={esDato ? "Es parte del juego: no se borra (podés ocultarlo en Capas)" : "Borrar (Supr)"}>Borrar</button>
+          disabled={esDato && !dato?.borrable}
+          title={esDato && !dato?.borrable ? "Es parte del juego: no se borra (podés ocultarlo en Capas)" : "Borrar (Supr)"}>Borrar</button>
       </div>
 
       {el.tipo === "texto" && (
@@ -117,6 +118,32 @@ function PanelElemento({ el, onCambiar, onAccion, enfocarTexto, onCambiarImagen,
 
         </Seccion>
       )}
+
+      {dato?.avatar && (() => {
+        const a = el.avatar;
+        const setA = (patch) => set({ avatar: { ...a, ...patch } });
+        return (
+          <Seccion titulo="Avatar">
+            <Fila label="Forma">
+              {[["circulo", "Círculo"], ["redondeado", "Redondeado"], ["cuadrado", "Cuadrado"]].map(([v, t]) => (
+                <Opcion key={v} on={a.forma === v} onClick={() => setA({ forma: v })}>{t}</Opcion>
+              ))}
+            </Fila>
+            <Interruptor on={!a.color} onClick={() => setA({ color: a.color ? null : (dato.colorAro || "#FF2D78") })}>
+              Aro del color de su lado
+            </Interruptor>
+            {a.color && <Fila label="Aro"><ColorInput value={a.color} onChange={(v) => setA({ color: v })}/></Fila>}
+            <Fila label="Grosor"><Slider value={a.grosor} min={0} max={20} step={0.5} onChange={(v) => setA({ grosor: v })} mostrar={(v) => `${v}%`}/></Fila>
+            <Fila label="Brillo"><Slider value={a.brillo} min={0} max={60} onChange={(v) => setA({ brillo: v })} mostrar={(v) => `${v}%`}/></Fila>
+            <Fila label="Fondo"><ColorInput value={a.fondo} onChange={(v) => setA({ fondo: v })}/></Fila>
+            <Fila label="Marco">
+              <Opcion onClick={onElegirMarco}>{a.marco ? "Cambiar…" : "Elegir PNG…"}</Opcion>
+              {a.marco && <Opcion onClick={() => setA({ marco: null })}>Quitar</Opcion>}
+            </Fila>
+            <div style={nota}>El marco es una imagen PNG transparente que va encima de la foto (un aro, una corona, un sticker). Ideal cuadrada.</div>
+          </Seccion>
+        );
+      })()}
 
       {el.tipo === "imagen" && (
         <Seccion titulo="Imagen">
@@ -285,7 +312,7 @@ export default function PanelPropiedades({ pantalla, sel, onCambiarElemento, onC
       {el ? (
         <PanelElemento key={el.id} el={el} enfocarTexto={enfocarTexto} formato={formato} aviso={avisoDe(avisos, el)}
           onCambiar={(patch) => onCambiarElemento(el.id, patch)} onAccion={onAccion}
-          onCambiarImagen={() => onPedirImagen("cambiar")}/>
+          onCambiarImagen={() => onPedirImagen("cambiar")} onElegirMarco={() => onPedirImagen("marco")}/>
       ) : (
         <PanelFondo fondo={pantalla.fondo} onCambiar={onCambiarFondo} onElegirImagen={() => onPedirImagen("fondo")}/>
       )}

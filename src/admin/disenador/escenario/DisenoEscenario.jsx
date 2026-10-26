@@ -8,7 +8,7 @@ import VistasJuego from "../VistasJuego";
 import EditorListo from "./EditorListo";
 import EditorBarometro from "./EditorBarometro";
 import EditorLienzo from "../../../lienzo/editor/EditorLienzo";
-import { ESCENARIO_POR_DEFECTO, PANTALLAS_ESCENARIO, PANTALLAS_ESCENARIO_CEL } from "../../../lienzo/juegos/escenario";
+import { ESCENARIO_POR_DEFECTO, PANTALLAS_ESCENARIO, PANTALLAS_ESCENARIO_CEL, conVideo } from "../../../lienzo/juegos/escenario";
 import { usePantallaVisibilidadAdmin } from "../../../hooks/usePantallaQr";
 
 /**
@@ -81,7 +81,8 @@ export default function DisenoEscenario({ tipo, nav }) {
     const pantallas = vista === "celular" ? PANTALLAS_ESCENARIO_CEL : PANTALLAS_ESCENARIO.filter((x) => x.vista === vista);
     if (!pantallas.length) return null;
     return <EditorLienzo key={vista} juego={tipo} formato={vista === "celular" ? "celular" : "tv"} pantallas={pantallas}
-      porDefecto={ESCENARIO_POR_DEFECTO[tipo]} datos={datos} avisos={avisos}/>;
+      porDefecto={ESCENARIO_POR_DEFECTO[tipo]} datos={datos} avisos={avisos}
+      migrar={(id, p) => (id === "performance" ? conVideo(p) : p)}/>;
   };
 
   return (

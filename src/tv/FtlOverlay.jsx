@@ -1,6 +1,28 @@
 import FtlBarometro from "../components/FtlBarometro";
 import LienzoPantalla from "../lienzo/LienzoPantalla";
 import { useLienzo } from "../lienzo/useLienzo";
+import { ANCHO, ALTO } from "../lienzo/modelo";
+import { AREAS_ESCENARIO } from "../lienzo/datosEscenario";
+
+/**
+ * La Performance editada partida alrededor del «Video del desafío»: lo que va
+ * DEBAJO del video (con el fondo), lo que va ENCIMA y la caja del video en %
+ * de la pantalla (null = pantalla completa, como siempre). Sin ese elemento
+ * (diseño viejo), todo va encima del video a pantalla completa.
+ */
+export function capasEscenario(pantalla) {
+  const els = pantalla.elementos;
+  const iv = els.findIndex((e) => e.tipo === "dato" && e.dato === "escVideo");
+  const sinAreas = (l) => l.filter((e) => !(e.tipo === "dato" && AREAS_ESCENARIO.has(e.dato)));
+  const v = iv >= 0 ? els[iv] : null;
+  return {
+    debajo: { ...pantalla, elementos: sinAreas(iv >= 0 ? els.slice(0, iv) : []) },
+    encima: { ...pantalla, elementos: sinAreas(iv >= 0 ? els.slice(iv + 1) : els) },
+    video: v ? { x: (v.x / ANCHO) * 100, y: (v.y / ALTO) * 100, w: (v.w / ANCHO) * 100, h: (v.h / ALTO) * 100,
+      visible: v.visible, opacidad: v.opacidad } : null,
+    conCaja: !!v,
+  };
+}
 
 /**
  * Overlay de Follow the Leader sobre el video del participante.
@@ -31,14 +53,25 @@ const BARO_BASE = { ancho: 100, alto: 70, x: 8, y: 61 };
 
 /**
  * `juego` (FTL / PT): con la pantalla «Performance» guardada en el editor libre
- * (Diseñador → Escenario) se dibuja ésa, transparente sobre el video.
+ * (Diseñador → Escenario) se dibuja ésa, sobre el video. `capa="debajo"`: lo
+ * que va detrás del video, con el fondo (la monta PantallaTV debajo de los
+ * players; sin diseño editado no dibuja nada).
  */
-export default function FtlOverlay({ participante, pct = null, decae = true, barometro = BARO_BASE, juego = null }) {
+export default function FtlOverlay({ participante, pct = null, decae = true, barometro = BARO_BASE, juego = null, capa = "encima" }) {
   const editada = useLienzo(juego?.type || null).performance;
   if (!participante) return null;
+  if (capa === "debajo") {
+    const c = editada ? capasEscenario(editada) : null;
+    if (!c?.conCaja) return null;
+    return (
+      <div data-tv-ftl="debajo" style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none" }}>
+        <LienzoPantalla pantalla={c.debajo} datos={{ vivo: true, participante, pct, decae }} llenar/>
+      </div>
+    );
+  }
   if (editada) return (
     <div data-tv-ftl style={{ position: "absolute", inset: 0, zIndex: 50, pointerEvents: "none" }}>
-      <LienzoPantalla pantalla={editada} datos={{ vivo: true, participante, pct, decae }} sinFondo llenar/>
+      <LienzoPantalla pantalla={capasEscenario(editada).encima} datos={{ vivo: true, participante, pct, decae }} sinFondo llenar/>
     </div>
   );
 

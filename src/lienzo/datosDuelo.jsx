@@ -1,13 +1,21 @@
+import { useEffect, useRef } from "react";
 import { cssDeTexto } from "./estilosTexto";
+import FtlBarometro from "../components/FtlBarometro";
 import { efectoDuelo, escalaDeZoom, EFECTOS_CSS } from "../constants/efectosPantalla";
+import { ColumnaDuelo, EfectosDuelo } from "../bigscreen/dueloColumna";
 
 /**
  * Elementos «dato» del Duelo de Talentos (fila `lienzo_duelo`), TV y celular.
  *
- * Tres son ÁREAS de la TV durante la votación: el video de la ronda y las dos
- * columnas de los duelistas (avatar, barómetro, % y la lluvia de 👍). Las
- * dibuja DueloBigscreen en esa caja, como siempre — sus medidas y animaciones
- * son de pantalla entera —; en el editor se ven como una caja de muestra.
+ * ÁREAS de la TV durante la votación (las dibuja DueloBigscreen en su caja,
+ * fuera del escenario escalado): el video de la ronda y los «Efectos del
+ * duelista» (partículas, brillo y la lluvia de 👍 que vuela hasta su cara).
+ * Lo demás de cada duelista son piezas sueltas: el fondo (una imagen webp
+ * común), la cara, el nombre, el 👍 % y el barómetro.
+ *
+ * `duColumna1/2` es la columna entera de antes (fondo + todo); la siguen
+ * dibujando los diseños guardados que no pasaron por el editor nuevo
+ * (ver separarColumnas en juegos/duelo.js).
  *
  * El logo del centro sigue saliendo de «Pantalla del duelo» (texto o imagen,
  * efecto y zoom). En el celular, los botones para votar / tocar llegan
@@ -17,7 +25,7 @@ import { efectoDuelo, escalaDeZoom, EFECTOS_CSS } from "../constants/efectosPant
  *           ganador, panel (nodo), postular, cargando, estado, saldo, consigna }
  */
 
-export const AREAS_DUELO = new Set(["duVideo", "duColumna1", "duColumna2"]);
+export const AREAS_DUELO = new Set(["duVideo", "duColumna1", "duColumna2", "duEfectos1", "duEfectos2"]);
 
 const JUST = { left: "flex-start", center: "center", right: "flex-end" };
 export const COLOR_P1 = "#ff1688";
@@ -36,22 +44,78 @@ const area = (icono, texto, color) => function Area() {
   );
 };
 
-/** Cara de un duelista (foto o avatar) en su aro, del color de su lado. */
-const cara = (leer, colorDe) => function Cara({ el, datos }) {
+/** Columna de un duelista, la de la TV (barómetro y 👍 % de «Pantalla del duelo»). */
+const columna = (slot) => function Columna({ datos }) {
+  return <ColumnaDuelo slot={slot} config={datos?.centro}/>;
+};
+
+/** «Efectos del duelista» en el editor: los de la TV, de muestra. */
+const efectos = (slot) => function Efectos() {
+  return <EfectosDuelo slot={slot}/>;
+};
+
+/**
+ * Cara de un duelista (foto o avatar) en su aro, del color de su lado. Con
+ * `slot`, en la votación en vivo (`datos.duelo`): es el blanco de la lluvia
+ * de 👍, late con cada voto y lleva la 👑 si va ganando.
+ */
+const cara = (leer, colorDe, slot = null) => function Cara({ el, datos }) {
+  const vivo = slot && datos?.duelo;
+  const flash = useRef(null);
+  const aro = useRef(null);
+  const pulso = vivo ? datos.duelo.pulsos[slot] : null;
+  useEffect(() => {
+    if (!pulso?.key) return;
+    const ref = datos.duelo.avatarRefs[slot];
+    ref.current?.animate([{ transform: "scale(1)" }, { transform: `scale(${pulso.big ? 1.1 : 1.06})` }, { transform: "scale(1)" }],
+      { duration: 380, easing: "ease-out" });
+    flash.current?.animate([{ transform: "scale(.6)", opacity: pulso.big ? 0.85 : 0.6 },
+      { transform: `scale(${pulso.big ? 2.4 : 1.8})`, opacity: 0 }], { duration: 460, easing: "ease-out" });
+  }, [pulso?.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const s = datos?.vivo ? leer(datos) : leer({ d1: D1, d2: D2, ganador: D1, result: "p1" });
   if (!s) return null;
   const lado = Math.min(el.w, el.h);
-  const col = colorDe(datos?.vivo ? datos : { result: "p1" }) || el.ficha.borde;
+  const a = el.avatar || AVATAR_BASE;
+  const col = a.color || colorDe(datos?.vivo ? datos : { result: "p1" }) || el.ficha.borde;
+  const radio = { circulo: "50%", redondeado: "22%", cuadrado: "0" }[a.forma] || "50%";
+  const lider = vivo && datos.duelo.lider === slot;
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: lado, height: lado, borderRadius: "50%", boxSizing: "border-box", overflow: "hidden", display: "flex",
-        alignItems: "center", justifyContent: "center", fontSize: lado * 0.46, background: "rgba(20,8,30,.6)",
-        border: `${Math.max(2, lado * 0.03)}px solid ${col}`, boxShadow: `0 0 ${lado * 0.25}px ${col}66` }}>
-        {s.photo_url ? <img src={s.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/> : s.avatar_emoji || "🎤"}
+    <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {slot && <div ref={flash} style={{ position: "absolute", width: lado, height: lado, borderRadius: radio, opacity: 0,
+        background: `radial-gradient(circle, ${col}cc, transparent 70%)`, transform: "scale(0)", pointerEvents: "none" }}/>}
+      {slot && lider && (
+        <div style={{ position: "absolute", top: `calc(50% - ${lado * 0.5 + lado * 0.36}px)`, left: "50%", fontSize: lado * 0.36,
+          lineHeight: 1, transform: "translateX(-50%) rotate(-8deg)", filter: `drop-shadow(0 0 8px ${col})` }}>👑</div>
+      )}
+      <div ref={vivo ? datos.duelo.avatarRefs[slot] : aro} style={{ position: "relative", width: lado, height: lado, flexShrink: 0 }}>
+        <div style={{ width: "100%", height: "100%", borderRadius: radio, boxSizing: "border-box", overflow: "hidden", display: "flex",
+          alignItems: "center", justifyContent: "center", fontSize: lado * 0.46, background: a.fondo,
+          border: a.grosor > 0 ? `${Math.max(1, lado * a.grosor / 100)}px solid ${col}` : "none",
+          boxShadow: a.brillo > 0 ? `0 0 ${lado * a.brillo / 100}px ${col}66` : "none" }}>
+          {s.photo_url ? <img src={s.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/> : s.avatar_emoji || "🎤"}
+        </div>
+        {a.marco && <img src={a.marco} alt="" draggable={false}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }}/>}
       </div>
+      {vivo && datos.duelo.popups.filter((p) => p.slot === slot).map((p) => (
+        <div key={p.id} style={{ position: "absolute", top: `calc(50% - ${lado * 0.55}px)`, [slot === 1 ? "right" : "left"]: 0,
+          fontFamily: "Syne, sans-serif", fontWeight: 800, color: col, fontSize: lado * (p.big ? 0.3 : 0.22),
+          textShadow: `0 2px 8px ${col}`, animation: "dueloVotePopup .8s ease-out forwards" }}>{p.text}</div>
+      ))}
     </div>
   );
 };
+
+const AVATAR_BASE = { forma: "circulo", color: null, grosor: 3, brillo: 25, fondo: "rgba(20,8,30,.6)", marco: null };
+
+/** Barómetro vertical del duelista (el de Follow the Leader, sin decaer). */
+const barometro = (slot) => function Barometro({ datos }) {
+  const pct = datos?.vivo ? datos.pct?.[`p${slot}`] ?? 0 : slot === 1 ? 58 : 42;
+  return <FtlBarometro pct={pct} tamano="tv" decae={false}/>;
+};
+
+/** «👍 58 %» del duelista; se apaga con «Porcentajes» de Pantalla del duelo. */
+const porcentaje = (slot) => (d) => (!d.d1 ? undefined : d.centro?.porcentajes === false ? "" : `👍 ${d.pct?.[`p${slot}`] ?? 0}%`);
 
 const texto = (leer, ejemplo, { colorDe } = {}) => function Texto({ el, datos }) {
   const v = datos ? leer(datos) : null;
@@ -125,23 +189,39 @@ const ganadorDe = (d) => (d.result === "p1" ? d.d1 : d.result === "p2" ? d.d2 : 
 export const DATOS_DUELO = {
   duVideo:    { nombre: "Video de la ronda", Componente: area("🎬", "Video de la ronda", "#00E5FF"), sinFichas: true, sinTexto: true, sinEfecto: true,
                 ayuda: "Dónde se ve el video del duelo (o la imagen de fondo de «Pantalla del duelo»)." },
-  duColumna1: { nombre: "Columna del duelista 1", Componente: area("💃", "Duelista 1 · avatar, barómetro y %", COLOR_P1), sinFichas: true, sinTexto: true, sinEfecto: true,
+  duColumna1: { nombre: "Columna del duelista 1", Componente: columna(1), sinFichas: true, sinTexto: true, sinEfecto: true,
                 ayuda: "La columna del duelista 1: avatar, barómetro, porcentaje y la lluvia de 👍. Se dibuja en esta caja." },
-  duColumna2: { nombre: "Columna del duelista 2", Componente: area("🎸", "Duelista 2 · avatar, barómetro y %", COLOR_P2), sinFichas: true, sinTexto: true, sinEfecto: true,
+  duColumna2: { nombre: "Columna del duelista 2", Componente: columna(2), sinFichas: true, sinTexto: true, sinEfecto: true,
                 ayuda: "La columna del duelista 2: avatar, barómetro, porcentaje y la lluvia de 👍. Se dibuja en esta caja." },
-  duCentro:   { nombre: "Logo del duelo", Componente: Centro, sinFichas: true, sinEfecto: true,
-                ayuda: "El logo del centro de «Pantalla del duelo» (texto o imagen, efecto y zoom se eligen ahí, arriba). «Tamaño» es el del texto." },
+  duEfectos1: { nombre: "Efectos del duelista 1", Componente: efectos(1), sinFichas: true, sinTexto: true, sinEfecto: true,
+                ayuda: "Partículas, brillo y la lluvia de 👍 del duelista 1: los 👍 nacen abajo de esta caja y vuelan hasta su cara. Transparente: el fondo es la imagen de abajo." },
+  duEfectos2: { nombre: "Efectos del duelista 2", Componente: efectos(2), sinFichas: true, sinTexto: true, sinEfecto: true,
+                ayuda: "Partículas, brillo y la lluvia de 👍 del duelista 2: los 👍 nacen abajo de esta caja y vuelan hasta su cara. Transparente: el fondo es la imagen de abajo." },
+  duBarometro1: { nombre: "Barómetro del duelista 1", Componente: barometro(1), sinFichas: true, sinTexto: true,
+                ayuda: "Sube y baja con el porcentaje del duelista 1." },
+  duBarometro2: { nombre: "Barómetro del duelista 2", Componente: barometro(2), sinFichas: true, sinTexto: true,
+                ayuda: "Sube y baja con el porcentaje del duelista 2." },
+  duPct1:     { nombre: "👍 % del duelista 1", Componente: texto(porcentaje(1), "👍 58%"), plantilla: true, sinFichas: true,
+                ayuda: "El porcentaje del duelista 1. Se apaga también con «Porcentajes» en Más ajustes." },
+  duPct2:     { nombre: "👍 % del duelista 2", Componente: texto(porcentaje(2), "👍 42%"), plantilla: true, sinFichas: true,
+                ayuda: "El porcentaje del duelista 2. Se apaga también con «Porcentajes» en Más ajustes." },
+  // Adorno, no pieza del juego: se puede borrar (Diseño original lo devuelve).
+  duCentro:   { nombre: "Logo del duelo", Componente: Centro, sinFichas: true, sinEfecto: true, borrable: true,
+                ayuda: "El logo del centro de «Pantalla del duelo» (texto o imagen, efecto y zoom se eligen en «Más ajustes»). «Tamaño» es el del texto. Si no lo querés, borralo y poné tu imagen con + Imagen." },
   duReloj:    { nombre: "Reloj", Componente: Reloj, acento: true, acentoNombre: "Últimos 10 s",
                 ayuda: "El tiempo que le queda a la votación. En los últimos 10 segundos cambia al color «Últimos 10 s»." },
-  duAvatar1:  { nombre: "Cara del duelista 1", Componente: cara((d) => d.d1, () => COLOR_P1), sinTexto: true, sinEfecto: true,
+  duAvatar1:  { nombre: "Cara del duelista 1", Componente: cara((d) => d.d1, () => COLOR_P1, 1), sinTexto: true, sinEfecto: true, sinFichas: true,
+                avatar: true, colorAro: COLOR_P1,
                 ayuda: "La foto o el avatar del duelista 1." },
-  duAvatar2:  { nombre: "Cara del duelista 2", Componente: cara((d) => d.d2, () => COLOR_P2), sinTexto: true, sinEfecto: true,
+  duAvatar2:  { nombre: "Cara del duelista 2", Componente: cara((d) => d.d2, () => COLOR_P2, 2), sinTexto: true, sinEfecto: true, sinFichas: true,
+                avatar: true, colorAro: COLOR_P2,
                 ayuda: "La foto o el avatar del duelista 2." },
   duNombre1:  { nombre: "Nombre del duelista 1", Componente: texto((d) => d.d1?.name, D1.name), plantilla: true, sinFichas: true,
                 ayuda: "El nombre del duelista 1." },
   duNombre2:  { nombre: "Nombre del duelista 2", Componente: texto((d) => d.d2?.name, D2.name), plantilla: true, sinFichas: true,
                 ayuda: "El nombre del duelista 2." },
-  duGanadorAvatar: { nombre: "Cara del ganador", Componente: cara(ganadorDe, colorGanador), sinTexto: true, sinEfecto: true,
+  duGanadorAvatar: { nombre: "Cara del ganador", Componente: cara(ganadorDe, colorGanador), sinTexto: true, sinEfecto: true, sinFichas: true,
+                avatar: true, colorAro: COLOR_P1,
                 ayuda: "La foto o el avatar de quien ganó, en el color de su lado." },
   duGanadorNombre: { nombre: "Nombre del ganador", Componente: texto((d) => ganadorDe(d)?.name, D1.name, { colorDe: colorGanador }),
                 plantilla: true, sinFichas: true, ayuda: "El nombre de quien ganó, en el color de su lado." },

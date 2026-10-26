@@ -23,7 +23,8 @@ import { VISTAS, VISTAS_POR_JUEGO } from "./vistasJuegos";
  * `editor(vista)`: si devuelve algo, esa vista se edita en el editor libre de
  * pantallas (src/lienzo) en lugar de la vista previa. Los ajustes propios de
  * la vista (QR y logo, cartel del participante listo, barómetro, vestuario…)
- * siguen arriba del editor: nada de lo que tenía cada diseñador se pierde.
+ * siguen arriba del editor (fuera de la Convocatoria, plegados en «Más
+ * ajustes»): nada de lo que tenía cada diseñador se pierde.
  */
 
 const CSS = `
@@ -43,6 +44,12 @@ const CSS = `
   .vj-cuerpo{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:14px;align-items:start;}
   .vj-preview{position:sticky;top:0;min-width:0;}
   .vj-ajustes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 12px;align-items:start;margin-bottom:6px;}
+  .vj-mas{margin-bottom:10px;}
+  .vj-mas-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 14px;
+    font:inherit;font-size:11.5px;font-weight:700;border-radius:12px;cursor:pointer;color:rgba(240,232,255,.75);
+    background:rgba(240,232,255,.04);border:1px solid rgba(240,232,255,.12);}
+  .vj-mas-btn:hover{color:#F0E8FF;border-color:var(--vj-col);}
+  .vj-mas-btn[aria-expanded="true"]{color:var(--vj-col);border-color:var(--vj-col);}
   @media (max-width:1100px){
     .vj-cuerpo{grid-template-columns:1fr;}
     .vj-preview{position:static;order:-1;}
@@ -65,6 +72,7 @@ export default function VistasJuego({ juego, col, nav, controles, escenaExtra, e
   const [vista, setVista] = useState("convocatoria");
   const [estados, setEstados] = useState({});   // vista → estado elegido
   const [rev, setRev] = useState(0);
+  const [masAbierto, setMasAbierto] = useState(false);
   const guardado = () => setRev((r) => r + 1);
 
   const def = VISTAS_POR_JUEGO[juego];
@@ -115,10 +123,22 @@ export default function VistasJuego({ juego, col, nav, controles, escenaExtra, e
         </div>
       </div>
 
-      {editorLibre && (vista === "convocatoria" || propios) && (
+      {editorLibre && vista === "convocatoria" && (
         <div className="vj-ajustes">
-          {vista === "convocatoria" && <QrLogoJuego juego={juego} col={col} qr={qr} logo={logo} onGuardado={guardado}/>}
+          <QrLogoJuego juego={juego} col={col} qr={qr} logo={logo} onGuardado={guardado}/>
           {propios}
+        </div>
+      )}
+      {/* En las demás vistas los ajustes propios van plegados: el editor queda
+          arriba, igual que en la Convocatoria. */}
+      {editorLibre && vista !== "convocatoria" && propios && (
+        <div className="vj-mas">
+          <button type="button" className="vj-mas-btn" aria-expanded={masAbierto}
+            onClick={() => setMasAbierto((v) => !v)}>
+            <span>⚙️ Más ajustes de esta pantalla</span>
+            <span aria-hidden="true">{masAbierto ? "▴" : "▾"}</span>
+          </button>
+          {masAbierto && <div className="vj-ajustes" style={{ marginTop: 8 }}>{propios}</div>}
         </div>
       )}
       {editorLibre}

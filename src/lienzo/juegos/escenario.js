@@ -23,6 +23,17 @@ export const PANTALLAS_ESCENARIO_CEL = [
 
 const FONDO_ESCENARIO = { ...FONDO_BASE, tipo: "radial", colores: ["#1A0D2E", "#08040F"] };
 const dato = (id, d, nombre, x, y, w, h, extra = {}) => ({ id, tipo: "dato", dato: d, nombre, x, y, w, h, ...extra });
+const videoEntero = () => dato("video", "escVideo", "Video del desafío", 0, 0, 1920, 1080);
+
+/**
+ * Performance guardada antes de que existiera «Video del desafío»: era
+ * transparente sobre el video a pantalla completa, así que se le agrega ése,
+ * al fondo de la lista. El editor lo hace al abrir.
+ */
+export function conVideo(p) {
+  if (!p?.elementos || p.elementos.some((e) => e.tipo === "dato" && e.dato === "escVideo")) return p;
+  return { ...p, elementos: [videoEntero(), ...p.elementos] };
+}
 
 function diseno(tipo) {
   const j = ESCENARIO_JUEGOS[tipo];
@@ -43,8 +54,9 @@ function diseno(tipo) {
         { estilo: { fuente: "syne", tamano: 76, peso: 900, color: "#F0E8FF", sombra: { color: "rgba(0,0,0,.8)", x: 0, y: 4, blur: 22 } } }),
       dato("listo", "escListo", "Cartel «Listo para…»", 192, 683, 1536, 60, { estilo: { tamano: 30 } }),
     ] },
-    // Transparente: abajo está el video del participante, a pantalla completa.
+    // El video del participante (área) a pantalla completa; el resto, encima.
     performance: { fondo: { ...FONDO_BASE }, elementos: [
+      videoEntero(),
       dato("avatar", "escAvatar", "Avatar del participante", 81, 32, 144, 144,
         { estilo: { tamano: 81 }, ficha: { fondo: "rgba(8,4,15,.6)", borde: "#FFD600" } }),
       dato("nombre", "escNombre", "Nombre del participante", 38, 189, 230, 84,

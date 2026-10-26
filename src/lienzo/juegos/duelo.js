@@ -7,8 +7,9 @@ import { COLOR_P1, COLOR_P2 } from "../datosDuelo";
  * calca la placa del Duelo (convocatoria), DueloBigscreen (votación, ganador,
  * empate) y DueloVistaCompleta (celular).
  *
- * En la votación, el video y las dos columnas de los duelistas son áreas: los
- * dibuja la TV en esas cajas (ver datosDuelo.jsx); el resto va encima.
+ * En la votación, cada duelista es un juego de piezas sueltas (ver
+ * piezasColumna): el fondo es una imagen webp común, encima los efectos
+ * (área que dibuja la TV) y la cara, el nombre, el 👍 % y el barómetro.
  */
 
 export const PANTALLAS_DUELO = [
@@ -26,6 +27,49 @@ export const PANTALLAS_DUELO_CEL = [
 ];
 
 const PINK = "#FF2D95";
+const ANCHO_COLUMNA = 288;   // 15 % de 1920, la columna de siempre
+const BAROMETRO_FABRICA = { ancho: 100, alto: 60, y: 64, x: 50 };
+
+/**
+ * Las piezas de la columna del duelista `n` dentro de la caja `c`
+ * ({x, y, w, h}). El barómetro sale de «Pantalla del duelo» (`config`), con
+ * las mismas cuentas que la columna vieja: así un diseño guardado se separa
+ * sin moverse (separarColumnas).
+ */
+export function piezasColumna(n, c, config = null, visible = true) {
+  const b = config?.barometro || BAROMETRO_FABRICA;
+  const baroW = Math.round(59.5 * (b.ancho / 100)), baroH = Math.round(c.h * (b.alto / 100));
+  const baroCx = n === 1 ? c.x + c.w * (b.x / 100) : c.x + c.w - c.w * (b.x / 100);
+  const lado = 100;
+  const v = { visible };
+  return [
+    { id: `fondo${n}`, tipo: "imagen", nombre: `Fondo del duelista ${n}`, src: `/duelo/columna-p${n}.webp`, ajuste: "cover", ...c, ...v },
+    dato(`efectos${n}`, `duEfectos${n}`, `Efectos del duelista ${n}`, c.x, c.y, c.w, c.h, v),
+    dato(`barometro${n}`, `duBarometro${n}`, `Barómetro del duelista ${n}`, Math.round(baroCx - baroW / 2),
+      Math.round(c.y + c.h * (b.y / 100) - baroH / 2), baroW, baroH, v),
+    dato(`cara${n}`, `duAvatar${n}`, `Cara del duelista ${n}`, Math.round(c.x + c.w / 2 - lado / 2), c.y + 40, lado, lado, v),
+    dato(`nombre${n}`, `duNombre${n}`, `Nombre del duelista ${n}`, c.x, c.y + 150, c.w, 44, { ...v,
+      estilo: { fuente: "grotesk", tamano: 33, peso: 700, mayus: true, espaciado: 0.02, color: "#FFFFFF",
+        sombra: { color: "rgba(0,0,0,.7)", x: 0, y: 2, blur: 10 } } }),
+    dato(`pct${n}`, `duPct${n}`, `👍 % del duelista ${n}`, c.x, c.y + 200, c.w, 70, { ...v,
+      estilo: { fuente: "syne", tamano: 48, peso: 800, color: n === 1 ? "#ff258e" : "#ff9100",
+        sombra: { color: n === 1 ? "rgba(255,22,136,.4)" : "rgba(255,138,0,.4)", x: 0, y: 2, blur: 12 } } }),
+  ];
+}
+
+/**
+ * Diseños guardados con la columna entera (`duColumna1/2`): cada una se
+ * reemplaza, en su lugar y en su capa, por sus piezas sueltas. El editor lo
+ * hace al abrir; la TV, al dibujar (así se ve igual hasta que se guarde).
+ */
+export function separarColumnas(p, config = null) {
+  if (!p?.elementos?.some((e) => e.tipo === "dato" && (e.dato === "duColumna1" || e.dato === "duColumna2"))) return p;
+  const elementos = p.elementos.flatMap((e) => {
+    const n = e.tipo === "dato" ? { duColumna1: 1, duColumna2: 2 }[e.dato] : null;
+    return n ? piezasColumna(n, { x: e.x, y: e.y, w: e.w, h: e.h }, config, e.visible !== false) : [e];
+  });
+  return { ...p, elementos };
+}
 const dato = (id, d, nombre, x, y, w, h, extra = {}) => ({ id, tipo: "dato", dato: d, nombre, x, y, w, h, ...extra });
 const tv = (id, nombre, texto, y, h, estilo, x = 160, w = 1600) => ({ id, tipo: "texto", nombre, texto, x, y, w, h, estilo });
 const encabezado = () => txt("titulo", "Título de la sección", "Duelo de Talentos", 0, 30,
@@ -45,8 +89,8 @@ export const DUELO_POR_DEFECTO = {
   // Transparente: el fondo de la votación es el video (o la imagen de «Pantalla del duelo»).
   votacion: { fondo: { ...FONDO_BASE }, elementos: [
     dato("video", "duVideo", "Video de la ronda", 0, 0, 1920, 1080),
-    dato("columna1", "duColumna1", "Columna del duelista 1", 0, 0, 288, 1080),
-    dato("columna2", "duColumna2", "Columna del duelista 2", 1632, 0, 288, 1080),
+    ...piezasColumna(1, { x: 0, y: 0, w: ANCHO_COLUMNA, h: 1080 }),
+    ...piezasColumna(2, { x: 1920 - ANCHO_COLUMNA, y: 0, w: ANCHO_COLUMNA, h: 1080 }),
     { id: "logo-app", tipo: "imagen", nombre: "Logo de BizarrApp", src: LOGO_APP, ajuste: "contain", x: 860, y: 20, w: 200, h: 110 },
     dato("centro", "duCentro", "Logo del duelo", 288, 140, 1344, 800,
       { estilo: { fuente: "syne", tamano: 120, peso: 900, color: "#F0E8FF", interlineado: 1.05, espaciado: 0.04 }, opacidad: 0.92 }),

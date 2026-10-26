@@ -143,6 +143,14 @@ export function normalizarElemento(el, i = 0) {
     // principal con `proporcion` y el color «Artista» (ver datosDj.jsx).
     estilo2: el.estilo2 && typeof el.estilo2 === "object" ? normalizarEstilo(el.estilo2) : null,
     leyenda: ["arriba", "abajo", "oculta"].includes(el.leyenda) ? el.leyenda : "arriba",
+    // Avatares (cara de un participante): forma, aro (color null = el de su
+    // lado; grosor y brillo en % del lado), fondo y un marco PNG encima.
+    avatar: {
+      forma: ["circulo", "redondeado", "cuadrado"].includes(el.avatar?.forma) ? el.avatar.forma : "circulo",
+      color: color(el.avatar?.color, null), grosor: num(el.avatar?.grosor, 0, 20, 3), brillo: num(el.avatar?.brillo, 0, 60, 25),
+      fondo: color(el.avatar?.fondo, "rgba(20,8,30,.6)"),
+      marco: typeof el.avatar?.marco === "string" && el.avatar.marco ? el.avatar.marco : null,
+    },
     ficha: { fondo: color(el.ficha?.fondo, "rgba(168,85,247,.12)"), borde: color(el.ficha?.borde, "rgba(168,85,247,.5)"),
       acento: color(el.ficha?.acento, "#00F5A0") },
     efecto: IDS_EF_TXT.includes(el.efecto) ? el.efecto : "ninguno" };

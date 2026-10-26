@@ -5,7 +5,7 @@ import { usePantallaEvent } from "../hooks/realtime/usePantallaEvent";
 import { useGameState } from "../hooks/realtime/useGameState";
 import { BIGSCREEN_CSS, PlacaScreen, RaffleScreen, TriviaScreen, SumaScreen, PalabraScreen } from "../bigscreen/BizarrApp PantallaGigante Festival";
 import DueloBigscreen from "../bigscreen/DueloBigscreen";
-import FtlOverlay from "./FtlOverlay";
+import FtlOverlay, { capasEscenario } from "./FtlOverlay";
 import FtlStandby from "./FtlStandby";
 import { QrDeJuego } from "../components/QrDeJuego";
 import TomatazoOverlay from "./TomatazoOverlay";
@@ -199,6 +199,12 @@ const shadow = { soft: "0 6px 18px rgba(0,0,0,.3)", medium: "0 10px 28px rgba(0,
  * los players A/B viven adentro y moverlos a otro contenedor los desmontaría,
  * matando la reproducción. Se cambian las props, no el árbol.
  */
+/** El video de FTL / PT en la caja del «Video del desafío» del editor (en %). */
+const aCajaEscenario = (block, caja) => ({
+  ...aPantallaCompleta(block), x: caja.x, y: caja.y, w: caja.w, h: caja.h,
+  opacity: caja.visible ? caja.opacidad : 0,
+});
+
 const aPantallaCompleta = (block) => ({
   ...block,
   visible: true, x: 0, y: 0, w: 100, h: 100, z: 1, opacity: 1, radius: 0,
@@ -557,6 +563,14 @@ export default function PantallaTV({ modo = "tv" }) {
     modoVotacion === "votos" ? turnoEnVivo : null, null, { soloTotales: true });
   const peleaFtl = useFtlPelea(modoVotacion === "pelea" ? turnoEnVivo : null,
     { anonimo: true, cadaMs: 400 });
+  const pctFtl = modoVotacion === "toques" ? energiaFtl
+    : modoVotacion === "votos" ? (votosFtl.up_pct ?? 0)
+    : modoVotacion === "pelea" ? peleaFtl.pct
+    : null;
+  // Diseñador → Escenario → Performance: la caja del «Video del desafío».
+  // Sin ese elemento (o sin diseño), el video va a pantalla completa.
+  const performanceEsc = useLienzo(showFtl ? juegoEsc.type : null).performance || null;
+  const cajaVideoEsc = ftlPerformance && performanceEsc ? capasEscenario(performanceEsc).video : null;
 
   // Con FTL en el aire la TV deja de ser la pantalla del DJ: se reusa su MOTOR
   // (players, audio, recortes, avance) pero se apaga toda su INTERFAZ — título,
@@ -847,13 +861,17 @@ export default function PantallaTV({ modo = "tv" }) {
           : canvasConfig.screen.backgroundMode === "none" && marca.fondoImagen ? `url(${marca.fondoImagen})` : "none",
         backgroundSize: "cover", backgroundPosition: "center",
       }}>
+        {/* FTL / PT: lo que el editor puso detrás del video, con su fondo. */}
+        {ftlPerformance && !hasLiveLayer && !hasPlaca && (
+          <FtlOverlay capa="debajo" participante={participanteFtl} juego={juegoEsc} pct={pctFtl} decae={modoVotacion === "toques"}/>
+        )}
         {capasDj && !soloVideo && (
           <div data-tv-lienzo="debajo" style={{ position: "absolute", inset: 0, zIndex: 0 }}>
             <LienzoPantalla pantalla={capasDj.debajo} datos={datosLienzoDj} llenar/>
           </div>
         )}
         <ConfiguredBlock id="video"
-          block={soloVideo ? aPantallaCompleta(bloqueVideo) : bloqueVideo}>
+          block={!soloVideo ? bloqueVideo : cajaVideoEsc ? aCajaEscenario(bloqueVideo, cajaVideoEsc) : aPantallaCompleta(bloqueVideo)}>
           {/* Players A/B permanentes: el standby nunca usa display:none. */}
           {playerIds.map((playerId, index) => (
             <div key={playerId} className="tv-player-layer" style={{
@@ -1010,10 +1028,7 @@ export default function PantallaTV({ modo = "tv" }) {
 
         {ftlPerformance && !hasLiveLayer && !hasPlaca && (
           <FtlOverlay participante={participanteFtl} juego={juegoEsc}
-            pct={modoVotacion === "toques" ? energiaFtl
-              : modoVotacion === "votos" ? (votosFtl.up_pct ?? 0)
-              : modoVotacion === "pelea" ? peleaFtl.pct
-              : null}
+            pct={pctFtl}
             decae={modoVotacion === "toques"}
             barometro={listoCfg[juegoEsc.type]?.barometro}/>
         )}

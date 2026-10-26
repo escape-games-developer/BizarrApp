@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MediaLibraryModal from "../../components/media/MediaLibraryModal";
-import { FondoLienzo, ElementoLienzo, LIENZO_CSS } from "../LienzoPantalla";
+import { FondoLienzo, ElementoLienzo, LIENZO_CSS, DATOS } from "../LienzoPantalla";
 import { FORMATOS, MAX_ELEMENTOS, normalizarElemento, normalizarPantalla, nuevoId } from "../modelo";
 import { ESTILO_BASE } from "../estilosTexto";
 import { useLienzoAdmin } from "../useLienzo";
@@ -30,6 +30,8 @@ import { nota } from "./controles";
  * revelada del Desafío).
  * `avisos`: { <id de dato>: texto } — los datos que el evento en vivo hoy no
  * deja ver en la TV; en el editor se marcan (contorno ámbar, ⚠ en Capas).
+ * `migrar(estado, pantalla)`: pone al día un diseño guardado con piezas que
+ * ya no existen (p. ej. la columna entera del Duelo) al abrirlo.
  */
 
 const TIRADORES = [
@@ -63,7 +65,7 @@ const HISTORIAL_MAX = 80;
 
 const esCampo = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
 
-export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefecto, datos, formato = "tv", avisos = null }) {
+export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefecto, datos, formato = "tv", avisos = null, migrar = null }) {
   const fmt = FORMATOS[formato] || FORMATOS.tv;
   const { ancho: ANCHO, alto: ALTO } = fmt;
   const cel = fmt.id !== "tv";   // celular o banner: del ancho de la app
@@ -76,7 +78,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
   const [hist, setHist] = useState({ pasado: [], futuro: [] });
   const [guias, setGuias] = useState({ v: [], h: [] });   // líneas de alineación activas (px lógicos)
   const [ayudas, setAyudas] = useState(leerAyudas);
-  const [libPara, setLibPara] = useState(null);  // null | "nueva" | "cambiar" | "fondo"
+  const [libPara, setLibPara] = useState(null);  // null | "nueva" | "cambiar" | "fondo" | "marco"
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState(null);
   const [enfocar, setEnfocar] = useState(0);
@@ -97,7 +99,10 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
   useEffect(() => {
     if (!admin.pantallas) return;
     const nueva = {};
-    for (const p of listaPantallas) nueva[p.id] = admin.pantallas[p.id] || normalizarPantalla(porDefecto[p.id]);
+    for (const p of listaPantallas) {
+      const guardada = admin.pantallas[p.id];
+      nueva[p.id] = guardada ? (migrar ? normalizarPantalla(migrar(p.id, guardada)) : guardada) : normalizarPantalla(porDefecto[p.id]);
+    }
     const d = docRef.current, b = baseRef.current;
     if (d && b) {
       const conCambios = (id) => JSON.stringify(d[id]) !== JSON.stringify(b[id]);
@@ -166,7 +171,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
     const p = docRef.current?.[estado];
     const el = p?.elementos.find((e) => e.id === sel);
     if (!el) return;
-    if (tipo === "borrar" && el.tipo !== "dato") {
+    if (tipo === "borrar" && (el.tipo !== "dato" || DATOS[el.dato]?.borrable)) {
       cambiar((q) => ({ ...q, elementos: q.elementos.filter((e) => e.id !== sel) }));
       setSel(null);
     } else if (tipo === "duplicar" && el.tipo !== "dato" && p.elementos.length < MAX_ELEMENTOS) {
@@ -205,6 +210,10 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
     if (!asset?.file_url) return;
     if (para === "fondo") cambiar((p) => ({ ...p, fondo: { ...p.fondo, tipo: "imagen", imagen: asset.file_url } }));
     else if (para === "cambiar" && sel) cambiarElemento(sel, { src: asset.file_url });
+    else if (para === "marco" && sel) {
+      const el = docRef.current?.[estado]?.elementos.find((e) => e.id === sel);
+      if (el) cambiarElemento(sel, { avatar: { ...el.avatar, marco: asset.file_url } });
+    }
     else {
       const ratio = asset.width && asset.height ? asset.width / asset.height : 16 / 9;
       const lado = cel ? 200 : 600;
@@ -469,7 +478,7 @@ export default function EditorLienzo({ juego, pantallas: listaPantallas, porDefe
       </div>
 
       <MediaLibraryModal open={!!libPara} onClose={() => setLibPara(null)} onSelect={elegirImagen}
-        title={libPara === "fondo" ? "Imagen de fondo (ideal 1920 × 1080)" : "Imagen"}/>
+        title={libPara === "fondo" ? "Imagen de fondo (ideal 1920 × 1080)" : libPara === "marco" ? "Marco del avatar (PNG transparente, cuadrado)" : "Imagen"}/>
     </div>
   );
 }

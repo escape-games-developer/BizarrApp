@@ -8,7 +8,7 @@ import SelectorEfecto from "../../juegos/SelectorEfecto";
 import { SeccionConfig, AvisoGuardado } from "../../juegos/SeccionConfig";
 import { ErrorCarga } from "../../juegos/AjustesDelJuego";
 import EditorLienzo from "../../../lienzo/editor/EditorLienzo";
-import { DUELO_POR_DEFECTO, PANTALLAS_DUELO, PANTALLAS_DUELO_CEL } from "../../../lienzo/juegos/duelo";
+import { DUELO_POR_DEFECTO, PANTALLAS_DUELO, PANTALLAS_DUELO_CEL, separarColumnas } from "../../../lienzo/juegos/duelo";
 import { useDueloPantalla } from "../../../hooks/useDueloPantalla";
 import { usePantallaVisibilidadAdmin } from "../../../hooks/usePantallaQr";
 
@@ -85,7 +85,7 @@ function ControlesDuelo({ onGuardado }) {
         <div style={nota}>
           Durante la votación, el fondo es el video de la ronda a pantalla completa (o la imagen de fondo, si no hay
           video) y encima va siempre la máscara: paneles, barómetros, avatares, logo de BizarrApp y logo de duelo.
-          Para ver la convocatoria o el resultado, elegilo arriba de la vista previa.
+          Votación, Ganador y Empate se editan en las solapas del editor.
         </div>
         <AvisoGuardado aviso={aviso}/>
       </div>
@@ -230,7 +230,8 @@ export default function DisenoDuelo({ nav }) {
     const pantallas = vista === "celular" ? PANTALLAS_DUELO_CEL : PANTALLAS_DUELO.filter((x) => x.vista === vista);
     if (!pantallas.length) return null;
     return <EditorLienzo key={vista} juego="duelo" formato={vista === "celular" ? "celular" : "tv"} pantallas={pantallas}
-      porDefecto={DUELO_POR_DEFECTO} datos={datos} avisos={avisos}/>;
+      porDefecto={DUELO_POR_DEFECTO} datos={datos} avisos={avisos}
+      migrar={(id, p) => (id === "votacion" ? separarColumnas(p, pantalla) : p)}/>;
   };
   return (
     <VistasJuego juego="duelo" col={COL} nav={nav} editor={editor}

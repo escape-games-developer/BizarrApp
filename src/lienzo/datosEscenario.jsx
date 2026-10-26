@@ -126,6 +126,24 @@ const valor = (leer, ejemplo) => function Valor({ el, datos }) {
   );
 };
 
+/**
+ * «Video del desafío» (Performance de FTL / PT): un ÁREA. El video sale de los
+ * players de la TV, que no pueden entrar al lienzo: este elemento sólo da su
+ * caja (ver capasEscenario en FtlOverlay). Lo de antes en la lista va debajo
+ * del video; lo de después, encima.
+ */
+export const AREAS_ESCENARIO = new Set(["escVideo"]);
+
+function VideoMuestra() {
+  return (
+    <div style={{ width: "100%", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", gap: 14, background: "rgba(0,229,255,.10)", border: "4px dashed #00E5FF", color: "rgba(240,232,255,.8)",
+      fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 28, textAlign: "center", padding: 12, overflow: "hidden" }}>
+      <span style={{ fontSize: 56 }}>🎬</span>Video del desafío
+    </div>
+  );
+}
+
 /** La votación del público durante el turno, tal cual (toques, 👍/👎 o pelea). */
 function Votacion({ el, datos }) {
   if (datos?.vivo) return datos.votacion ? <div style={{ width: "100%", height: "100%", overflow: "auto" }}>{datos.votacion}</div> : null;
@@ -139,6 +157,8 @@ function Votacion({ el, datos }) {
 }
 
 export const DATOS_ESCENARIO = {
+  escVideo:     { nombre: "Video del desafío", Componente: VideoMuestra, sinFichas: true, sinTexto: true, sinEfecto: true,
+                  ayuda: "Dónde y de qué tamaño se ve el video del participante (YouTube o subido). Lo que esté arriba en Capas va encima del video; lo de abajo, detrás, con el fondo de la pantalla." },
   escAvatar:    { nombre: "Avatar del participante", Componente: Avatar, sinTexto: true,
                   ayuda: "El avatar de quien está en el escenario, en su aro. «Borde» es el color del aro." },
   escNombre:    { nombre: "Nombre del participante", Componente: Nombre, sinFichas: true,
