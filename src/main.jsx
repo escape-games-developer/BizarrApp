@@ -1,6 +1,14 @@
 import { isClientPreviewPath } from "./preview/previewContract";
 import { isTvPreviewPath } from "./preview/tvPreviewContract";
 
+// /admin se instala como una app aparte («Bizarr Panel»): su propio manifest
+// (abre en /admin, gira libre) en vez del del Cliente (/, sólo vertical). Va
+// antes que nada para que el navegador lea el manifest correcto.
+if (window.location.pathname.startsWith("/admin")) {
+  document.querySelector('link[rel="manifest"]')?.setAttribute("href", "/manifest-panel.json");
+  document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute("content", "Bizarr Panel");
+}
+
 // La ruta se decide ANTES de importar cualquier otra cosa. Los imports
 // estáticos se evalúan todos al cargar el módulo, y varias rutas arrastran
 // src/lib/supabase.js, que crea el cliente con sesión persistente y

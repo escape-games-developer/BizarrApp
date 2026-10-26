@@ -14,7 +14,8 @@ import { ALLOWED_VIDEO_LABEL } from "../../services/dueloVideo";
  *
  * Filtro de playlist: "todas" | "sin" (sin playlist) | id de playlist.
  */
-export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoActualId, onAsignar, ocupado }) {
+// `simple` (panel del Anfitrión): sólo filtrar y asignar; no carga, borra ni mueve videos.
+export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoActualId, onAsignar, ocupado, simple = false }) {
   const { playlists, videos, loading, error } = useEscenarioBiblioteca(juego);
   const [filtro, setFiltro]       = useState("todas");
   const [lineas, setLineas]       = useState("");
@@ -111,15 +112,17 @@ export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoAct
                 cursor: "pointer", padding: "4px 0 4px 9px" }}>
               {p.nombre}
             </button>
-            <button type="button" title="Borrar playlist" disabled={busy} onClick={() => quitarPl(p)}
-              style={{ background: "none", border: "none", color: "rgba(255,45,120,.7)", fontSize: 10,
-                cursor: "pointer", padding: "4px 8px 4px 0" }}>✕</button>
+            {!simple && (
+              <button type="button" title="Borrar playlist" disabled={busy} onClick={() => quitarPl(p)}
+                style={{ background: "none", border: "none", color: "rgba(255,45,120,.7)", fontSize: 10,
+                  cursor: "pointer", padding: "4px 8px 4px 0" }}>✕</button>
+            )}
           </span>
         ))}
         {videos.some((v) => !v.playlist_id) && playlists.length > 0 && (
           <button type="button" style={chip(filtroOk === "sin")} onClick={() => setFiltro("sin")}>Sin playlist</button>
         )}
-        {!creandoPl && (
+        {!simple && !creandoPl && (
           <button type="button" style={{ ...chip(false), borderStyle: "dashed" }} onClick={() => setCreandoPl(true)}>
             ＋ Playlist
           </button>
@@ -139,7 +142,7 @@ export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoAct
       )}
 
       {/* Agregar videos — siempre a la vista: links de YouTube y archivos de la PC */}
-      <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, background: "rgba(240,232,255,.03)",
+      {!simple && <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, background: "rgba(240,232,255,.03)",
           border: "1px solid rgba(240,232,255,.08)" }}>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase",
             color: "rgba(240,232,255,.45)", marginBottom: 4 }}>Agregar videos</div>
@@ -163,7 +166,7 @@ export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoAct
           <div style={{ fontSize: 9, color: "rgba(240,232,255,.3)", marginTop: 5 }}>
             {ALLOWED_VIDEO_LABEL} · máx 100 MB. El nombre es el del archivo.
           </div>
-      </div>
+      </div>}
 
       {(err || error) && <div style={{ fontSize: 10.5, color: "#FF2D78", marginBottom: 8 }}>✕ {err || error}</div>}
       {!err && !error && nota && <div style={{ fontSize: 10.5, color: "#00F5A0", marginBottom: 8 }}>{nota}</div>}
@@ -177,10 +180,11 @@ export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoAct
         <div style={{ fontSize: 11, color: "rgba(240,232,255,.3)", padding: "8px 0" }}>Cargando biblioteca…</div>
       ) : visibles.length === 0 ? (
         <div style={{ fontSize: 11, color: "rgba(240,232,255,.35)", padding: "8px 0", lineHeight: 1.5 }}>
-          {videos.length ? "No hay videos en esta playlist." : "Todavía no hay videos. Agregá links o subí archivos."}
+          {videos.length ? "No hay videos en esta playlist."
+            : simple ? "Todavía no hay videos cargados." : "Todavía no hay videos. Agregá links o subí archivos."}
         </div>
       ) : (
-        <div style={{ maxHeight: 360, overflowY: "auto" }}>
+        <div style={{ maxHeight: simple ? "none" : 360, overflowY: "auto" }}>
           {visibles.map((v) => {
             const elegido = v.id === videoActualId;
             return (
@@ -198,17 +202,21 @@ export default function BibliotecaEscenario({ juego, col, puedeAsignar, videoAct
                     title={v.nombre}>
                     {v.nombre}
                   </div>
-                  <button type="button" title="Borrar de la biblioteca" disabled={busy} onClick={() => quitarVideo(v)}
-                    style={{ background: "none", border: "none", color: "rgba(255,45,120,.65)", fontSize: 11,
-                      cursor: "pointer", padding: 2, flexShrink: 0 }}>✕</button>
+                  {!simple && (
+                    <button type="button" title="Borrar de la biblioteca" disabled={busy} onClick={() => quitarVideo(v)}
+                      style={{ background: "none", border: "none", color: "rgba(255,45,120,.65)", fontSize: 11,
+                        cursor: "pointer", padding: 2, flexShrink: 0 }}>✕</button>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 5, marginTop: 6 }}>
-                  <select value={v.playlist_id || ""} disabled={busy}
-                    onChange={(e) => correr(() => moverVideo(v.id, e.target.value || null))}
-                    style={{ ...input, padding: "4px 6px", fontSize: 10, flex: 1, minWidth: 0 }}>
-                    <option value="">Sin playlist</option>
-                    {playlists.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
+                  {simple ? <div style={{ flex: 1 }}/> : (
+                    <select value={v.playlist_id || ""} disabled={busy}
+                      onChange={(e) => correr(() => moverVideo(v.id, e.target.value || null))}
+                      style={{ ...input, padding: "4px 6px", fontSize: 10, flex: 1, minWidth: 0 }}>
+                      <option value="">Sin playlist</option>
+                      {playlists.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                  )}
                   {puedeAsignar && (
                     <button className={elegido ? "btn btn-g" : "btn btn-p"} style={{ padding: "4px 10px", fontSize: 10 }}
                       disabled={ocupado || elegido} onClick={() => onAsignar(v)}>

@@ -12,7 +12,7 @@ import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
 import { useTriviaAccumulated, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
-import { usePantallaMensaje } from "../hooks/usePantallaQr";
+import { usePantallaMensaje, QR_DE_JUEGO, PLACA_DE_JUEGO } from "../hooks/usePantallaQr";
 import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
 import DisenadorDj from "./disenador/DisenadorDj";
@@ -26,6 +26,9 @@ import { useRaffle, raffleCountdown } from "../hooks/useRaffle";
 import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import AdminSidebar from "./AdminSidebar";
 import AjustesPanel from "./AjustesPanel";
+import PanelAnfitrion from "./anfitrion/PanelAnfitrion";
+import BotonInstalar from "./anfitrion/BotonInstalar";
+import { VISTAS, leerVistaElegida, guardarVistaElegida, vistaEfectiva } from "./vistaPanel";
 import Toggle from "./juegos/Toggle";
 import DisenadorEscenario from "./disenador/DisenadorEscenario";
 import DisenadorJuegos from "./disenador/DisenadorJuegos";
@@ -493,6 +496,12 @@ const SECS = [
 // Módulos congelados por producto. Conservamos sus entradas y paneles para
 // poder reactivarlos, pero no los exponemos en los accesos operativos.
 const FROZEN_MODULE_IDS = new Set(["karaoke"]);
+
+// Lo que maneja el Anfitrión desde la tablet, por grupo y en este orden.
+const JUEGOS_ANFITRION = [
+  { grupo: "Juegos",    ids: ["rey", "suma", "palabra", "trivia"] },
+  { grupo: "Escenario", ids: ["duelo", "ftl", "pt"] },
+];
 
 // Pantallas internas que no están en SECS: se abren desde Lanzar (y la campana)
 // y las ve quien puede ver Lanzar.
@@ -1109,7 +1118,9 @@ function DueloReglasCard({col, enJuego}){
 // Lo único local es la SELECCIÓN previa al lanzamiento (quién va de P1 y de
 // P2) y el campo de video: elegir no es lanzar, y no se persiste hasta que
 // `duelo_launch_round` lo acepta.
-function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
+// `simple` (panel del Anfitrión): elige duelistas, lanza y cierra; sin video de
+// fondo, cronómetro, reglas ni diseño. «Cerrar duelo» pide confirmación.
+function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, simple = false}){
   const { postulaciones, quitar, reactivar, vaciar } = useDueloPostulaciones(sessionId, null);
   const { round, counts, now } = useDueloRound(sessionId, { autoFinish: true });
 
@@ -1323,7 +1334,8 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
           title={fase === "result" ? "Bajar el resultado y volver a la placa" : "Cerrar la votación, mostrar el ganador y volver a la placa"}>
           🏁 Finalizar duelo
         </button>
-        <button className="btn btn-r" style={btnBarra} disabled={!puedeCerrar} onClick={cerrar}
+        <button className="btn btn-r" style={btnBarra} disabled={!puedeCerrar}
+          onClick={simple ? () => confirmarFinalizar("el Duelo", cerrar) : cerrar}
           title="Sacar el Duelo de la pantalla y volver a DJ Democracy">
           ⏹ Cerrar duelo
         </button>
@@ -1433,7 +1445,7 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
         </div>
       </div>
 
-      <div className="card" style={{marginBottom:10}}>
+      {!simple && <div className="card" style={{marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
           <div className="ctitle" style={{margin:0}}>🎞️ Video de fondo</div>
           <Toggle on={videoFondo} color={DUELO_P1}
@@ -1478,7 +1490,7 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
           va la imagen de fondo (o negro).
         </div>
         </>}
-      </div>
+      </div>}
     </>
   );
 
@@ -1569,10 +1581,10 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
           {barraOperativa}
           {/* Siempre visible, también durante la votación: rige desde el
               próximo lanzamiento. */}
-          <DueloCronometroCard col={DUELO_P1}/>
-          <DueloReglasCard col={DUELO_P1} enJuego={votando}/>
+          {!simple && <DueloCronometroCard col={DUELO_P1}/>}
+          {!simple && <DueloReglasCard col={DUELO_P1} enJuego={votando}/>}
           {/* Cómo se ve en la TV: Diseñador → Escenario → Duelo. */}
-          {puedeDisenar && (
+          {puedeDisenar && !simple && (
             <button type="button" className="btn btn-g" style={{width:"100%", marginTop:10, padding:"8px 10px", fontSize:11}}
               onClick={() => { pedirDisenoDe("duelo"); goTo("disenoEscenario"); }}>
               🎨 Diseño de la pantalla del Duelo
@@ -1606,7 +1618,9 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar}){
 //   game_state.active_escenario / escenario_participant / escenario_video
 //                            → qué proyecta /tv y qué vista abre el cliente
 // Las dos se escriben en la misma acción; el panel las lee de la base.
-function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, puedeDisenar}){
+// `simple` (panel del Anfitrión): convoca, llama, asigna video y lanza; sin la
+// regla de votación, el diseño ni la carga de la biblioteca. Finalizar confirma.
+function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, puedeDisenar, simple = false}){
   const juego = ESCENARIO_JUEGOS[type];
   const COL = juego.colorAdmin;
   const { queue, error: errCola, call, finish } = useEscenarioQueue(sessionId, type);
@@ -1805,7 +1819,8 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
           {enVivo ? "🔴 En vivo" : "🚀 Lanzar video"}
         </button>
         <button className="btn btn-r" style={{gridColumn:"span 2", padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
-          disabled={!puedeFinalizar} onClick={finalizarJuego}
+          disabled={!puedeFinalizar}
+          onClick={simple ? () => confirmarFinalizar(juego.label, finalizarJuego) : finalizarJuego}
           title={enElAire ? "Cerrar el juego y volver a DJ Democracy" : "Retirar la placa"}>
           ⏹ Finalizar
         </button>
@@ -2019,7 +2034,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
       <div>
         {barraOperativa}
 
-        <div className="card" style={{marginBottom:10}}>
+        {!simple && <div className="card" style={{marginBottom:10}}>
           <div className="ctitle" style={{marginBottom:4}}>{juego.icon} {juego.label}</div>
           <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
             {juego.subAdmin} La música sigue saliendo por DJ Democracy: la TV no
@@ -2032,9 +2047,9 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
               🎨 Diseño de pantallas (TV y celular)
             </button>
           )}
-        </div>
+        </div>}
 
-        <VotacionJuego juego={type} col={COL}/>
+        {!simple && <VotacionJuego juego={type} col={COL}/>}
 
         {/* Biblioteca — links de YouTube, archivos de la PC y playlists. Con
             un participante preparado, cada video tiene «Asignar». Elegir NO
@@ -2042,7 +2057,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
         <BibliotecaEscenario juego={type} col={COL}
           puedeAsignar={enElAire && !!active && !!proyectado && !enVivo}
           videoActualId={videoActual?.videoId || null}
-          onAsignar={elegirVideo} ocupado={busy}/>
+          onAsignar={elegirVideo} ocupado={busy} simple={simple}/>
       </div>
       </div>
     </div>
@@ -2271,7 +2286,14 @@ const mensajeCancelacion = (cancel) =>
     required_count:  cancel?.required_count,
   }, { cancelado: true });
 
-function ReyPanel({sec, controls, sessionId, gameState}){
+/** Finalizar desde el panel del Anfitrión: en la tablet un toque de más saca el juego del aire. */
+function confirmarFinalizar(juego, finalizar){
+  if (window.confirm(`¿Finalizar ${juego}? La pantalla vuelve a DJ Democracy.`)) finalizar();
+}
+
+// `simple` (panel del Anfitrión): opera el juego y elige el premio; no edita la
+// biblioteca ni las reglas, y Finalizar pide confirmación. Mismo motor.
+function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
   // 🎟️ Biblioteca: la fuente de verdad es `rey_premios_biblioteca` en Supabase.
   // Sobrevive al F5, al cambio de módulo y al cambio de computadora.
   const {
@@ -2745,14 +2767,15 @@ function ReyPanel({sec, controls, sessionId, gameState}){
           {rotuloLanzar}
         </button>
         {/* FINALIZAR — saca el Rey (o su placa) y la TV vuelve a DJ Democracy. */}
-        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}>
+        <button className="btn btn-r" disabled={!puedeFinalizar}
+          onClick={simple ? () => confirmarFinalizar("Rey del Orto", finalizarJuego) : finalizarJuego}>
           ⏹ Finalizar
         </button>
       </div>
     </div>
   );
 
-  const listaElegibles = (
+  const listaElegibles = simple ? null : (
     <div className="card">
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <div className="ctitle" style={{margin:0}}>
@@ -2817,7 +2840,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
             Elegí un premio de la biblioteca
           </div>
           <div style={{fontSize:11,color:"rgba(240,232,255,.3)",lineHeight:1.5}}>
-            Seleccionalo en el panel derecho para preparar el próximo sorteo.
+            {simple ? "Tocalo en la biblioteca de premios." : "Seleccionalo en el panel derecho para preparar el próximo sorteo."}
           </div>
         </div>
       ) : (
@@ -2928,6 +2951,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
                 <div className="rey-row-t">{p.nombre}</div>
                 {p.detalle && <div className="rey-row-d">{p.detalle}</div>}
               </div>
+              {!simple && (<>
               <button className="btn" style={{padding:"4px 7px",fontSize:10,flexShrink:0,
                 background:"rgba(0,229,255,.06)",border:"1px solid rgba(0,229,255,.2)",
                 color:"rgba(0,229,255,.75)"}}
@@ -2938,12 +2962,14 @@ function ReyPanel({sec, controls, sessionId, gameState}){
                 color:"rgba(255,45,120,.7)"}}
                 title="Eliminar de la biblioteca" disabled={busy}
                 onClick={e=>{ e.stopPropagation(); quitarPremio(p); }}>🗑️</button>
+              </>)}
             </div>
           );
         })}
       </div>
 
       {/* Alta manual — la biblioteca no se precarga ni se autogenera. */}
+      {!simple && (
       <div style={{borderTop:"1px solid rgba(240,232,255,.08)",marginTop:10,paddingTop:10}}>
         <input className="inp" value={nuevoNom} maxLength={PREMIO_MAX}
           style={{width:"100%",margin:"0 0 6px",fontWeight:700}}
@@ -2970,6 +2996,7 @@ function ReyPanel({sec, controls, sessionId, gameState}){
           2 a {PREMIO_MAX} caracteres · sin repetir
         </div>
       </div>
+      )}
     </div>
   );
 
@@ -3295,12 +3322,12 @@ function ReyPanel({sec, controls, sessionId, gameState}){
       <div>
         {barraOperativa}
         {actionError&&(
-          <div className="card" style={{marginBottom:10,borderColor:"rgba(255,45,120,.4)"}}>
+          <div className="card card-error" style={{marginBottom:10,borderColor:"rgba(255,45,120,.4)"}}>
             <div style={{color:"#FCA5A5",fontSize:11,lineHeight:1.5}}>{actionError}</div>
           </div>
         )}
         {bibliotecaPremios}
-        {configReglas}
+        {!simple && configReglas}
       </div>
       </div>
     </div>
@@ -3414,7 +3441,7 @@ const MOTIVO_CANCELACION = {
 // La lista de participantes queda, pero es INFORMATIVA: le sirve al operador
 // para ver cuánta gente tiene número y quién sigue presente. No se puede tildar
 // a nadie porque no hay nada que tildar.
-function SumaPanel({sec, controls, sessionId, gameState}){
+function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
   const COL = "#FF9500";
   const { round, assignments, lanzarRonda, cancelarRonda, verificarObjetivo } =
     useSumateRound(sessionId, { admin: true });
@@ -3592,7 +3619,8 @@ function SumaPanel({sec, controls, sessionId, gameState}){
           🔄 Nueva ronda
         </button>
         {/* FINALIZAR — cierra la ronda viva y saca Sumate de la pantalla. */}
-        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}>
+        <button className="btn btn-r" disabled={!puedeFinalizar}
+          onClick={simple ? () => confirmarFinalizar("Sumate", finalizarJuego) : finalizarJuego}>
           ⏹ Finalizar
         </button>
       </div>
@@ -3600,7 +3628,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
   );
 
   // Lista informativa de participantes. NO seleccionable: acá no se valida nada.
-  const listaParticipantes = (
+  const listaParticipantes = simple ? null : (
     <div className="card" style={{marginBottom:10}}>
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}}>
         <div className="ctitle" style={{margin:0}}>Participantes</div>
@@ -3786,11 +3814,13 @@ function SumaPanel({sec, controls, sessionId, gameState}){
           sin ronda). */}
       <div>
         {barraOperativa}
-        <SumaBibliotecaCard col={COL} biblioteca={biblioteca}
+        <SumaBibliotecaCard col={COL} biblioteca={biblioteca} simple={simple}
           elegidoId={objetivoElegidoId} onElegir={setObjetivoElegidoId}/>
-        <div style={{marginTop:10}}>
-          <SumaReglasCard col={COL}/>
-        </div>
+        {!simple && (
+          <div style={{marginTop:10}}>
+            <SumaReglasCard col={COL}/>
+          </div>
+        )}
       </div>
       </div>
     </div>
@@ -3802,7 +3832,7 @@ function SumaPanel({sec, controls, sessionId, gameState}){
 // DELETE por id, sin UPDATE). Tocar un objetivo lo SELECCIONA: es estado local
 // del panel, no escribe nada. La validación 3..45 es UX; la autoridad es la
 // tabla.
-function SumaBibliotecaCard({col, biblioteca, elegidoId, onElegir}){
+function SumaBibliotecaCard({col, biblioteca, elegidoId, onElegir, simple = false}){
   const { objetivos, loading, error, refresh, existe, agregar, eliminar } = biblioteca;
   const [nuevo,      setNuevo]      = useState("");
   const [trabajando, setTrabajando] = useState(false);
@@ -3886,9 +3916,11 @@ function SumaBibliotecaCard({col, biblioteca, elegidoId, onElegir}){
               onClick={() => onElegir(o.id)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onElegir(o.id); } }}>
               <span className="sum-obj-n">{o.target}</span>
-              <button className="sum-obj-x" title="Eliminar de la biblioteca"
-                disabled={trabajando}
-                onClick={(e) => { e.stopPropagation(); baja(o); }}>✕</button>
+              {!simple && (
+                <button className="sum-obj-x" title="Eliminar de la biblioteca"
+                  disabled={trabajando}
+                  onClick={(e) => { e.stopPropagation(); baja(o); }}>✕</button>
+              )}
             </div>
           ))}
         </div>
@@ -3898,6 +3930,7 @@ function SumaBibliotecaCard({col, biblioteca, elegidoId, onElegir}){
       )}
 
       {/* Alta manual — la biblioteca no se precarga ni se autogenera. */}
+      {!simple && (
       <div style={{borderTop:"1px solid rgba(240,232,255,.08)", marginTop:10, paddingTop:10}}>
         <div style={{display:"flex", gap:6, marginBottom:6}}>
           <input className="inp" value={nuevo} inputMode="numeric" maxLength={3}
@@ -3923,6 +3956,7 @@ function SumaBibliotecaCard({col, biblioteca, elegidoId, onElegir}){
           Enteros de {OBJETIVO_MIN} a {OBJETIVO_MAX}. El servidor vuelve a validar.
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -4072,7 +4106,7 @@ const mensajeArma = (r) => {
   }
 };
 
-function PalabraPanel({sec, controls, sessionId, gameState}){
+function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
   const COL = "#A855F7";
   const { round, assignments, lanzarRonda, cancelarRonda } =
     useArmaPalabraRound(sessionId, { admin: true });
@@ -4280,7 +4314,8 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
           🔄 Nueva palabra
         </button>
         {/* FINALIZAR — cierra la ronda viva y saca el juego de la pantalla. */}
-        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}>
+        <button className="btn btn-r" disabled={!puedeFinalizar}
+          onClick={simple ? () => confirmarFinalizar("Arma la palabra", finalizarJuego) : finalizarJuego}>
           ⏹ Finalizar
         </button>
       </div>
@@ -4415,6 +4450,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
               </div>
     
               {/* Lista informativa. NO seleccionable: acá no se valida nada. */}
+              {!simple && (
               <div className="card" style={{marginBottom:10}}>
                 <div className="ctitle">Participantes</div>
                 {assignments.length === 0 && (
@@ -4448,7 +4484,8 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                   Sólo informativo. El grupo se resuelve en el escenario, no desde acá.
                 </div>
               </div>
-    
+              )}
+
             </>
           )}
         </div>
@@ -4551,6 +4588,7 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                     </div>
                     {/* Una palabra ya lanzada es historial de la partida: editarla
                         retroactivamente no cambia la ronda que se jugó. */}
+                    {!simple && (<>
                     <button className="btn" style={{padding:"4px 7px", fontSize:10, flexShrink:0,
                       background:"rgba(0,229,255,.06)", border:"1px solid rgba(0,229,255,.2)",
                       color: (usada || alAire) ? "rgba(0,229,255,.25)" : "rgba(0,229,255,.75)"}}
@@ -4563,12 +4601,14 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                       title="Eliminar de la biblioteca"
                       disabled={busy}
                       onClick={e=>{ e.stopPropagation(); quitarPalabra(p); }}>🗑️</button>
+                    </>)}
                   </div>
                 );
               })}
             </div>
 
             {/* Alta manual — la biblioteca no se precarga ni se autogenera. */}
+            {!simple && (
             <div style={{borderTop:"1px solid rgba(240,232,255,.08)", marginTop:10, paddingTop:10}}>
               <div style={{display:"flex", gap:6, marginBottom:6}}>
                 <input className="inp" value={palabra} maxLength={6}
@@ -4593,14 +4633,17 @@ function PalabraPanel({sec, controls, sessionId, gameState}){
                 3 a 6 letras, sin repetir ninguna
               </div>
             </div>
+            )}
           </div>
 
           {/* Configuración debajo de la biblioteca. Referencia visual: la
               palabra en juego o, sin ronda viva, la que se está preparando. */}
-          <div style={{marginTop:10}}>
-            <PalabraReglasCard col={COL} palabraRef={enJuego ? objetivo : (elegida?.word || "")}
-              enJuego={enJuego}/>
-          </div>
+          {!simple && (
+            <div style={{marginTop:10}}>
+              <PalabraReglasCard col={COL} palabraRef={enJuego ? objetivo : (elegida?.word || "")}
+                enJuego={enJuego}/>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -4938,7 +4981,7 @@ function ConfirmarBorradoModal({pregunta, guardando, error, onCancelar, onConfir
   );
 }
 
-function TriviaPanel({sec, controls, sessionId, gameState}){
+function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
   // `qs` = preguntas de ESTA ronda: COPIAS {text, opts, correct}, sin
   // referencia viva a la biblioteca. Editar o borrar la biblioteca no las toca.
   const [qs,       setQs]       = useState([]);
@@ -5086,7 +5129,8 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
           title={phase !== "idle" ? "Hay una partida en curso" : !qs.length ? "Cargá al menos una pregunta" : "Lanzar el desafío"}>
           🚀 Lanzar desafío
         </button>
-        <button className="btn btn-r" disabled={!puedeFinalizar} onClick={finalizarJuego}
+        <button className="btn btn-r" disabled={!puedeFinalizar}
+          onClick={simple ? () => confirmarFinalizar("Desafío Demente", finalizarJuego) : finalizarJuego}
           title="Cierra el Desafío y la TV vuelve a DJ Democracy">
           ⏹ Finalizar
         </button>
@@ -5204,7 +5248,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             {bibFiltro ? `${bibLista.length} de ${biblio.preguntas.length}` : biblio.preguntas.length}
           </div>
         )}
-        <button className="dd-lib-add" title="Nueva pregunta" aria-label="Nueva pregunta" onClick={abrirNueva}>+</button>
+        {!simple && <button className="dd-lib-add" title="Nueva pregunta" aria-label="Nueva pregunta" onClick={abrirNueva}>+</button>}
       </div>
 
       {/* «Cargando» sólo en la carga inicial: los refrescos después de guardar,
@@ -5226,7 +5270,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
             placeholder="🔎 Buscar pregunta..." style={{margin:"0 0 8px",width:"100%"}}/>
           {biblio.preguntas.length===0 && (
             <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"6px 0",lineHeight:1.5}}>
-              Todavía no hay preguntas. Creá la primera con el botón +.
+              {simple ? "Todavía no hay preguntas cargadas." : "Todavía no hay preguntas. Creá la primera con el botón +."}
             </div>
           )}
           {biblio.preguntas.length>0 && bibLista.length===0 && (
@@ -5242,10 +5286,12 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
                     aria-label={sel ? "Quitar de la selección" : "Seleccionar"}
                     onClick={()=>alternarSel(p.id)}>{sel ? "●" : "○"}</button>
                   <div className="dd-lib-q" onClick={()=>alternarSel(p.id)} title={p.text}>{p.text}</div>
-                  <button className="dd-lib-ic" title="Editar pregunta" aria-label="Editar pregunta"
-                    onClick={()=>abrirEditar(p)}>✏️</button>
-                  <button className="dd-lib-ic" title="Eliminar de la biblioteca" aria-label="Eliminar de la biblioteca"
-                    onClick={()=>{ setBorrarErr(null); setBorrando(p); }}>🗑️</button>
+                  {!simple && (<>
+                    <button className="dd-lib-ic" title="Editar pregunta" aria-label="Editar pregunta"
+                      onClick={()=>abrirEditar(p)}>✏️</button>
+                    <button className="dd-lib-ic" title="Eliminar de la biblioteca" aria-label="Eliminar de la biblioteca"
+                      onClick={()=>{ setBorrarErr(null); setBorrando(p); }}>🗑️</button>
+                  </>)}
                 </div>
               );
             })}
@@ -5416,7 +5462,8 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
         <div>
           {barraOperativa}
           {bibliotecaCard}
-          <div className="card">
+          {/* El cupón lo define el administrador; el Anfitrión lanza con el de siempre. */}
+          {!simple && <div className="card">
             <div className="ctitle">⚙️ Configuración</div>
             <div style={{fontSize:9.5,letterSpacing:1.2,color:"rgba(240,232,255,.35)",marginBottom:5}}>
               CUPÓN DEL EQUIPO GANADOR
@@ -5432,7 +5479,7 @@ function TriviaPanel({sec, controls, sessionId, gameState}){
                 color: phase==="finished" ? "#00F5A0" : phase==="idle" ? "rgba(240,232,255,.7)" : "#FF2D78"}}>
                 {estadoTxt}</span>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -6339,10 +6386,13 @@ function LoginAdmin(){
   const [password, setPassword] = useState("");
   const [err,      setErr]      = useState(null);
   const [loading,  setLoading]  = useState(false);
+  const [vista,    setVista]    = useState(leerVistaElegida);
 
   const submit = async (e) => {
     e.preventDefault();
     setErr(null);
+    // Sólo cuenta para el Administrador general; las demás cuentas entran con su perfil.
+    guardarVistaElegida(vista);
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
@@ -6375,6 +6425,24 @@ function LoginAdmin(){
           <input type="password" placeholder="Contraseña" value={password}
             autoComplete="current-password"
             onChange={e=>setPassword(e.target.value)} style={inputStyle} required/>
+          <div style={{fontSize:10,color:"rgba(240,232,255,.4)",letterSpacing:1,textTransform:"uppercase",
+            margin:"4px 0 7px"}}>Ingresar como</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:6}}>
+            {VISTAS.map(v=>(
+              <button key={v.id} type="button" onClick={()=>setVista(v.id)}
+                aria-pressed={vista===v.id}
+                style={{padding:"9px 4px",borderRadius:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",
+                  fontSize:11,fontWeight:700,display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+                  color:vista===v.id?C.white:"rgba(240,232,255,.5)",
+                  background:vista===v.id?"rgba(255,45,120,.14)":"rgba(240,232,255,.04)",
+                  border:`1px solid ${vista===v.id?C.pink:"rgba(240,232,255,.12)"}`}}>
+                <span style={{fontSize:17}}>{v.icono}</span>{v.label}
+              </button>
+            ))}
+          </div>
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)",lineHeight:1.45,marginBottom:12}}>
+            Sólo el administrador elige. Las demás cuentas entran con su perfil.
+          </div>
           {err&&<div style={{color:"#FCA5A5",fontSize:11,marginBottom:10,
             textAlign:"center"}}>{err}</div>}
           <button type="submit" disabled={loading} style={{width:"100%",padding:12,
@@ -6384,6 +6452,9 @@ function LoginAdmin(){
             boxShadow:"0 4px 18px rgba(255,45,120,.3)"}}>
             {loading?"Ingresando…":"Iniciar sesión"}
           </button>
+          <div style={{display:"flex",justifyContent:"center",marginTop:12}}>
+            <BotonInstalar/>
+          </div>
         </form>
       </div>
     </>
@@ -6398,6 +6469,9 @@ export default function AdminPanel(){
   const [authSession, setAuthSession] = useState(undefined); // undefined = verificando sesión
   const [isAdmin,     setIsAdmin]     = useState(undefined); // undefined = verificando admin_users
   const [acceso,      setAcceso]      = useState(undefined); // { rol, secciones } del usuario logueado
+  // Con qué perfil mira el panel el Administrador general (login / encabezado).
+  const [vistaElegida, setVistaElegida] = useState(leerVistaElegida);
+  const cambiarVista = (v) => { guardarVistaElegida(v); setVistaElegida(v); };
   const [user, setUser] = useState(null);
   useEffect(() => {
     supabase.auth.getUser().then(({data:{user}}) => setUser(user));
@@ -6410,6 +6484,8 @@ export default function AdminPanel(){
   useEffect(() => {
     const uid = authSession?.user?.id;
     if (!uid) { setIsAdmin(undefined); setAcceso(undefined); return; }
+    // El login guardó con qué vista entrar: el panel ya estaba montado.
+    setVistaElegida(leerVistaElegida());
     let cancelled = false;
     // Primero comprobamos acceso usando únicamente la columna histórica. Así
     // el panel sigue abriendo aunque la migración de roles aún no esté aplicada
@@ -6470,11 +6546,15 @@ export default function AdminPanel(){
     prevMsgCount.current = pending.length;
   },[pending]);
   useEffect(()=>{ window.__bizarrToast = showToast; },[]);
-  // Administrador: todo. Operador: sólo las secciones que le asignaron.
-  const esAdminTotal = acceso?.rol === "admin";
+  // Administrador: todo. Anfitrión / Producción: sólo las secciones que le
+  // asignaron. El Administrador general mirando como otro perfil ve todas las
+  // que ese perfil podría tener (las que no son sólo de administrador).
+  const vista = vistaEfectiva(acceso, vistaElegida);
+  const esAdminTotal = vista === "admin";
+  const todasLasAsignables = acceso?.rol === "admin";
   const visibleSecs = SECS.filter(s=>!FROZEN_MODULE_IDS.has(s.id) && (esAdminTotal
     || (!s.adminOnly && !SECCIONES_SOLO_ADMIN.has(s.id)
-        && !!acceso?.secciones.some(id=>(SECCIONES_FUSIONADAS[id]||id)===s.id))));
+        && (todasLasAsignables || !!acceso?.secciones.some(id=>(SECCIONES_FUSIONADAS[id]||id)===s.id)))));
   const puedeVer = id => visibleSecs.some(s=>s.id===(SUBSECCIONES[id]||id));
   // Orden y visibilidad del sidebar guardados en Ajustes (null = orden base).
   const sidebarConfig = useSidebarConfig(isAdmin === true);
@@ -6579,6 +6659,45 @@ export default function AdminPanel(){
     </>
   );
 
+  // Sólo el Administrador general cambia de vista; las demás cuentas ven su perfil.
+  const selectorVista = acceso?.rol === "admin" ? (
+    <select value={vista} onChange={e=>cambiarVista(e.target.value)} title="Ver el panel como otro perfil"
+      style={{height:36,padding:"0 10px",borderRadius:10,background:"#1A0D2E",color:"#F0E8FF",colorScheme:"dark",
+        border:"1px solid #9B2FFF66",fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700,cursor:"pointer",order:1}}>
+      {VISTAS.map(v=><option key={v.id} value={v.id}>{v.icono} Ver como {v.label}</option>)}
+    </select>
+  ) : null;
+  const salir = async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; };
+
+  if (vista === "anfitrion") {
+    const juegos = JUEGOS_ANFITRION.flatMap(({grupo, ids})=>ids
+      .map(id=>visibleSecs.find(s=>s.id===id)).filter(Boolean).map(s=>({...s, grupo})));
+    const juegoAlAire = QR_DE_JUEGO[gameState?.active_game]
+      || (LIVE_ESCENARIO_LABELS[gameState?.active_escenario] ? gameState.active_escenario : null)
+      || PLACA_DE_JUEGO[gameState?.active_placa]?.id || null;
+    const renderJuego = (s) => {
+      const props = {sec:s, controls, sessionId:session?.id ?? null, gameState, simple:true};
+      const escenario = {...props, goTo:()=>{}, puedeDisenar:false};
+      switch (s.id) {
+        case "rey":     return <ReyPanel {...props}/>;
+        case "suma":    return <SumaPanel {...props}/>;
+        case "palabra": return <PalabraPanel {...props}/>;
+        case "trivia":  return <TriviaPanel {...props}/>;
+        case "duelo":   return <DueloPanel {...escenario}/>;
+        case "ftl":     return <JuegoEscenarioPanel {...escenario} type="ftl"/>;
+        case "pt":      return <JuegoEscenarioPanel {...escenario} type="pt"/>;
+        default:        return null;
+      }
+    };
+    return (
+      <>
+        <style>{css}</style>
+        <PanelAnfitrion juegos={juegos} juegoAlAire={juegoAlAire} alAire={estadoEnVivo(gameState)?.label || null}
+          conectados={connectedCount} renderJuego={renderJuego} selectorVista={selectorVista} onSalir={salir}/>
+      </>
+    );
+  }
+
   return(
     <>
       <style>{css}</style>
@@ -6595,7 +6714,7 @@ export default function AdminPanel(){
           collapsed={sbCollapsed} onToggle={()=>setSbCollapsed(c=>!c)}
           visibleSecs={visibleSecs} configItems={sidebarConfig.items}
           badges={{mensajes:msgCount, videos:vidCount}}
-          onLogout={async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; }}/>
+          onLogout={salir}/>
 
         {/* Main */}
         <div className="main">
@@ -6604,6 +6723,7 @@ export default function AdminPanel(){
               <div className="mhdr-title">{curSec.icon} {curSec.label}</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
+              {selectorVista}
               <div style={{position:"relative",order:6}}>
                 <button onClick={()=>setBellOpen(b=>!b)}
                   style={{background:"#1A0D2E",border:"1px solid #9B2FFF44",borderRadius:"50%",width:36,height:36,color:"#F0E8FF",cursor:"pointer",position:"relative",padding:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"border-color .15s"}}>
