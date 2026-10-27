@@ -2829,9 +2829,19 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
   // ── Premio que el operador está preparando ────────────────────────────────
   // Sólo preparación: elegirlo no escribe nada. El premio recién viaja a
   // `game_state.raffle_prize` cuando se toca LANZAR.
+  // Anfitrión: la tarjeta de estado mide siempre lo mismo (preparación,
+  // sorteo, ganador, cancelado) para que la tablet no salte entre fases.
+  const cardEstado = simple ? "card rey-estado" : "card";
+
   const premioCard = (
-    <div className="card">
+    <div className={cardEstado}>
       <div className="ctitle">Premio del sorteo</div>
+      {/* Anfitrión: sin tarjeta de ayuda aparte; el estado de la placa va acá. */}
+      {simple && (announcing || isRey) && (
+        <div className="chip chip-wait" style={{alignSelf:"center",marginBottom:10}}>
+          {announcing ? "⏳ Placa en pantalla" : "👑 Al aire, en reposo"}
+        </div>
+      )}
       {!premioElegido ? (
         <div style={{textAlign:"center",padding:"20px 12px"}}>
           <div style={{fontSize:26,marginBottom:7,opacity:.45}}>🎟️</div>
@@ -3147,7 +3157,7 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
 
             {/* Anunciar / Lanzar / Finalizar viven SÓLO en la barra operativa
                 de la columna derecha. Acá queda el estado. */}
-            <div className="card">
+            {!simple && <div className="card">
               {announcing && (
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <div className="chip chip-wait">⏳ Placa en pantalla</div>
@@ -3169,14 +3179,14 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
                   Elegí un premio de la biblioteca para poder lanzar.
                 </div>
               )}
-            </div>
+            </div>}
 
             {listaElegibles}
           </>
       )}
 
       {phase==="launched"&&(
-        <div className="card" style={{borderColor:"rgba(255,214,0,.3)"}}>
+        <div className={cardEstado} style={{borderColor:"rgba(255,214,0,.3)"}}>
           <div style={{textAlign:"center",padding:"8px 0"}}>
             <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:64,color:"#FFD600"}}>
               {cd}
@@ -3245,7 +3255,7 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
           salir del módulo y sin finalizar el juego. */}
       {phase==="cancelled"&&(
           <>
-            <div className="card" style={{borderColor:"rgba(255,214,0,.35)"}}>
+            <div className={cardEstado} style={{borderColor:"rgba(255,214,0,.35)"}}>
               <div style={{textAlign:"center",padding:"4px 0 10px"}}>
                 <div style={{fontSize:34,marginBottom:6}}>👑</div>
                 <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:19,color:"#FFD600",
@@ -3294,7 +3304,7 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
       )}
 
       {phase==="winner"&&(
-        <div className="card" style={{textAlign:"center",borderColor:"rgba(0,245,160,.3)"}}>
+        <div className={cardEstado} style={{textAlign:"center",borderColor:"rgba(0,245,160,.3)"}}>
           <div style={{fontSize:36,marginBottom:8}}>🏆</div>
           <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:22,color:"#00F5A0",marginBottom:4}}>
             {winnerName || "¡GANADOR!"}
@@ -3308,10 +3318,10 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
           {/* Dos salidas distintas, en la barra: 🔄 Nueva ronda sortea otra vez
               sin sacar el juego del aire; ⏹ Finalizar lo cierra y la TV vuelve
               a DJ Democracy. */}
-          <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",lineHeight:1.5}}>
+          {!simple && <div style={{fontSize:9.5,color:"rgba(240,232,255,.28)",lineHeight:1.5}}>
             Elegí el premio en la biblioteca y tocá 🔄 Nueva ronda para sortear
             de nuevo, o ⏹ Finalizar para volver a DJ Democracy.
-          </div>
+          </div>}
         </div>
       )}
       </div>

@@ -118,8 +118,12 @@ const CSS = `
   /* Mover / quitar preguntas de la ronda: íconos chicos, agrandados para el dedo. */
   .anf .dd-split > div:first-child button:not(.btn){font-size:20px !important;padding:6px 10px !important;}
   .anf .rey-actions,.anf .sum-actions,.anf .pal-actions,.anf .dd-actions{gap:10px;}
+  /* Bajos y con letra grande: se leen igual y dejan lugar al estado del juego. */
   .anf .rey-actions .btn,.anf .sum-actions .btn,.anf .pal-actions .btn,.anf .dd-actions .btn{
-    min-height:76px;font-size:17px;font-weight:800;padding:10px 8px;}
+    min-height:54px;font-size:19px !important;font-weight:800;padding:6px 8px;line-height:1.15;}
+  /* Rey del Orto: el estado (premio → sorteo → ganador) siempre del mismo alto. */
+  .anf .rey-estado{position:relative;min-height:300px;display:flex;flex-direction:column;justify-content:center;}
+  .anf .rey-estado > .ctitle{position:absolute;top:16px;left:18px;}
   .anf .inp{font-size:16px;padding:12px 14px;}
   .anf .rey-split,.anf .sum-split,.anf .pal-split,.anf .dd-split{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;}
   .anf .rey-list,.anf .pal-list,.anf .dd-lib-list,.anf .sum-list{max-height:none;}
