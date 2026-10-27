@@ -3,6 +3,7 @@ import General from "./ajustes/General";
 import VistaPanelOpciones from "./ajustes/VistaPanelOpciones";
 import RegistroClientes from "./ajustes/RegistroClientes";
 import CartaMenu from "./ajustes/CartaMenu";
+import PermisosAnfitrion from "./ajustes/PermisosAnfitrion";
 
 const card = {
   background: "rgba(240,232,255,.035)",
@@ -38,6 +39,11 @@ const CATEGORIAS = [
     id: "registro", icon: "📝", label: "Registro de clientes",
     descripcion: "Activá o desactivá las formas en que los clientes pueden crear su cuenta.",
     Componente: RegistroClientes,
+  },
+  {
+    id: "anfitrion", icon: "🎮", label: "Permisos del anfitrión",
+    descripcion: "Qué puede hacer el perfil Anfitrión en la tablet, además de ver quién juega y lanzar. Lo que no le permitas lo hace Producción.",
+    Componente: PermisosAnfitrion,
   },
   {
     id: "carta", icon: "🍹", label: "Carta (menú)",

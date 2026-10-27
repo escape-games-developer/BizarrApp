@@ -5,8 +5,23 @@ const CUANDO = {
   app:   "Los clientes lo ven al abrir la app",
 };
 
-/** Bloque de configuración de un juego: título, cuándo se aplica y contenido. */
-export function SeccionConfig({ icon, titulo, cuando, children, style }) {
+/**
+ * Bloque de configuración de un juego: título, cuándo se aplica y contenido.
+ * `embebida`: va dentro de una sección desplegable que ya muestra el título;
+ * sin tarjeta propia, sólo el «cuándo» y el contenido.
+ */
+export function SeccionConfig({ icon, titulo, cuando, children, style, embebida = false }) {
+  if (embebida) return (
+    <div style={style}>
+      {cuando && (
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: "uppercase",
+          color: "rgba(240,232,255,.45)", marginBottom: 8 }}>
+          {CUANDO[cuando]}
+        </div>
+      )}
+      {children}
+    </div>
+  );
   return (
     <div className="card" style={{ marginBottom: 10, ...style }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>

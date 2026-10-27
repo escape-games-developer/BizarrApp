@@ -890,6 +890,16 @@ export default function PantallaTV({ modo = "tv" }) {
             <video key={archivoFtl.url} src={archivoFtl.url} autoPlay playsInline
               muted={telepronter || !screenAudioOn}
               onEnded={terminarVideoEscenario}
+              // Recorte del tema (Biblioteca de Escenario): arranca en «desde»
+              // y al llegar a «hasta» se corta como si hubiera terminado.
+              onLoadedMetadata={(e) => {
+                const ini = Number(archivoFtl.trimStart) || 0;
+                if (ini > 0 && ini < (e.currentTarget.duration || Infinity)) e.currentTarget.currentTime = ini;
+              }}
+              onTimeUpdate={(e) => {
+                const fin = Number(archivoFtl.trimEnd) || 0;
+                if (fin > 0 && e.currentTarget.currentTime >= fin) { e.currentTarget.pause(); terminarVideoEscenario(); }
+              }}
               onError={(e) => console.error("[PantallaTV] video de escenario:", e)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
                 objectFit: "contain", background: "#000", zIndex: 3 }}/>

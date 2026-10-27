@@ -44,7 +44,7 @@ import { videoParaEscenario } from "../services/escenarioBiblioteca";
 import BibliotecaEscenario from "./escenario/BibliotecaEscenario";
 import { useFtlEnergia, useFtlPelea } from "../hooks/realtime/useFtlEnergia";
 import { useFollowLeaderVotes } from "../hooks/realtime/useFollowLeaderVotes";
-import { useVotacionEscenario } from "../hooks/useVotacionEscenario";
+import { useVotacionEscenario, MODOS_VOTACION } from "../hooks/useVotacionEscenario";
 import FtlBarometro from "../components/FtlBarometro";
 import { ESCENARIO_JUEGOS } from "../constants/escenarioJuegos";
 import { useSumateRound } from "../hooks/realtime/useSumateRound";
@@ -53,6 +53,7 @@ import { useBibliotecaPalabras } from "../hooks/useBibliotecaPalabras";
 import { useBibliotecaPreguntasTrivia } from "../hooks/useBibliotecaPreguntasTrivia";
 import { useTriviaBorrador } from "../hooks/realtime/useTriviaBorrador";
 import { TEAMS } from "../constants/theme";
+import { usePermisosAnfitrion } from "../hooks/usePermisosAnfitrion";
 import {
   ImportarModal, FiltroSecciones, CampoSeccion, CSS_SECCIONES,
   TODAS, enSeccion, enSeccionValida, seccionDelFiltro,
@@ -361,6 +362,31 @@ const css = `
   .regla-dsp-e.on{color:#00F5A0;background:rgba(0,245,160,.1);border-color:rgba(0,245,160,.35);}
   .regla-dsp-ch{flex-shrink:0;color:rgba(240,232,255,.4);transition:transform .15s;}
   .regla-dsp[open] .regla-dsp-ch{transform:rotate(180deg);}
+  /* Vista previa del turno de Escenario (participante + video). */
+  .esc-prev{border:1.5px solid;border-radius:14px;overflow:hidden;margin-bottom:12px;background:#000;}
+  .esc-prev-media{position:relative;aspect-ratio:16/9;background:#0D0820;}
+  .esc-prev-media img,.esc-prev-media video,.esc-prev-media iframe{position:absolute;inset:0;width:100%;height:100%;
+    object-fit:cover;border:0;}
+  .esc-prev-vacio{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:6px;font-size:34px;color:rgba(240,232,255,.35);}
+  .esc-prev-vacio span{font-size:12px;}
+  .esc-prev-vivo{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;padding:4px 10px;
+    border-radius:999px;background:#EF4444;color:#fff;font-size:11px;font-weight:800;letter-spacing:1px;}
+  .esc-prev-vivo span{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1.2s infinite;}
+  .esc-prev-ver{position:absolute;top:10px;right:10px;padding:5px 11px;border-radius:999px;cursor:pointer;
+    font:700 11px 'DM Sans',sans-serif;color:#fff;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.25);}
+  .esc-prev-quien{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:10px;padding:26px 12px 10px;
+    background:linear-gradient(transparent,rgba(0,0,0,.85));pointer-events:none;}
+  .esc-prev-av{width:46px;height:46px;flex-shrink:0;border-radius:50%;border:2px solid;display:grid;place-items:center;
+    font-size:26px;background:rgba(13,8,32,.85);}
+  .esc-prev-nom{font-family:'DM Sans',sans-serif;font-weight:800;font-size:16px;text-shadow:0 1px 4px #000;}
+  .esc-prev-vid{font-size:11px;color:rgba(255,255,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sec-dsp{margin-bottom:10px;}
+  .sec-dsp summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;}
+  .sec-dsp summary::-webkit-details-marker{display:none;}
+  .sec-dsp summary .regla-dsp-t{font-size:12.5px;}
+  .sec-dsp[open] .regla-dsp-ch{transform:rotate(180deg);}
+  .sec-dsp-c{margin-top:10px;}
   .regla-dsp-c{padding:0 2px 12px;}
   /* Duelo: postulantes en dos columnas (Membrillo | Batata); tocar = elegir. */
   .duelo-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;}
@@ -958,6 +984,69 @@ function ReglaDesplegable({titulo, estado, on, children}){
         <span className="regla-dsp-ch" aria-hidden="true">▾</span>
       </summary>
       <div className="regla-dsp-c">{children}</div>
+    </details>
+  );
+}
+
+// Vista previa del turno de Escenario: el participante en el escenario y el
+// video que le asignaron, como lo ve la TV pero en chico. Por defecto muestra
+// la miniatura (no carga nada pesado); «▶ Ver» reproduce el video acá, SIN
+// SONIDO y aparte de la TV (no la controla ni se sincroniza con ella).
+function VistaPreviaEscenario({participante, video, enVivo, col}){
+  const [verVideo, setVerVideo] = useState(false);
+  const clave = video?.ytId || video?.url || null;
+  useEffect(() => { setVerVideo(false); }, [clave]);
+  const titulo = video ? (video.ytTitle || video.ytId || "Video") : null;
+  // Mismo recorte que la TV (desde / hasta del tema).
+  const ini = Number(video?.trimStart) || 0, fin = Number(video?.trimEnd) || 0;
+  const recYt = `${ini ? `&start=${ini}` : ""}${fin ? `&end=${fin}` : ""}`;
+  const recArchivo = ini || fin ? `#t=${ini}${fin ? `,${fin}` : ""}` : "";
+  return (
+    <div className="esc-prev" style={{borderColor: enVivo ? "#EF4444" : `${col}66`}}>
+      <div className="esc-prev-media">
+        {!video ? (
+          <div className="esc-prev-vacio">🎬<span>Sin video asignado todavía</span></div>
+        ) : verVideo ? (
+          video.ytId ? (
+            <iframe title="Vista previa" allow="autoplay; encrypted-media"
+              src={`https://www.youtube-nocookie.com/embed/${video.ytId}?autoplay=1&mute=1&controls=0&playsinline=1&rel=0${recYt}`}/>
+          ) : (
+            <video src={`${video.url}${recArchivo}`} autoPlay muted playsInline/>
+          )
+        ) : video.ytId ? (
+          <img src={`https://i.ytimg.com/vi/${video.ytId}/hqdefault.jpg`} alt=""/>
+        ) : (
+          <video src={`${video.url}#t=${ini || 1}`} muted playsInline preload="metadata"/>
+        )}
+        {enVivo && <div className="esc-prev-vivo"><span/>EN VIVO</div>}
+        {video && (
+          <button type="button" className="esc-prev-ver" onClick={() => setVerVideo(v => !v)}>
+            {verVideo ? "■ Miniatura" : "▶ Ver sin sonido"}
+          </button>
+        )}
+        <div className="esc-prev-quien">
+          <div className="esc-prev-av" style={{borderColor: col}}>{participante.avatar_emoji || "👤"}</div>
+          <div style={{minWidth:0}}>
+            <div className="esc-prev-nom" style={{color: col}}>{participante.user_name}</div>
+            {titulo && <div className="esc-prev-vid">{video.url ? "🎞️" : "🎬"} {titulo}</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tarjeta entera desplegable (Follow the Leader / Personal Trainer): mismo
+// encabezado que ReglaDesplegable, pero como tarjeta propia de la columna.
+function SeccionDesplegable({titulo, estado, on, abierta = false, children}){
+  return (
+    <details className="card sec-dsp" open={abierta}>
+      <summary>
+        <span className="regla-dsp-t">{titulo}</span>
+        {estado && <span className={`regla-dsp-e${on ? " on" : ""}`}>{estado}</span>}
+        <span className="regla-dsp-ch" aria-hidden="true">▾</span>
+      </summary>
+      <div className="sec-dsp-c">{children}</div>
     </details>
   );
 }
@@ -1789,8 +1878,12 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
 // Las dos se escriben en la misma acción; el panel las lee de la base.
 // `simple` (panel del Anfitrión): convoca, llama, asigna video y lanza; sin la
 // regla de votación, el diseño ni la carga de la biblioteca. Finalizar confirma.
-function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, puedeDisenar, simple = false}){
+function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, puedeDisenar, simple = false, permisos = null}){
   const juego = ESCENARIO_JUEGOS[type];
+  // Anfitrión: llamar y elegir la canción dependen de Ajustes → Permisos del
+  // anfitrión. Lo que no tiene permitido lo hace Producción desde su panel.
+  const puedeLlamar  = !simple || !!permisos?.escenarioLlamar;
+  const puedeCancion = !simple || !!permisos?.escenarioCancion;
   const COL = juego.colorAdmin;
   const { queue, error: errCola, call, finish } = useEscenarioQueue(sessionId, type);
   // El video del desafío sale de la Biblioteca propia del juego
@@ -1971,7 +2064,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
   const motivoNoLanzar = !enElAire ? "Anunciá el juego primero: abre la convocatoria."
     : !active ? "Llamá a un participante al escenario."
     : enVivo ? null
-    : !tieneVideo ? "Asignale un video desde la Biblioteca."
+    : !tieneVideo ? (puedeCancion ? "Asignale un video desde la Biblioteca." : "Esperando que Producción elija la canción.")
     : null;
 
   const barraOperativa = (
@@ -2065,10 +2158,11 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
           {waiting.map((p, i) => {
             const marcado = p.id === elegido?.id;
             return (
-              <div key={p.id} className="qrow" role="radio" aria-checked={marcado} tabIndex={0}
-                onClick={() => setElegidoId(p.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setElegidoId(p.id); } }}
-                style={{animationDelay: (i * .05) + "s", cursor:"pointer",
+              <div key={p.id} className="qrow" role={puedeLlamar ? "radio" : undefined}
+                aria-checked={puedeLlamar ? marcado : undefined} tabIndex={puedeLlamar ? 0 : undefined}
+                onClick={puedeLlamar ? () => setElegidoId(p.id) : undefined}
+                onKeyDown={puedeLlamar ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setElegidoId(p.id); } } : undefined}
+                style={{animationDelay: (i * .05) + "s", cursor: puedeLlamar ? "pointer" : "default",
                   background: marcado ? `${COL}18` : undefined,
                   outline: marcado ? `1.5px solid ${COL}` : "none", borderRadius:10}}>
                 <div style={{width:16, height:16, borderRadius:"50%", flexShrink:0,
@@ -2079,7 +2173,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
               </div>
             );
           })}
-          {waiting.length > 0 && (
+          {waiting.length > 0 && puedeLlamar && (
             <div style={{display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:6, marginTop:10}}>
               <button className="btn btn-g" style={{padding:"9px 6px", fontSize:11}}
                 disabled={busy} onClick={elegirAlAzar}>
@@ -2092,7 +2186,8 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
             </div>
           )}
           <div style={{fontSize:10, color:"rgba(240,232,255,.35)", textAlign:"center", marginTop:7}}>
-            {elegido ? `Elegido: ${elegido.user_name}` : waiting.length ? "Tocá una persona o elegí al azar." : ""}
+            {!puedeLlamar ? (waiting.length ? "Producción llama a quien sube al escenario." : "")
+              : elegido ? `Elegido: ${elegido.user_name}` : waiting.length ? "Tocá una persona o elegí al azar." : ""}
           </div>
         </div>
       )}
@@ -2104,22 +2199,11 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
             <div className="chip chip-live"><div className="dot-live"/>{enVivo ? "En vivo" : "Preparado"}</div>
           </div>
           <div style={{fontSize:9.5, color:"rgba(240,232,255,.3)", letterSpacing:1,
-            textTransform:"uppercase", marginBottom:5}}>Participante en escenario</div>
-          <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12,
-            padding:"10px", background:"rgba(255,149,0,.06)",
-            border:"1px solid rgba(255,149,0,.2)", borderRadius:11}}>
-            <div style={{fontSize:28}}>{active.avatar_emoji || "👤"}</div>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:13, fontWeight:700, color:COL}}>{active.user_name}</div>
-              {/* El video lo eligió el OPERADOR: sale de escenario_video, no de
-                  la fila de la cola. */}
-              <div style={{fontSize:10, color: tieneVideo ? "#00F5A0" : "rgba(240,232,255,.35)"}}>
-                {tieneVideo
-                  ? `${videoActual.url ? "🎞️" : "🎬"} ${videoActual.ytTitle || videoActual.ytId || "Video"}`
-                  : "Sin video asignado todavía"}
-              </div>
-            </div>
-          </div>
+            textTransform:"uppercase", marginBottom:5}}>Vista previa · participante y video</div>
+          {/* El video lo eligió el OPERADOR: sale de escenario_video, no de la
+              fila de la cola. */}
+          <VistaPreviaEscenario participante={active} video={tieneVideo ? videoActual : null}
+            enVivo={enVivo} col={COL}/>
 
           {/* Barómetro de energía — misma fuente que /tv y que el celular
               (ftl_energia_pct). Sólo mientras suena el video. */}
@@ -2184,7 +2268,8 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
               <div style={{fontSize:10.5, color:"rgba(240,232,255,.35)", textAlign:"center", marginBottom:8}}>
                 {tieneVideo
                   ? "Está preparado. Tocá 🚀 Lanzar video para arrancar."
-                  : "Asignale un video desde la Biblioteca (columna derecha)."}
+                  : puedeCancion ? "Asignale un video desde la Biblioteca (columna derecha)."
+                  : "Esperando que Producción elija la canción."}
               </div>
               <button className="btn btn-g btn-full" disabled={busy} onClick={finalizar}>
                 👤 Bajar del escenario — sigue la convocatoria
@@ -2203,30 +2288,42 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
       <div>
         {barraOperativa}
 
-        {!simple && <div className="card" style={{marginBottom:10}}>
-          <div className="ctitle" style={{marginBottom:4}}>{juego.icon} {juego.label}</div>
-          <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
-            {juego.subAdmin} La música sigue saliendo por DJ Democracy: la TV no
-            corta el audio durante este juego.
-            {!enElAire && " Tocá 📢 Anunciar para abrir la convocatoria."}
-          </p>
-          {puedeDisenar && (
-            <button type="button" className="btn btn-g" style={{width:"100%", marginTop:10, padding:"8px 10px", fontSize:11}}
-              onClick={() => { pedirDisenoDe(type); goTo("disenoEscenario"); }}>
-              🎨 Diseño de pantallas (TV y celular)
-            </button>
-          )}
-        </div>}
-
-        {!simple && <VotacionJuego juego={type} col={COL}/>}
-
         {/* Biblioteca — links de YouTube, archivos de la PC y playlists. Con
-            un participante preparado, cada video tiene «Asignar». Elegir NO
-            reproduce: sólo escribe escenario_video. */}
-        <BibliotecaEscenario juego={type} col={COL}
-          puedeAsignar={enElAire && !!active && !!proyectado && !enVivo}
-          videoActualId={videoActual?.videoId || null}
-          onAsignar={elegirVideo} ocupado={busy} simple={simple}/>
+            un participante preparado, cada video tiene «Asignar»: la canción
+            del participante se elige acá. Elegir NO reproduce: sólo escribe
+            escenario_video. Anfitrión: suelta, sin desplegable. */}
+        {simple ? puedeCancion && (
+          <BibliotecaEscenario juego={type} col={COL}
+            puedeAsignar={enElAire && !!active && !!proyectado && !enVivo}
+            videoActualId={videoActual?.videoId || null}
+            onAsignar={elegirVideo} ocupado={busy} simple/>
+        ) : (<>
+          {/* Secciones desplegables, en el orden de uso: Biblioteca (abierta),
+              Votación, Diseñador. */}
+          <SeccionDesplegable titulo="🎬 Biblioteca" abierta
+            estado={tieneVideo ? "VIDEO ASIGNADO" : null} on={tieneVideo}>
+            <BibliotecaEscenario juego={type} col={COL} embebida
+              puedeAsignar={enElAire && !!active && !!proyectado && !enVivo}
+              videoActualId={videoActual?.videoId || null}
+              onAsignar={elegirVideo} ocupado={busy}/>
+          </SeccionDesplegable>
+          <SeccionDesplegable titulo="🗳️ Votación del público" on={modoVotacion !== "off"}
+            estado={modoVotacion === "off" ? "SIN VOTACIÓN" : (MODOS_VOTACION[modoVotacion]?.titulo || "").split(" · ")[0]}>
+            <VotacionJuego juego={type} col={COL} embebida/>
+          </SeccionDesplegable>
+          <SeccionDesplegable titulo="🎨 Diseñador">
+            <p style={{fontSize:11, color:"rgba(240,232,255,.45)", lineHeight:1.5, margin:0}}>
+              {juego.subAdmin} La música sigue saliendo por DJ Democracy: la TV no
+              corta el audio durante este juego.
+            </p>
+            {puedeDisenar && (
+              <button type="button" className="btn btn-g" style={{width:"100%", marginTop:10, padding:"8px 10px", fontSize:11}}
+                onClick={() => { pedirDisenoDe(type); goTo("disenoEscenario"); }}>
+                🎨 Diseño de pantallas (TV y celular)
+              </button>
+            )}
+          </SeccionDesplegable>
+        </>)}
       </div>
       </div>
     </div>
@@ -5213,7 +5310,9 @@ function ConfirmarBorradoModal({pregunta, guardando, error, onCancelar, onConfir
   );
 }
 
-function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
+function TriviaPanel({sec, controls, sessionId, gameState, simple = false, permisos = null}){
+  // Anfitrión: arma la ronda sólo si Ajustes → Permisos del anfitrión lo deja.
+  const eligePreguntas = !simple || !!permisos?.triviaPreguntas;
   // `qs` = preguntas de ESTA ronda: COPIAS {text, opts, correct}, sin
   // referencia viva a la biblioteca. Editar o borrar la biblioteca no las toca.
   // Viven en `trivia_borradores` (con el cupón): Producción las elige y el
@@ -5588,11 +5687,19 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
               {/* Anfitrión: sólo lee. Las preguntas las elige Producción; acá
                   se ven con todas las respuestas y la correcta marcada. */}
               {simple && qs.length===0 && (
-                <div className="dd-anf-vacio">Producción todavía no eligió las preguntas.</div>
+                <div className="dd-anf-vacio">
+                  {eligePreguntas ? "Elegí las preguntas en la biblioteca." : "Producción todavía no eligió las preguntas."}
+                </div>
               )}
               {simple && qs.map((q,i)=>(
                 <div key={i} className="dd-anf-q">
-                  <div className="dd-anf-q-t"><span>{i+1}.</span> {q.text}</div>
+                  <div className="dd-anf-q-t" style={{display:"flex",gap:8}}>
+                    <div style={{flex:1}}><span>{i+1}.</span> {q.text}</div>
+                    {eligePreguntas && (
+                      <button type="button" title="Quitar de la ronda" onClick={()=>borrarQ(i)}
+                        style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"rgba(255,45,120,.7)",padding:"0 4px"}}>🗑️</button>
+                    )}
+                  </div>
                   {q.opts.map((o,oi)=>(
                     <div key={oi} className={`dd-anf-op${q.correct===oi?" ok":""}`}>
                       <b>{String.fromCharCode(65+oi)}</b> {o}{q.correct===oi && <em>✓ Correcta</em>}
@@ -5730,8 +5837,8 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
         {/* ══ Columna lateral: barra → biblioteca → configuración ═══════════ */}
         <div>
           {barraOperativa}
-          {/* Anfitrión: no elige preguntas, así que no ve la biblioteca. */}
-          {!simple && bibliotecaCard}
+          {/* Anfitrión: ve la biblioteca sólo si tiene permiso para elegir. */}
+          {eligePreguntas && bibliotecaCard}
           {/* El cupón lo define el administrador; el Anfitrión lanza con el de siempre. */}
           {!simple && <div className="card">
             <div className="ctitle">⚙️ Configuración</div>
@@ -6797,6 +6904,8 @@ export default function AdminPanel(){
   // 👥 en vivo: cuenta los activos (heartbeat en los últimos 2 min).
   const { filas: filasConectadas } = useConectados(session?.id);
   const connectedCount = (filasConectadas || []).filter(estaActivo).length;
+  // Ajustes → Permisos del anfitrión: qué puede hacer en la tablet.
+  const permisosAnfitrion = usePermisosAnfitrion();
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
   const pantallaActiva = pantallaGlobal.event?.status === "live";
   const { pending, approved, approve, reject } = useMessages(session?.id, "admin");
@@ -6963,7 +7072,7 @@ export default function AdminPanel(){
       || (LIVE_ESCENARIO_LABELS[gameState?.active_escenario] ? gameState.active_escenario : null)
       || PLACA_DE_JUEGO[gameState?.active_placa]?.id || null;
     const renderJuego = (s) => {
-      const props = {sec:s, controls, sessionId:session?.id ?? null, gameState, simple:true};
+      const props = {sec:s, controls, sessionId:session?.id ?? null, gameState, simple:true, permisos:permisosAnfitrion};
       const escenario = {...props, goTo:()=>{}, puedeDisenar:false};
       switch (s.id) {
         case "rey":     return <ReyPanel {...props}/>;

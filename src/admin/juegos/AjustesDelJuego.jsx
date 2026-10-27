@@ -42,7 +42,7 @@ export function ErrorCarga({ error, recargar }) {
 }
 
 /** 🗳️ Votación del público (FTL / PT): un modo o ninguno. Fila `votacion_escenario`. */
-export function VotacionJuego({ juego, col }) {
+export function VotacionJuego({ juego, col, embebida = false }) {
   const { config, error, guardar, recargar } = useVotacionEscenarioAdmin();
   const { guardando, aviso, correr } = useGuardado();
 
@@ -56,7 +56,7 @@ export function VotacionJuego({ juego, col }) {
     ["off", { titulo: "Sin votación", detalle: "El público no vota y la TV no muestra barómetro." }]];
 
   return (
-    <SeccionConfig icon="🗳️" titulo="Votación del público" cuando="ronda">
+    <SeccionConfig icon="🗳️" titulo="Votación del público" cuando="ronda" embebida={embebida}>
       {error ? <ErrorCarga error={error} recargar={recargar}/> : !config ? (
         <div style={nota}>Cargando…</div>
       ) : (
