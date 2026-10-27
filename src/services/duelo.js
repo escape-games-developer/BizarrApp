@@ -27,6 +27,8 @@ export const REGLA_DUELO_APLAUSOS = "max_aplausos_usuario";
 export const REGLA_DUELO_MODO = "modo_votacion";
 /** ON: video detrás del duelo. OFF: sin video, la pantalla dice DUELO. */
 export const REGLA_DUELO_VIDEO = "video_fondo";
+/** ON: un participante de cada team (Membrillo contra Batata). OFF: indistinto. */
+export const REGLA_DUELO_TEAMS = "un_por_team";
 
 /**
  * Modos de votación (regla `modo_votacion`). En los dos, los barómetros se

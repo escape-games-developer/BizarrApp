@@ -111,8 +111,12 @@ const CSS = `
   .anf .ctitle{font-size:12px;letter-spacing:1.4px;color:rgba(240,232,255,.45);margin-bottom:12px;}
   /* !important: varios botones (Escenario, Duelo) traen tamaño en línea. */
   .anf .btn{min-height:52px;font-size:15px !important;border-radius:14px;}
-  /* Barra de acciones de Escenario y Duelo: primera tarjeta de la columna derecha. */
-  .anf .pal-split > div:last-child > .card:first-child .btn{min-height:68px;font-size:17px !important;font-weight:800;}
+  /* Barra de acciones de Escenario y Duelo: misma fila que los juegos (botones
+     bajos, letra grande). !important: sus botones traen tamaño y columnas en línea. */
+  .anf .esc-actions{grid-template-columns:repeat(3,minmax(0,1fr)) !important;gap:10px !important;}
+  .anf .esc-actions.esc-4{grid-template-columns:repeat(4,minmax(0,1fr)) !important;}
+  .anf .esc-actions .btn{grid-column:auto !important;min-height:54px;font-size:19px !important;font-weight:800;
+    padding:6px 8px !important;line-height:1.15 !important;}
   /* Deshabilitado = gris: un degradado al 35 % se sigue leyendo como «tocable». */
   .anf .btn:disabled{opacity:.3;filter:grayscale(1);box-shadow:none;}
   /* Mover / quitar preguntas de la ronda: íconos chicos, agrandados para el dedo. */
@@ -143,6 +147,10 @@ const CSS = `
   .anf .qrow{min-height:60px;padding:8px 10px;}
   .anf .qrow .btn{min-height:46px;min-width:52px;font-size:14px !important;padding:8px 14px !important;}
   .anf .qname{font-size:15px;}
+  /* Duelo: postulantes en dos columnas, la fila entera se toca. */
+  .anf .duelo-post{min-height:64px;padding:10px;gap:10px;border-radius:14px;}
+  .anf .duelo-post .btn{min-height:44px;min-width:44px;font-size:14px !important;}
+  .anf .duelo-col-t{font-size:14px;padding:10px 12px;}
   /* Vertical (o angosta): una sola columna. Se deshacen las dos columnas del
      panel (display:contents) para reordenar las tarjetas: primero la barra de
      acciones (y su error), después el estado del juego, al final la biblioteca. */

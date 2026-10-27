@@ -10,8 +10,8 @@ import { supabase } from "../lib/supabase";
  * pregunta copia sus datos al editor: la ronda nunca depende de esta fila.
  *
  * Contrato (V1 `20260929023450` + edición `20260929025312`):
- *   · SELECT  `id,question_text,options,correct_option,created_at`, por created_at.
- *   · INSERT  sólo `question_text`, `options`, `correct_option`. `created_by`
+ *   · SELECT  `id,question_text,options,correct_option,seccion,created_at`, por created_at.
+ *   · INSERT  sólo `question_text`, `options`, `correct_option`, `seccion`. `created_by`
  *             lo pone la base (auth.uid()) y la policy lo exige: no se manda.
  *   · UPDATE  sólo esas mismas tres columnas (grant por columna).
  *   · DELETE  por id.
@@ -28,7 +28,7 @@ import { supabase } from "../lib/supabase";
  */
 
 export const TABLA_BIBLIOTECA_TRIVIA = "trivia_preguntas_biblioteca";
-const COLUMNAS = "id,question_text,options,correct_option,created_at";
+const COLUMNAS = "id,question_text,options,correct_option,seccion,created_at";
 
 /** Fila de la tabla → forma que usa el panel (la misma que `qs`). */
 const desdeFila = (f) => ({
@@ -36,6 +36,7 @@ const desdeFila = (f) => ({
   text:    f.question_text,
   opts:    Array.isArray(f.options) ? f.options : [],
   correct: f.correct_option,
+  seccion: f.seccion || null,
 });
 
 /** Pregunta del editor → payload del INSERT. created_by lo pone la base. */
@@ -43,6 +44,7 @@ const haciaFila = (q) => ({
   question_text:  q.text,
   options:        q.opts,
   correct_option: q.correct,
+  seccion:        q.seccion || null,
 });
 
 /** Traduce un error de Postgres/PostgREST. Nunca devuelve SQL crudo. */
@@ -182,5 +184,39 @@ export function useBibliotecaPreguntasTrivia() {
     }
   }, [refresh]);
 
-  return { preguntas, loading, error, guardando, refresh, guardar, editar, eliminar };
+  /**
+   * Alta en bloque desde un archivo (ya validado por importar.js). El UNIQUE
+   * es sobre una expresión, así que no hay `onConflict`: si un lote choca con
+   * una pregunta que otro admin cargó en el medio, ese lote va de a una y
+   * las repetidas se saltean.
+   */
+  const importar = useCallback(async (items) => {
+    if (guardandoRef.current) return null;
+    guardandoRef.current = true;
+    setGuardando(true);
+    let agregadas = 0;
+    try {
+      for (let i = 0; i < items.length; i += 100) {
+        const lote = items.slice(i, i + 100).map(haciaFila);
+        const { data, error: e } = await supabase.from(TABLA_BIBLIOTECA_TRIVIA).insert(lote).select("id");
+        if (!e) { agregadas += (data || []).length; continue; }
+        if (e.code !== "23505") {
+          console.error("[useBibliotecaPreguntasTrivia] import error:", e);
+          throw new Error(mensajeError(e, `No pudimos importar las preguntas${agregadas ? ` (se cargaron ${agregadas})` : ""}.`));
+        }
+        for (const fila of lote) {
+          const { error: e1 } = await supabase.from(TABLA_BIBLIOTECA_TRIVIA).insert(fila);
+          if (!e1) agregadas++;
+          else if (e1.code !== "23505") throw new Error(mensajeError(e1, `No pudimos importar las preguntas (se cargaron ${agregadas}).`));
+        }
+      }
+      return { agregadas, repetidas: items.length - agregadas };
+    } finally {
+      await refresh();
+      guardandoRef.current = false;
+      if (montadoRef.current) setGuardando(false);
+    }
+  }, [refresh]);
+
+  return { preguntas, loading, error, guardando, refresh, guardar, editar, eliminar, importar };
 }

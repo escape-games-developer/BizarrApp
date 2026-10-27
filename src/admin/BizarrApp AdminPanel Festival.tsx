@@ -51,6 +51,16 @@ import { useSumateRound } from "../hooks/realtime/useSumateRound";
 import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInvalida } from "../hooks/realtime/useArmaPalabraRound";
 import { useBibliotecaPalabras } from "../hooks/useBibliotecaPalabras";
 import { useBibliotecaPreguntasTrivia } from "../hooks/useBibliotecaPreguntasTrivia";
+import { useTriviaBorrador } from "../hooks/realtime/useTriviaBorrador";
+import { TEAMS } from "../constants/theme";
+import {
+  ImportarModal, FiltroSecciones, CampoSeccion, CSS_SECCIONES,
+  TODAS, enSeccion, enSeccionValida, seccionDelFiltro,
+} from "./bibliotecas/Secciones";
+import {
+  parsearPalabras, parsearPreguntas, FORMATO_PALABRAS, FORMATO_PREGUNTAS,
+  seccionesDe, unificarSeccion,
+} from "./bibliotecas/importar";
 import {
   useReglasArma, motivoMinimoArmaInvalido,
   REGLA_ARMA_MINIMOS, ARMA_MIN_PISO, ARMA_MIN_TECHO,
@@ -76,7 +86,7 @@ import { uploadDueloVideo, validateVideoFile } from "../services/dueloVideo";
 import {
   lanzarRondaDuelo, finalizarRondaDuelo, cancelarRondaDuelo, pushDuelo, mensajeDueloAdmin,
   faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, anchoBarraP1,
-  REGLA_DUELO_DURACION, REGLA_DUELO_APLAUSOS, REGLA_DUELO_MODO, REGLA_DUELO_VIDEO, MODOS_DUELO, modoDeRonda,
+  REGLA_DUELO_DURACION, REGLA_DUELO_APLAUSOS, REGLA_DUELO_MODO, REGLA_DUELO_VIDEO, REGLA_DUELO_TEAMS, MODOS_DUELO, modoDeRonda,
   DUELO_DURACION_MIN, DUELO_DURACION_MAX, DUELO_APLAUSOS_MIN, DUELO_APLAUSOS_MAX,
 } from "../services/duelo";
 import {
@@ -341,8 +351,43 @@ const css = `
   .dd-modal{width:100%;max-width:560px;max-height:calc(100vh - 32px);overflow-y:auto;padding:18px;border-radius:16px;
     background:#120A20;border:1px solid rgba(168,85,247,.35);box-shadow:0 20px 60px rgba(0,0,0,.6);}
   .dd-modal-t{font-family:'DM Sans',sans-serif;font-weight:700;font-size:15px;color:#F0E8FF;margin-bottom:12px;}
+  /* Reglas en secciones desplegables: cerrada = nombre + estado. */
+  .regla-dsp{border-top:1px solid rgba(240,232,255,.08);}
+  .regla-dsp summary{display:flex;align-items:center;gap:8px;padding:11px 2px;cursor:pointer;list-style:none;}
+  .regla-dsp summary::-webkit-details-marker{display:none;}
+  .regla-dsp-t{flex:1;min-width:0;font-size:12px;font-weight:800;color:#F0E8FF;}
+  .regla-dsp-e{flex-shrink:0;padding:2px 8px;border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.6px;
+    color:rgba(240,232,255,.45);background:rgba(240,232,255,.06);border:1px solid rgba(240,232,255,.12);}
+  .regla-dsp-e.on{color:#00F5A0;background:rgba(0,245,160,.1);border-color:rgba(0,245,160,.35);}
+  .regla-dsp-ch{flex-shrink:0;color:rgba(240,232,255,.4);transition:transform .15s;}
+  .regla-dsp[open] .regla-dsp-ch{transform:rotate(180deg);}
+  .regla-dsp-c{padding:0 2px 12px;}
+  /* Duelo: postulantes en dos columnas (Membrillo | Batata); tocar = elegir. */
+  .duelo-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;}
+  .duelo-col-t{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;margin-bottom:6px;
+    font-size:11px;font-weight:800;border:1px solid rgba(240,232,255,.1);}
+  .duelo-col-t span{margin-left:auto;opacity:.7;}
+  .duelo-col-vacia{font-size:10.5px;color:rgba(240,232,255,.25);text-align:center;padding:10px 0;}
+  .duelo-post{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:11px;margin-bottom:6px;
+    background:rgba(240,232,255,.03);border:1px solid rgba(240,232,255,.08);}
+  .duelo-post.ok{cursor:pointer;}
+  .duelo-post.ok:hover{border-color:rgba(255,45,120,.45);background:rgba(255,45,120,.06);}
+  .duelo-post.ok:active{transform:scale(.98);}
+  /* Anfitrión: preguntas de la ronda con todas las respuestas, sólo lectura. */
+  .dd-anf-vacio{font-size:14px;color:rgba(240,232,255,.4);padding:14px 0;text-align:center;}
+  .dd-anf-q{padding:12px 14px;border-radius:14px;margin-bottom:10px;
+    background:rgba(240,232,255,.04);border:1px solid rgba(240,232,255,.08);}
+  .dd-anf-q-t{font-size:16px;font-weight:700;color:#F0E8FF;line-height:1.35;margin-bottom:8px;}
+  .dd-anf-q-t span{color:rgba(240,232,255,.35);}
+  .dd-anf-op{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;margin-top:5px;
+    font-size:15px;color:rgba(240,232,255,.6);background:rgba(240,232,255,.03);border:1px solid transparent;}
+  .dd-anf-op b{width:22px;flex-shrink:0;color:rgba(240,232,255,.35);}
+  .dd-anf-op em{margin-left:auto;font-style:normal;font-size:12px;font-weight:800;white-space:nowrap;}
+  .dd-anf-op.ok{color:#00F5A0;font-weight:700;background:rgba(0,245,160,.1);border-color:rgba(0,245,160,.35);}
+  .dd-anf-op.ok b{color:#00F5A0;}
   @media (max-width:1040px){ .dd-split{grid-template-columns:1fr;} .dd-lib-list{max-height:340px;} }
   @media (max-width:360px){ .dd-actions{grid-template-columns:1fr;} }
+  ${CSS_SECCIONES}
 
   /* Sumate — operación a la izquierda, configuración a la derecha. Clase
      propia, mismo criterio que .pal-* / .rey-*. */
@@ -902,6 +947,21 @@ function DueloLado({p, col, pct, votos, ganador, unidad = "toque"}){
   );
 }
 
+// Sección desplegable de una regla: cerrada muestra el nombre y el estado
+// (ACTIVADA / el modo / el tiempo); se abre para editarla.
+function ReglaDesplegable({titulo, estado, on, children}){
+  return (
+    <details className="regla-dsp">
+      <summary>
+        <span className="regla-dsp-t">{titulo}</span>
+        {estado && <span className={`regla-dsp-e${on ? " on" : ""}`}>{estado}</span>}
+        <span className="regla-dsp-ch" aria-hidden="true">▾</span>
+      </summary>
+      <div className="regla-dsp-c">{children}</div>
+    </details>
+  );
+}
+
 // ── Cronómetro del Duelo (regla duracion_votacion) ─────────────────────────
 // Activado: la ronda se lanza con cuenta regresiva y se cierra sola. Apagado:
 // sin reloj, la cierra el operador con 🏁 Finalizar duelo. El tiempo se
@@ -945,9 +1005,9 @@ function DueloCronometroCard({col}){
     background:"rgba(240,232,255,.05)",border:"1px solid rgba(240,232,255,.12)",color:"#F0E8FF"};
 
   return (
-    <div className="card" style={{marginBottom:10}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-        <div className="ctitle" style={{margin:0}}>⏱ Cronómetro</div>
+    <ReglaDesplegable titulo="⏱ Cronómetro" on={duracion.enabled}
+      estado={duracion.enabled && segGuardado != null ? formatoReloj(segGuardado) : "SIN RELOJ"}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
         <Toggle on={duracion.enabled} color={col} label={guardando ? "Guardando…" : duracion.enabled ? "Activado" : "Desactivado"}
           onToggle={() => guardar({ enabled: !duracion.enabled },
             duracion.enabled ? "Cronómetro desactivado." : "Cronómetro activado.")}/>
@@ -975,7 +1035,7 @@ function DueloCronometroCard({col}){
           {aviso.ok ? "✓ " : "✕ "}{aviso.text}
         </div>
       )}
-    </div>
+    </ReglaDesplegable>
   );
 }
 
@@ -1008,32 +1068,22 @@ function DueloReglasCard({col, enJuego}){
   };
 
   if (loading) return (
-    <div className="card"><div className="ctitle">⚙️ Configuración</div>
-      <div style={{fontSize:11,color:"rgba(240,232,255,.3)"}}>Cargando configuración…</div>
-    </div>
+    <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"10px 0"}}>Cargando reglas…</div>
   );
   if (reglasError) return (
-    <div className="card"><div className="ctitle">⚙️ Configuración</div>
-      <div style={{fontSize:11,color:"#FCA5A5",lineHeight:1.5}}>{reglasError}</div>
-    </div>
+    <div style={{fontSize:11,color:"#FCA5A5",lineHeight:1.5,padding:"10px 0"}}>{reglasError}</div>
   );
 
   return (
-    <div className="card">
-      <div className="ctitle">⚙️ Configuración de reglas</div>
-
+    <>
       {/* Modo de votación: por toques o voto único, uno activo */}
-      <div className="rey-regla">
-        <div className="rey-regla-hdr">
-          <div className="rey-regla-t">Modo de votación</div>
-          <div className="rey-regla-estado rey-regla-on">{MODOS_DUELO[modo].titulo.split(" · ")[0]}</div>
-        </div>
+      <ReglaDesplegable titulo="🗳️ Modo de votación" on estado={MODOS_DUELO[modo].titulo.split(" · ")[0]}>
         {!modoRegla ? (
           <div className="rey-regla-d" style={{color:"#FCA5A5"}}>
             Falta aplicar en Supabase la migración 20261020130000_duelo_modos_votacion.
           </div>
         ) : (
-          <div style={{display:"grid",gap:6,marginTop:8}}>
+          <div style={{display:"grid",gap:6}}>
             {Object.entries(MODOS_DUELO).map(([id, m]) => {
               const activo = modo === id;
               return (
@@ -1053,47 +1103,44 @@ function DueloReglasCard({col, enJuego}){
             })}
           </div>
         )}
-      </div>
-
-      {/* El cronómetro vive en DueloCronometroCard, arriba de esta card. */}
+      </ReglaDesplegable>
 
       {/* Límite de toques por persona (Mod 1): activado = tope; apagado =
           toques continuos e indefinidos. Apagado conserva el número. */}
       {aplausos && (
-        <div className="rey-regla" style={{opacity: modo === "toques" ? 1 : .55}}>
-          <div className="rey-regla-hdr">
-            <div className="rey-regla-t">Límite de toques por persona</div>
-            <div className={`rey-regla-estado ${aplausos.enabled ? "rey-regla-on" : "rey-regla-off"}`}>
-              {aplausos.enabled ? "ACTIVO" : "SIN LÍMITE"}
+        <ReglaDesplegable titulo="👏 Límite de toques por persona" on={aplausos.enabled}
+          estado={aplausos.enabled ? `${maxGuardado ?? "—"} TOQUES` : "SIN LÍMITE"}>
+          <div style={{opacity: modo === "toques" ? 1 : .55}}>
+            <div style={{display:"flex",justifyContent:"flex-end"}}>
+              <Toggle on={aplausos.enabled} color={col}
+                label={guardando===REGLA_DUELO_APLAUSOS ? "Guardando…" : aplausos.enabled ? "Activado" : "Desactivado"}
+                onToggle={() => guardar(REGLA_DUELO_APLAUSOS, { enabled: !aplausos.enabled },
+                  aplausos.enabled ? "Sin límite: toques continuos e indefinidos." : "Límite de toques activado.")}/>
             </div>
-            <Toggle on={aplausos.enabled} color={col}
-              label={guardando===REGLA_DUELO_APLAUSOS ? "Guardando…" : ""}
-              onToggle={() => guardar(REGLA_DUELO_APLAUSOS, { enabled: !aplausos.enabled },
-                aplausos.enabled ? "Sin límite: toques continuos e indefinidos." : "Límite de toques activado.")}/>
-          </div>
-          <div className="rey-regla-d">
-            {aplausos.enabled
-              ? "Cada persona puede tocar hasta este total por ronda, sumando a los dos participantes."
-              : "Toques continuos e indefinidos: cada persona toca todas las veces que quiera."}
-            {modo !== "toques" && " Sólo aplica al Mod 1 · Por toques."}
-          </div>
-          <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9,opacity:aplausos.enabled?1:.45}}>
-            <input value={maxInput} onChange={(e)=>setMaxInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
-            <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
-              disabled={!!guardando || !!motivoMax || !sucioMax}
-              onClick={() => guardar(REGLA_DUELO_APLAUSOS, { value: { max: Number(maxInput.trim()) } }, "Límite de toques guardado.")}>
-              {guardando===REGLA_DUELO_APLAUSOS ? "…" : "Guardar"}
-            </button>
-            <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
-              Toques, entre {DUELO_APLAUSOS_MIN} y {DUELO_APLAUSOS_MAX}.
+            <div className="rey-regla-d" style={{marginTop:6}}>
+              {aplausos.enabled
+                ? "Cada persona puede tocar hasta este total por ronda, sumando a los dos participantes."
+                : "Toques continuos e indefinidos: cada persona toca todas las veces que quiera."}
+              {modo !== "toques" && " Sólo aplica al Mod 1 · Por toques."}
             </div>
+            <div style={{display:"flex",gap:7,alignItems:"center",marginTop:9,opacity:aplausos.enabled?1:.45}}>
+              <input value={maxInput} onChange={(e)=>setMaxInput(e.target.value)} inputMode="numeric" style={inputStyle}/>
+              <button className="btn btn-g" style={{padding:"7px 14px",fontSize:11}}
+                disabled={!!guardando || !!motivoMax || !sucioMax}
+                onClick={() => guardar(REGLA_DUELO_APLAUSOS, { value: { max: Number(maxInput.trim()) } }, "Límite de toques guardado.")}>
+                {guardando===REGLA_DUELO_APLAUSOS ? "…" : "Guardar"}
+              </button>
+              <div style={{flex:1,fontSize:10,color:"rgba(240,232,255,.3)",lineHeight:1.4}}>
+                Toques, entre {DUELO_APLAUSOS_MIN} y {DUELO_APLAUSOS_MAX}.
+              </div>
+            </div>
+            {motivoMax && maxInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoMax}</div>}
           </div>
-          {motivoMax && maxInput.trim()!=="" && <div style={{fontSize:10,color:"#FCA5A5",marginTop:6}}>{motivoMax}</div>}
-        </div>
+        </ReglaDesplegable>
       )}
 
       {enJuego && (
-        <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:6,lineHeight:1.5}}>
+        <div style={{fontSize:10,color:"rgba(240,232,255,.35)",marginTop:8,lineHeight:1.5}}>
           Los cambios aplican desde el próximo lanzamiento: la ronda en curso conserva sus reglas.
         </div>
       )}
@@ -1102,7 +1149,7 @@ function DueloReglasCard({col, enJuego}){
           {aviso.ok ? "✓ " : "✕ "}{aviso.text}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1152,6 +1199,34 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
     finally { setGuardandoVideo(false); }
   };
 
+  // Regla «uno de cada team» (apagada = indistinto). Sin la fila, apagada.
+  const reglaTeams = reglaDuelo(REGLA_DUELO_TEAMS);
+  const unoPorTeam = !!reglaTeams?.enabled;
+  const [guardandoTeams, setGuardandoTeams] = useState(false);
+  const alternarUnoPorTeam = async () => {
+    if (!reglaTeams || guardandoTeams) return;
+    setGuardandoTeams(true); setErr(null);
+    try { await actualizarReglaDuelo(REGLA_DUELO_TEAMS, { enabled: !unoPorTeam }); }
+    catch (e) { setErr(e?.message || String(e)); }
+    finally { setGuardandoTeams(false); }
+  };
+
+  // Team de cada postulante: las postulaciones no lo guardan, sale del perfil.
+  const [teamDe, setTeamDe] = useState({});
+  const idsPostulantes = [...new Set(postulaciones.map(p => p.user_id))].sort().join(",");
+  useEffect(() => {
+    if (!idsPostulantes) { setTeamDe({}); return; }
+    let vivo = true;
+    supabase.from("profiles").select("id,team").in("id", idsPostulantes.split(","))
+      .then(({ data, error: e }) => {
+        if (!vivo) return;
+        if (e) { console.error("[DueloPanel] teams", e); return; }
+        setTeamDe(Object.fromEntries((data || []).map(r => [r.id, r.team])));
+      });
+    return () => { vivo = false; };
+  }, [idsPostulantes]);
+  const teamOf = (p) => (p ? teamDe[p.user_id] || null : null);
+
   const fase    = faseDuelo(gameState, round);
   const alAire  = gameState?.active_escenario === "duelo";
   const votando = round?.status === "voting";
@@ -1176,9 +1251,43 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
   };
 
   // ── Selección ────────────────────────────────────────────────────────────
-  const elegir = (p, slot) => {
-    if (slot === 1) { setSelP1(selP1 === p.id ? null : p.id); if (selP2 === p.id) setSelP2(null); }
-    else            { setSelP2(selP2 === p.id ? null : p.id); if (selP1 === p.id) setSelP1(null); }
+  // Se toca un postulante y ocupa el primer lugar libre: el primero que se
+  // elige es el participante 1 y el segundo, el 2. Con la regla «uno de cada
+  // team», el segundo tiene que ser del otro team (y los dos tener team).
+  const otroElegido = (lugar) => (lugar === 1 ? p2 : p1);
+  const motivoNoElegible = (p, lugar) => {
+    if (!unoPorTeam) return null;
+    const t = teamOf(p);
+    if (!t) return "Sin team: con la regla «uno de cada team» no puede participar.";
+    const otro = otroElegido(lugar);
+    if (otro && teamOf(otro) === t) return `Ya hay un participante de ${TEAMS[t]?.name || t}.`;
+    return null;
+  };
+  const lugarLibre = !selP1 ? 1 : !selP2 ? 2 : null;
+  const elegir = (p) => {
+    if (!lugarLibre || motivoNoElegible(p, lugarLibre)) return;
+    if (lugarLibre === 1) setSelP1(p.id); else setSelP2(p.id);
+  };
+
+  // AL AZAR: completa los lugares libres (si ya estaban los dos, sortea de
+  // nuevo los dos) entre los postulantes que esperan, respetando la regla.
+  const sortear = () => {
+    const disponibles = postulaciones.filter(p => p.status === "waiting" && !enRondaIds.includes(p.user_id));
+    const azar = (lista) => lista[Math.floor(Math.random() * lista.length)] || null;
+    const llenos = selP1 && selP2;
+    let a = llenos ? null : p1, b = llenos ? null : p2;
+    const libres = (excluir) => disponibles.filter(p => !excluir.some(x => x && x.id === p.id));
+    const elegible = (p, otro) => !unoPorTeam || (teamOf(p) && (!otro || teamOf(otro) !== teamOf(p)));
+    if (!a) a = azar(libres([b]).filter(p => elegible(p, b)));
+    if (!b) b = azar(libres([a]).filter(p => elegible(p, a)));
+    if (!a || !b) {
+      setErr(unoPorTeam
+        ? "No hay postulantes suficientes para sortear uno de cada team."
+        : "Hacen falta al menos dos postulantes esperando para sortear.");
+      return;
+    }
+    setErr(null);
+    setSelP1(a.id); setSelP2(b.id);
   };
 
   const quitarPostulante = (p) => correr(async () => {
@@ -1262,11 +1371,13 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
 
   // LANZAR: una sola autoridad, `duelo_launch_round`. Cancela sola la ronda
   // activa anterior, pone el Duelo al aire y congela participantes y reglas.
+  const teamsMal = unoPorTeam && !!p1 && !!p2 && (!teamOf(p1) || !teamOf(p2) || teamOf(p1) === teamOf(p2));
   const puedeLanzar = !busy && !uploading && !!sessionId && !!p1 && !!p2 && p1.id !== p2.id
-    && p1.user_id !== p2.user_id && !votando;
+    && p1.user_id !== p2.user_id && !votando && !teamsMal;
   const motivoNoLanzar = votando ? "Hay una ronda votando: finalizala o cancelala primero."
     : (!p1 || !p2) ? "Elegí al participante 1 y al participante 2."
     : p1.user_id === p2.user_id ? "Los dos participantes tienen que ser distintos."
+    : teamsMal ? "Regla activa: tiene que ser uno de cada team."
     : uploading ? "Esperá a que termine de subir el video."
     : null;
 
@@ -1322,22 +1433,22 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
   const btnBarra = {padding:"10px 4px",fontSize:10.5,whiteSpace:"normal",lineHeight:1.25};
   const barraOperativa = (
     <div className="card" style={{marginBottom:10, borderColor:"rgba(255,45,120,.3)"}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
+      <div className="esc-actions esc-4" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6}}>
         <button className="btn btn-g" style={btnBarra} disabled={!puedeAnunciar} onClick={anunciar}
           title={alAire ? "El Duelo ya está anunciado" : "Placa en pantalla y convocatoria abierta"}>
           📢 Anunciar
         </button>
         <button className="btn btn-p" style={btnBarra} disabled={!puedeLanzar} onClick={lanzar}>
-          🚀 Lanzar duelo
+          {simple ? "🚀 Lanzar" : "🚀 Lanzar duelo"}
         </button>
         <button className="btn btn-p" style={btnBarra} disabled={!puedeFinalizar} onClick={finalizar}
           title={fase === "result" ? "Bajar el resultado y volver a la placa" : "Cerrar la votación, mostrar el ganador y volver a la placa"}>
-          🏁 Finalizar duelo
+          {simple ? "🏁 Finalizar" : "🏁 Finalizar duelo"}
         </button>
         <button className="btn btn-r" style={btnBarra} disabled={!puedeCerrar}
           onClick={simple ? () => confirmarFinalizar("el Duelo", cerrar) : cerrar}
           title="Sacar el Duelo de la pantalla y volver a DJ Democracy">
-          ⏹ Cerrar duelo
+          {simple ? "⏹ Cerrar" : "⏹ Cerrar duelo"}
         </button>
       </div>
       {motivoNoLanzar && !votando && (fase === "convocatoria" || fase === "result") && (
@@ -1356,6 +1467,43 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
   // postulación se borra en la base y para volver se tiene que postular.
   const enLista = postulaciones.filter(p =>
     p.status !== "selected" && p.id !== selP1 && p.id !== selP2);
+  // Dos columnas: Team Membrillo | Team Batata. Los que no tienen team
+  // (invitados) van abajo, a lo ancho.
+  const columnas = [
+    { id:"membrillo", ...TEAMS.membrillo, lista: enLista.filter(p => teamOf(p) === "membrillo") },
+    { id:"batata",    ...TEAMS.batata,    lista: enLista.filter(p => teamOf(p) === "batata") },
+  ];
+  const sinTeam = enLista.filter(p => !["membrillo","batata"].includes(teamOf(p)));
+  const filaPostulante = (p) => {
+    const enRonda = enRondaIds.includes(p.user_id);
+    const rechazada = p.status==="rejected";
+    const motivo = lugarLibre ? motivoNoElegible(p, lugarLibre) : null;
+    const elegible = !rechazada && !enRonda && !votando && !!lugarLibre && !motivo;
+    return (
+      <div key={p.id} className={`duelo-post${elegible ? " ok" : ""}`} style={{opacity: rechazada || (!elegible && !enRonda) ? .55 : 1}}
+        role={elegible ? "button" : undefined} tabIndex={elegible ? 0 : undefined}
+        title={motivo || (!lugarLibre ? "Ya hay dos participantes: quitá uno para elegir otro." : undefined)}
+        onClick={elegible ? () => elegir(p) : undefined}
+        onKeyDown={elegible ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); elegir(p); } } : undefined}>
+        <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} size={44}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div className="qname">{p.user_name}</div>
+          <div style={{fontSize:9.5,color:"rgba(240,232,255,.4)"}}>
+            {enRonda ? "🎤 en el escenario"
+              : rechazada ? "inactiva (de un flujo anterior)"
+              : elegible ? `Tocá para P${lugarLibre}` : "esperando"}
+          </div>
+        </div>
+        {rechazada && (
+          <button className="btn btn-g" style={{padding:"5px 9px",fontSize:10}}
+            disabled={busy} onClick={(e)=>{ e.stopPropagation(); reactivarPostulante(p); }}>Reactivar</button>
+        )}
+        <button className="btn" style={{padding:"5px 8px",fontSize:10,background:"rgba(255,45,120,.06)",
+          border:"1px solid rgba(255,45,120,.18)",color:"rgba(255,45,120,.7)"}}
+          disabled={busy||enRonda} onClick={(e)=>{ e.stopPropagation(); quitarPostulante(p); }} title="Quitar de la lista">✕</button>
+      </div>
+    );
+  };
   const listaPostulantes = (
     <div className="card" style={{marginBottom:10}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8}}>
@@ -1364,55 +1512,47 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
           <div style={{fontSize:9.5,color:"rgba(240,232,255,.3)"}}>
             {enLista.filter(p=>p.status!=="rejected").length} disponibles
           </div>
+          <button className="btn btn-p" style={{padding:"3px 10px",fontSize:9.5}}
+            disabled={busy || votando} onClick={sortear}
+            title={unoPorTeam ? "Elegir al azar uno de cada team" : "Elegir al azar entre los postulantes"}>🎲 Al azar</button>
           <button className="btn btn-g" style={{padding:"3px 9px",fontSize:9.5}}
             disabled={busy || postulaciones.length===0} onClick={vaciarLista}>🧹 Vaciar</button>
         </div>
       </div>
 
-      {enLista.length===0 && (
+      {unoPorTeam && (
+        <div style={{fontSize:10.5,color:"#FDE68A",marginBottom:8}}>
+          Regla activa: uno de cada team (Membrillo contra Batata).
+        </div>
+      )}
+
+      {enLista.length===0 ? (
         <div style={{fontSize:11.5,color:"rgba(240,232,255,.3)",textAlign:"center",padding:"14px 0"}}>
           {!alAire ? "Tocá 📢 Anunciar para recibir postulaciones."
             : postulaciones.length===0 ? "Todavía no se postuló nadie…"
             : "No hay más postulantes esperando."}
         </div>
-      )}
-
-      <div className="rey-list">
-        {enLista.map((p)=>{
-          const es1 = selP1===p.id, es2 = selP2===p.id;
-          const enRonda = enRondaIds.includes(p.user_id);
-          const rechazada = p.status==="rejected";
-          return (
-            <div key={p.id} className="qrow" style={{opacity:rechazada?.5:1}}>
-              <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} size={34}
-                col={es1?DUELO_P1:es2?DUELO_P2:undefined}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div className="qname">{p.user_name}</div>
-                <div style={{fontSize:9,color:"rgba(240,232,255,.35)"}}>
-                  {enRonda ? "🎤 en el escenario"
-                    : rechazada ? "inactiva (de un flujo anterior)" : "esperando"}
+      ) : (
+        <>
+          <div className="duelo-cols">
+            {columnas.map((c) => (
+              <div key={c.id}>
+                <div className="duelo-col-t" style={{color:c.color,borderColor:c.border,background:c.bg}}>
+                  {c.emoji} {c.name} <span>{c.lista.length}</span>
                 </div>
+                {c.lista.length === 0 && <div className="duelo-col-vacia">Nadie todavía</div>}
+                {c.lista.map(filaPostulante)}
               </div>
-              {rechazada ? (
-                <button className="btn btn-g" style={{padding:"5px 9px",fontSize:10}}
-                  disabled={busy} onClick={()=>reactivarPostulante(p)}>Reactivar</button>
-              ) : (
-                <div style={{display:"flex",gap:5}}>
-                  <button className="btn" style={{padding:"5px 9px",fontSize:10,
-                    background:es1?DUELO_P1:"rgba(255,45,120,.1)",border:"1px solid rgba(255,45,120,.3)",
-                    color:es1?"#fff":DUELO_P1}} disabled={votando||enRonda} onClick={()=>elegir(p,1)}>P1</button>
-                  <button className="btn" style={{padding:"5px 9px",fontSize:10,
-                    background:es2?DUELO_P2:"rgba(255,149,0,.1)",border:"1px solid rgba(255,149,0,.3)",
-                    color:es2?"#fff":DUELO_P2}} disabled={votando||enRonda} onClick={()=>elegir(p,2)}>P2</button>
-                </div>
-              )}
-              <button className="btn" style={{padding:"5px 8px",fontSize:10,background:"rgba(255,45,120,.06)",
-                border:"1px solid rgba(255,45,120,.18)",color:"rgba(255,45,120,.7)"}}
-                disabled={busy||enRonda} onClick={()=>quitarPostulante(p)} title="Quitar de la lista">✕</button>
+            ))}
+          </div>
+          {sinTeam.length > 0 && (
+            <div style={{marginTop:8}}>
+              <div className="duelo-col-t" style={{color:"rgba(240,232,255,.55)"}}>Sin team <span>{sinTeam.length}</span></div>
+              <div className="duelo-cols">{sinTeam.map(filaPostulante)}</div>
             </div>
-          );
-        })}
-      </div>
+          )}
+        </>
+      )}
     </div>
   );
 
@@ -1430,11 +1570,16 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
                   <DueloAvatar emoji={p.avatar_emoji} photo={p.photo_url} col={col}/>
                   <div style={{fontSize:11.5,fontWeight:700,color:col}}>{p.user_name}</div>
+                  {TEAMS[teamOf(p)] && (
+                    <div style={{fontSize:10,fontWeight:700,color:TEAMS[teamOf(p)].color}}>
+                      {TEAMS[teamOf(p)].emoji} {TEAMS[teamOf(p)].name}
+                    </div>
+                  )}
                   <button className="btn btn-g" style={{padding:"2px 8px",fontSize:9}} onClick={limpiar}>Quitar</button>
                 </div>
               ) : (
                 <div style={{fontSize:11,color:"rgba(240,232,255,.25)",padding:"14px 0"}}>
-                  Elegí con «P{n}» en la lista
+                  {lugarLibre === n ? "Tocá un postulante de la lista" : "Libre"}
                 </div>
               )}
             </div>
@@ -1444,10 +1589,32 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
           Elegir no es lanzar: nadie se entera hasta que toques 🚀 Lanzar duelo.
         </div>
       </div>
+    </>
+  );
 
-      {!simple && <div className="card" style={{marginBottom:10}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div className="ctitle" style={{margin:0}}>🎞️ Video de fondo</div>
+  // ── Reglas: una tarjeta, cada regla en su sección desplegable ────────────
+  // Uno de cada team y Video de fondo usan el estado de este panel (la lista
+  // y el lanzamiento dependen de ellas); cronómetro, modo y límite de toques
+  // viven en sus componentes.
+  const tarjetaReglas = (
+    <div className="card" style={{marginBottom:10}}>
+      <div className="ctitle">⚙️ Reglas del duelo</div>
+      {reglaTeams && (
+        <ReglaDesplegable titulo="🍋🍠 Uno de cada team" on={unoPorTeam} estado={unoPorTeam ? "ACTIVADA" : "INDISTINTO"}>
+          <div style={{display:"flex",justifyContent:"flex-end"}}>
+            <Toggle on={unoPorTeam} color={DUELO_P1}
+              label={guardandoTeams ? "Guardando…" : unoPorTeam ? "Activada" : "Desactivada"}
+              onToggle={alternarUnoPorTeam}/>
+          </div>
+          <div style={{fontSize:10.5,color:"rgba(240,232,255,.45)",marginTop:6,lineHeight:1.5}}>
+            {unoPorTeam
+              ? "El duelo es siempre Membrillo contra Batata: un participante de cada team. Los que no tienen team no pueden participar."
+              : "Los dos participantes pueden ser de cualquier team, incluso del mismo."}
+          </div>
+        </ReglaDesplegable>
+      )}
+      <ReglaDesplegable titulo="🎞️ Video de fondo" on={videoFondo} estado={videoFondo ? "ACTIVADO" : "SIN VIDEO"}>
+        <div style={{display:"flex",justifyContent:"flex-end"}}>
           <Toggle on={videoFondo} color={DUELO_P1}
             label={guardandoVideo ? "Guardando…" : videoFondo ? "Activado" : "Desactivado"}
             onToggle={alternarVideoFondo}/>
@@ -1490,9 +1657,12 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
           va la imagen de fondo (o negro).
         </div>
         </>}
-      </div>}
-    </>
+      </ReglaDesplegable>
+      <DueloCronometroCard col={DUELO_P1}/>
+      <DueloReglasCard col={DUELO_P1} enJuego={votando}/>
+    </div>
   );
+
 
   const resultado = round?.result; // 'p1' | 'p2' | 'tie' — lo decide el servidor
 
@@ -1581,8 +1751,7 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
           {barraOperativa}
           {/* Siempre visible, también durante la votación: rige desde el
               próximo lanzamiento. */}
-          {!simple && <DueloCronometroCard col={DUELO_P1}/>}
-          {!simple && <DueloReglasCard col={DUELO_P1} enJuego={votando}/>}
+          {!simple && tarjetaReglas}
           {/* Cómo se ve en la TV: Diseñador → Escenario → Duelo. */}
           {puedeDisenar && !simple && (
             <button type="button" className="btn btn-g" style={{width:"100%", marginTop:10, padding:"8px 10px", fontSize:11}}
@@ -1807,7 +1976,7 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
 
   const barraOperativa = (
     <div className="card" style={{marginBottom:10, borderColor:`${COL}4D`}}>
-      <div style={{display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:6}}>
+      <div className="esc-actions" style={{display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:6}}>
         <button className="btn btn-g" style={{gridColumn:"span 2", padding:"9px 4px", fontSize:10.5, whiteSpace:"normal", lineHeight:1.25}}
           disabled={!puedeAnunciar} onClick={anunciar}
           title={enElAire ? "La convocatoria ya está abierta" : "Abre la convocatoria y avisa a los clientes para que se postulen"}>
@@ -4139,13 +4308,29 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
   // de computadora.
   const {
     palabras, loading: bibliLoading, error: bibliError,
-    existe: yaEnBiblioteca, agregar, editar, eliminar,
+    existe: yaEnBiblioteca, agregar, editar, eliminar, importar,
   } = useBibliotecaPalabras();
 
   const [palabra,   setPalabra]   = useState("");   // input en curso
   const [busqueda,  setBusqueda]  = useState("");   // filtro local de la biblioteca
   const [editando,  setEditando]  = useState(null); // id de la fila en edición
   const [editTexto, setEditTexto] = useState("");   // texto nuevo mientras se edita
+  // Secciones: filtro de la lista, sección de la palabra nueva / en edición
+  // y el modal de importación (.txt / .csv).
+  const [seccionFiltro, setSeccionFiltro] = useState(TODAS);
+  const [nuevaSeccion,  setNuevaSeccion]  = useState("");
+  const [editSeccion,   setEditSeccion]   = useState("");
+  const [importando,    setImportando]    = useState(false);
+  const secciones = seccionesDe(palabras);
+  const nombresSecciones = secciones.map((s) => s.nombre);
+  const sinSeccion = palabras.filter((p) => !p.seccion).length;
+  // Si la sección elegida se queda vacía (borrada o movida), vuelve a Todas.
+  useEffect(() => {
+    if (enSeccionValida(seccionFiltro, nombresSecciones, sinSeccion)) return;
+    setSeccionFiltro(TODAS);
+  });
+  // Lo nuevo va a la sección que se está mirando.
+  useEffect(() => { setNuevaSeccion(seccionDelFiltro(seccionFiltro) || ""); }, [seccionFiltro]);
   const [usadas,    setUsadas]    = useState([]);   // ya lanzadas en esta partida
   // Palabra que el operador está preparando. Es estado OPERATIVO LOCAL: no se
   // persiste, no toca game_state, no crea ronda y no llega ni a la TV ni a los
@@ -4191,7 +4376,7 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
 
   const agregarPalabra = () => correr(async () => {
     if (!puedeAgregar) return;
-    await agregar(palabraNorm);
+    await agregar(palabraNorm, unificarSeccion(nuevaSeccion, nombresSecciones));
     setPalabra("");
     setNota(`📚 ${palabraNorm} quedó guardada en la biblioteca.`);
   });
@@ -4206,11 +4391,11 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
   const editDup    = palabraValida(editNorm) && yaEnBiblioteca(editNorm, editando);
   const puedeGuardarEdicion = palabraValida(editNorm) && !editDup;
 
-  const abrirEdicion    = (p) => { setEditando(p.id); setEditTexto(p.word); };
-  const cancelarEdicion = ()  => { setEditando(null); setEditTexto(""); };
+  const abrirEdicion    = (p) => { setEditando(p.id); setEditTexto(p.word); setEditSeccion(p.seccion || ""); };
+  const cancelarEdicion = ()  => { setEditando(null); setEditTexto(""); setEditSeccion(""); };
   const guardarEdicion  = ()  => correr(async () => {
     if (!puedeGuardarEdicion) return;
-    await editar(editando, editNorm);
+    await editar(editando, editNorm, unificarSeccion(editSeccion, nombresSecciones));
     cancelarEdicion();
   });
 
@@ -4234,7 +4419,8 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
   // normaliza la búsqueda con la misma función que las palabras, así "mar",
   // "MAR" y "már" encuentran MARCO.
   const filtro    = normalizarPalabra(busqueda);
-  const filtradas = filtro ? palabras.filter((p) => p.word.includes(filtro)) : palabras;
+  const deSeccion = palabras.filter((p) => enSeccion(p, seccionFiltro));
+  const filtradas = filtro ? deSeccion.filter((p) => p.word.includes(filtro)) : deSeccion;
 
   // Cuánta gente hace falta NO se decide acá: lo decide
   // `arma_palabra_launch_round` con la regla de `arma_palabra_reglas_config`
@@ -4512,7 +4698,17 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
         <div>
           {barraOperativa}
           <div className="card">
-            <div className="ctitle">📚 Biblioteca de palabras</div>
+            <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
+              <div className="ctitle" style={{margin:0, flex:1}}>📚 Biblioteca de palabras</div>
+              {!simple && (
+                <button className="btn btn-g" style={{padding:"4px 10px", fontSize:10}}
+                  title="Cargar palabras desde un archivo .txt o .csv"
+                  onClick={()=>setImportando(true)}>📥 Importar</button>
+              )}
+            </div>
+
+            <FiltroSecciones secciones={secciones} sinSeccion={sinSeccion} total={palabras.length}
+              valor={seccionFiltro} onCambiar={setSeccionFiltro} color={COL}/>
 
             {/* Buscador — filtra en memoria lo que ya trajo el hook. */}
             <input className="inp" value={busqueda} maxLength={12}
@@ -4522,7 +4718,7 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
 
             <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
               <div style={{flex:1, fontSize:9.5, color:"rgba(240,232,255,.3)"}}>
-                {filtro
+                {filtradas.length !== palabras.length
                   ? `${filtradas.length} de ${palabras.length}`
                   : `${palabras.length} ${palabras.length === 1 ? "palabra" : "palabras"}`}
               </div>
@@ -4575,6 +4771,8 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
                       onChange={e=>setEditTexto(e.target.value)}
                       onKeyDown={e=>{ if(e.key==="Enter") guardarEdicion();
                                       if(e.key==="Escape") cancelarEdicion(); }}/>
+                    <CampoSeccion valor={editSeccion} onCambiar={setEditSeccion}
+                      secciones={secciones} style={{flex:1, minWidth:110}}/>
                     <button className="btn btn-g" style={{padding:"5px 9px", fontSize:10}}
                       disabled={busy || !puedeGuardarEdicion} onClick={guardarEdicion}>✓</button>
                     <button className="btn btn-r" style={{padding:"5px 9px", fontSize:10}}
@@ -4602,6 +4800,7 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
                       <div className="pal-row-w">{w}</div>
                       <div className="pal-row-n">
                         {w.length} letras{alAire ? " · en juego" : usada ? " · ya jugada" : ""}
+                        {seccionFiltro === TODAS && p.seccion && <> <span className="bib-tag">{p.seccion}</span></>}
                       </div>
                     </div>
                     {/* Una palabra ya lanzada es historial de la partida: editarla
@@ -4635,6 +4834,8 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
                   onChange={e=>setPalabra(e.target.value)}
                   onKeyDown={e=>{ if(e.key === "Enter") agregarPalabra(); }}
                   placeholder="+ Nueva palabra"/>
+                <CampoSeccion valor={nuevaSeccion} onCambiar={setNuevaSeccion}
+                  secciones={secciones} style={{flex:1, minWidth:0}}/>
                 <button className="btn btn-p" style={{padding:"0 13px", whiteSpace:"nowrap"}}
                   disabled={busy || !puedeAgregar} onClick={agregarPalabra}>➕</button>
               </div>
@@ -4664,6 +4865,15 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
           )}
         </div>
       </div>
+
+      {importando && (
+        <ImportarModal titulo="Importar palabras" formato={FORMATO_PALABRAS} ejemplo="palabras-ejemplo"
+          secciones={secciones} seccionInicial={seccionDelFiltro(seccionFiltro)}
+          parsear={(texto, csv, seccionPorDefecto) => parsearPalabras(texto, {
+            csv, seccionPorDefecto, secciones: nombresSecciones, existe: (w) => yaEnBiblioteca(w),
+          })}
+          onImportar={importar} onCerrar={()=>setImportando(false)}/>
+      )}
     </div>
   );
 }
@@ -4920,8 +5130,9 @@ const claveTrivia = (texto) => String(texto || "").replace(/\s+/g, " ").trim().t
 // título y la acción que recibe `onGuardar`. Reutiliza OpcionesEditor y
 // preguntaValida, así las reglas (2–4 opciones, una correcta) son las mismas
 // que siempre tuvo Desafío Demente.
-function PreguntaModal({modo, inicial, guardando, error, onCancelar, onGuardar}){
+function PreguntaModal({modo, inicial, secciones = [], guardando, error, onCancelar, onGuardar}){
   const [texto,   setTexto]   = useState(inicial?.text ?? "");
+  const [seccion, setSeccion] = useState(inicial?.seccion ?? "");
   const [opts,    setOpts]    = useState(inicial?.opts?.length ? [...inicial.opts] : ["",""]);
   const [correct, setCorrect] = useState(Number.isInteger(inicial?.correct) ? inicial.correct : 0);
   const valida = preguntaValida(texto, opts, correct);
@@ -4935,7 +5146,7 @@ function PreguntaModal({modo, inicial, guardando, error, onCancelar, onGuardar})
   const guardar = () => {
     if (!valida || guardando) return;
     // Misma normalización que siempre usó la ronda: trim de texto y opciones.
-    onGuardar({ text:texto.trim(), opts:opts.map((o) => o.trim()), correct });
+    onGuardar({ text:texto.trim(), opts:opts.map((o) => o.trim()), correct, seccion });
   };
 
   return (
@@ -4948,6 +5159,9 @@ function PreguntaModal({modo, inicial, guardando, error, onCancelar, onGuardar})
           value={texto} onChange={(e)=>setTexto(e.target.value)}/>
         <div className="ctitle" style={{marginTop:4}}>Respuestas</div>
         <OpcionesEditor opts={opts} setOpts={setOpts} correct={correct} setCorrect={setCorrect}/>
+        <div className="ctitle">Sección</div>
+        <CampoSeccion valor={seccion} onCambiar={setSeccion} secciones={secciones}
+          style={{width:"100%", marginBottom:10}}/>
         {modo === "editar" && (
           <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)",marginBottom:8,lineHeight:1.5}}>
             Editar la biblioteca no cambia las preguntas que ya copiaste a la ronda.
@@ -5002,8 +5216,11 @@ function ConfirmarBorradoModal({pregunta, guardando, error, onCancelar, onConfir
 function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
   // `qs` = preguntas de ESTA ronda: COPIAS {text, opts, correct}, sin
   // referencia viva a la biblioteca. Editar o borrar la biblioteca no las toca.
-  const [qs,       setQs]       = useState([]);
-  const [coupon,   setCoupon]   = useState("BEER50");
+  // Viven en `trivia_borradores` (con el cupón): Producción las elige y el
+  // Anfitrión las ve en su tablet; un F5 ya no las borra.
+  const {
+    preguntas: qs, setPreguntas: setQs, cupon: coupon, setCupon: setCoupon, error: borradorError,
+  } = useTriviaBorrador(sessionId);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
   // 📚 Biblioteca: catálogo PERSISTENTE (trivia_preguntas_biblioteca).
@@ -5018,6 +5235,17 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
   const [modalErr,    setModalErr]    = useState(null);
   const [borrando,    setBorrando]    = useState(null);   // pregunta a confirmar
   const [borrarErr,   setBorrarErr]   = useState(null);
+  // Secciones de la biblioteca + importación desde .txt / .csv.
+  const [seccionFiltro, setSeccionFiltro] = useState(TODAS);
+  const [importandoQ,   setImportandoQ]   = useState(false);
+  const seccionesQ = seccionesDe(biblio.preguntas);
+  const nombresSeccionesQ = seccionesQ.map((s) => s.nombre);
+  const sinSeccionQ = biblio.preguntas.filter((p) => !p.seccion).length;
+  const clavesBiblioteca = new Set(biblio.preguntas.map((p) => claveTrivia(p.text)));
+  useEffect(() => {
+    if (enSeccionValida(seccionFiltro, nombresSeccionesQ, sinSeccionQ)) return;
+    setSeccionFiltro(TODAS);
+  });
   const phase = gameState?.active_game === "trivia" ? gameState?.trivia_state || "idle" : "idle";
   const enElAire = gameState?.active_game === "trivia";
   const curQ = gameState?.trivia_question ?? 0;
@@ -5057,17 +5285,6 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
       return next;
     });
   };
-
-  // Las preguntas cargadas viven sólo en memoria hasta que se lanza la ronda:
-  // un F5 acá las borra todas. El aviso del navegador es la única red de
-  // contención mientras no haya borrador persistido.
-  const hayBorradorSinLanzar = qs.length > 0 && !roundId;
-  useEffect(() => {
-    if (!hayBorradorSinLanzar) return undefined;
-    const avisar = (e) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
-  }, [hayBorradorSinLanzar]);
 
   // Toda acción pasa por acá: un solo vuelo a la vez y el error queda visible.
   // Sin esto, un doble click en Lanzar insertaba las preguntas dos veces y uno
@@ -5251,10 +5468,11 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
   // opciones (aunque las opciones no se vean en la lista).
   const sinAcentos = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const bibFiltro = sinAcentos(bibBusqueda.trim());
+  const deSeccionQ = biblio.preguntas.filter((p) => enSeccion(p, seccionFiltro));
   const bibLista  = bibFiltro
-    ? biblio.preguntas.filter((p) => sinAcentos(p.text).includes(bibFiltro)
+    ? deSeccionQ.filter((p) => sinAcentos(p.text).includes(bibFiltro)
         || p.opts.some((o) => sinAcentos(o).includes(bibFiltro)))
-    : biblio.preguntas;
+    : deSeccionQ;
   const preparando = phase === "idle";
 
   const bibliotecaCard = (
@@ -5263,11 +5481,19 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
         <div className="ctitle" style={{margin:0,flex:1}}>📚 Biblioteca de preguntas</div>
         {!biblio.error && (
           <div style={{fontSize:9.5,color:"rgba(240,232,255,.35)"}}>
-            {bibFiltro ? `${bibLista.length} de ${biblio.preguntas.length}` : biblio.preguntas.length}
+            {bibLista.length !== biblio.preguntas.length ? `${bibLista.length} de ${biblio.preguntas.length}` : biblio.preguntas.length}
           </div>
+        )}
+        {!simple && (
+          <button className="btn btn-g" style={{padding:"4px 10px",fontSize:10}}
+            title="Cargar preguntas desde un archivo .txt o .csv"
+            onClick={()=>setImportandoQ(true)}>📥 Importar</button>
         )}
         {!simple && <button className="dd-lib-add" title="Nueva pregunta" aria-label="Nueva pregunta" onClick={abrirNueva}>+</button>}
       </div>
+
+      <FiltroSecciones secciones={seccionesQ} sinSeccion={sinSeccionQ} total={biblio.preguntas.length}
+        valor={seccionFiltro} onCambiar={setSeccionFiltro} color="#A855F7"/>
 
       {/* «Cargando» sólo en la carga inicial: los refrescos después de guardar,
           editar o borrar no hacen desaparecer la lista. */}
@@ -5303,7 +5529,10 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
                   <button className="dd-lib-radio" role="checkbox" aria-checked={sel}
                     aria-label={sel ? "Quitar de la selección" : "Seleccionar"}
                     onClick={()=>alternarSel(p.id)}>{sel ? "●" : "○"}</button>
-                  <div className="dd-lib-q" onClick={()=>alternarSel(p.id)} title={p.text}>{p.text}</div>
+                  <div className="dd-lib-q" onClick={()=>alternarSel(p.id)} title={p.text}>
+                    {seccionFiltro === TODAS && p.seccion && <><span className="bib-tag">{p.seccion}</span> </>}
+                    {p.text}
+                  </div>
                   {!simple && (<>
                     <button className="dd-lib-ic" title="Editar pregunta" aria-label="Editar pregunta"
                       onClick={()=>abrirEditar(p)}>✏️</button>
@@ -5356,7 +5585,22 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
                   «Agregar seleccionadas a ronda».
                 </div>
               )}
-              {qs.map((q,i)=>(
+              {/* Anfitrión: sólo lee. Las preguntas las elige Producción; acá
+                  se ven con todas las respuestas y la correcta marcada. */}
+              {simple && qs.length===0 && (
+                <div className="dd-anf-vacio">Producción todavía no eligió las preguntas.</div>
+              )}
+              {simple && qs.map((q,i)=>(
+                <div key={i} className="dd-anf-q">
+                  <div className="dd-anf-q-t"><span>{i+1}.</span> {q.text}</div>
+                  {q.opts.map((o,oi)=>(
+                    <div key={oi} className={`dd-anf-op${q.correct===oi?" ok":""}`}>
+                      <b>{String.fromCharCode(65+oi)}</b> {o}{q.correct===oi && <em>✓ Correcta</em>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {!simple && qs.map((q,i)=>(
                 <div key={i} style={{padding:"7px 9px",background:"rgba(240,232,255,.04)",
                   border:"1px solid rgba(240,232,255,.07)",borderRadius:9,marginBottom:5}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
@@ -5388,11 +5632,8 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
                   </div>
                 </div>
               ))}
-              {hayBorradorSinLanzar && (
-                <div style={{fontSize:9.5,color:"rgba(255,214,0,.55)",marginTop:6,lineHeight:1.5}}>
-                  ⚠️ La ronda todavía no se guardó: vive en esta pestaña hasta que lances la
-                  partida. Si recargás, se pierde. La biblioteca sí queda guardada.
-                </div>
+              {borradorError && (
+                <div style={{fontSize:10.5,color:"#FCA5A5",marginTop:6,lineHeight:1.5}}>{borradorError}</div>
               )}
             </div>
           )}
@@ -5424,7 +5665,17 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
                 {qs[curQ].text}
               </div>
 
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+              {/* Anfitrión: la correcta siempre marcada, también antes de revelar. */}
+              {simple && (
+                <div style={{marginBottom:12}}>
+                  {qs[curQ].opts.map((o,oi)=>(
+                    <div key={oi} className={`dd-anf-op${qs[curQ].correct===oi?" ok":""}`}>
+                      <b>{String.fromCharCode(65+oi)}</b> {o}{qs[curQ].correct===oi && <em>✓ Correcta</em>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!simple && <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
                 {qs[curQ].opts.map((o,oi)=>(
                   <div key={oi} style={{
                     padding:"6px 10px",borderRadius:8,fontSize:11,
@@ -5434,7 +5685,7 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
                     {String.fromCharCode(65+oi)}. {o}
                   </div>
                 ))}
-              </div>
+              </div>}
 
               {/* Controles de la partida — propios de la fase, no de la barra. */}
               <div style={{display:"flex",gap:7}}>
@@ -5479,7 +5730,8 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
         {/* ══ Columna lateral: barra → biblioteca → configuración ═══════════ */}
         <div>
           {barraOperativa}
-          {bibliotecaCard}
+          {/* Anfitrión: no elige preguntas, así que no ve la biblioteca. */}
+          {!simple && bibliotecaCard}
           {/* El cupón lo define el administrador; el Anfitrión lanza con el de siempre. */}
           {!simple && <div className="card">
             <div className="ctitle">⚙️ Configuración</div>
@@ -5488,7 +5740,7 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
             </div>
             {/* Mismo estado `coupon` de siempre: se entrega a startTrivia al
                 lanzar. Con la partida en curso ya se usó, así que no se edita. */}
-            <input className="inp" value={coupon} onChange={e=>setCoupon(e.target.value)}
+            <input className="inp" value={coupon} maxLength={40} onChange={e=>setCoupon(e.target.value)}
               placeholder="Ej: BEER50" disabled={phase!=="idle"}
               style={{marginBottom:8,opacity:phase!=="idle"?.55:1}}/>
             {/* Resumen compacto, derivado de estado existente. */}
@@ -5505,11 +5757,26 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
         <PreguntaModal
           key={modal.modo === "editar" ? modal.pregunta.id : "nueva"}
           modo={modal.modo}
-          inicial={modal.modo === "editar" ? modal.pregunta : null}
+          inicial={modal.modo === "editar" ? modal.pregunta : { seccion: seccionDelFiltro(seccionFiltro) }}
+          secciones={seccionesQ}
           guardando={biblio.guardando}
           error={modalErr}
           onCancelar={cerrarModal}
-          onGuardar={guardarModal}/>
+          onGuardar={(q) => guardarModal({ ...q, seccion: unificarSeccion(q.seccion, nombresSeccionesQ) })}/>
+      )}
+      {importandoQ && (
+        <ImportarModal titulo="Importar preguntas" formato={FORMATO_PREGUNTAS} ejemplo="preguntas-ejemplo"
+          secciones={seccionesQ} seccionInicial={seccionDelFiltro(seccionFiltro)}
+          parsear={(texto, csv, seccionPorDefecto) => parsearPreguntas(texto, {
+            csv, seccionPorDefecto, secciones: nombresSeccionesQ, clave: claveTrivia,
+            existe: (t) => clavesBiblioteca.has(claveTrivia(t)),
+          })}
+          onImportar={async (items) => {
+            const r = await biblio.importar(items);
+            if (!r) throw new Error("Hay otra operación de la biblioteca en curso. Probá de nuevo.");
+            return r;
+          }}
+          onCerrar={()=>setImportandoQ(false)}/>
       )}
       {borrando && (
         <ConfirmarBorradoModal

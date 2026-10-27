@@ -31,7 +31,7 @@ import {
 
 const DUPLICADA = "Esa palabra ya está en la biblioteca.";
 
-const COLUMNAS = "id,word,created_by,created_at,updated_at";
+const COLUMNAS = "id,word,seccion,created_by,created_at,updated_at";
 
 /** Alfabético: es como el operador busca una palabra en una lista. */
 const ordenar = (lista) =>
@@ -106,7 +106,7 @@ export function useBibliotecaPalabras() {
     return palabras.some((p) => p.word === w && p.id !== exceptoId);
   }, [palabras]);
 
-  const agregar = useCallback(async (word) => {
+  const agregar = useCallback(async (word, seccion = null) => {
     const w = preparar(word);
     // Mismo patrón que `createPlaylist` en useInternalPlaylists: el id del admin
     // sale de la sesión que ya tiene el cliente de Supabase, sin prop drilling.
@@ -114,7 +114,7 @@ export function useBibliotecaPalabras() {
 
     const { data, error: e } = await supabase
       .from("palabra_biblioteca")
-      .insert({ word: w, created_by: user?.id ?? null })
+      .insert({ word: w, seccion: seccion || null, created_by: user?.id ?? null })
       .select(COLUMNAS)
       .single();
 
@@ -123,11 +123,11 @@ export function useBibliotecaPalabras() {
     return data;
   }, []);
 
-  const editar = useCallback(async (id, word) => {
+  const editar = useCallback(async (id, word, seccion = null) => {
     const w = preparar(word);
     const { data, error: e } = await supabase
       .from("palabra_biblioteca")
-      .update({ word: w })
+      .update({ word: w, seccion: seccion || null })
       .eq("id", id)
       .select(COLUMNAS)
       .single();
@@ -150,5 +150,31 @@ export function useBibliotecaPalabras() {
     setPalabras((ps) => ps.filter((p) => p.id !== id));
   }, []);
 
-  return { palabras, loading, error, existe, agregar, editar, eliminar, refresh };
+  /**
+   * Alta en bloque desde un archivo (ya validado por importar.js). Las que
+   * otro admin cargó en el medio no frenan el resto: `ignoreDuplicates` las
+   * saltea contra el UNIQUE (word).
+   */
+  const importar = useCallback(async (items) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    let agregadas = 0;
+    for (let i = 0; i < items.length; i += 200) {
+      const lote = items.slice(i, i + 200).map((it) => ({
+        word: preparar(it.word), seccion: it.seccion || null, created_by: user?.id ?? null,
+      }));
+      const { data, error: e } = await supabase
+        .from("palabra_biblioteca")
+        .upsert(lote, { onConflict: "word", ignoreDuplicates: true })
+        .select("id");
+      if (e) {
+        await refresh();
+        throw new Error(mensajeError(e, `No pudimos importar las palabras${agregadas ? ` (se cargaron ${agregadas})` : ""}.`));
+      }
+      agregadas += (data || []).length;
+    }
+    await refresh();
+    return { agregadas, repetidas: items.length - agregadas };
+  }, [refresh]);
+
+  return { palabras, loading, error, existe, agregar, editar, eliminar, importar, refresh };
 }
