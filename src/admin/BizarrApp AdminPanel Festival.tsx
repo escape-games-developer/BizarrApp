@@ -3668,7 +3668,9 @@ function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
           <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700, lineHeight:1.5}}>{err}</div>
         </div>
       )}
-      {!err && nota && (
+      {/* Anfitrión: sin carteles de confirmación (ronda lanzada, DJ Democracy…):
+          lo que pasó ya se ve en el estado y en la pastilla AL AIRE. */}
+      {!err && nota && !simple && (
         <div className="card" style={{borderColor:"rgba(0,245,160,.3)", marginBottom:10}}>
           <div style={{fontSize:11.5, color:"#00F5A0", fontWeight:700}}>{nota}</div>
         </div>
@@ -3681,8 +3683,34 @@ function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
           Abajo de 1040px `.sum-split` apila las columnas. */}
       <div className="sum-split">
       <div>
+      {/* ── Preparación, Anfitrión: igual que Arma la palabra (título solo y
+          conectados en su propia tarjeta). ── */}
+      {!enJuego && simple && (
+        <>
+          <div className="card" style={{marginBottom:10}}>
+            <div className="ctitle" style={{margin:0}}>🔢 Sumate que sumamos</div>
+          </div>
+          <div className="card">
+            <div style={{display:"flex", alignItems:"center", gap:8}}>
+              <div style={{flex:1, fontSize:11.5, color:"rgba(240,232,255,.55)"}}>
+                Participantes conectados
+              </div>
+              <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:22,
+                color: activos >= 2 ? COL : "rgba(240,232,255,.25)"}}>{activos}</div>
+              <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
+                onClick={leerConectados}>↻</button>
+            </div>
+            {activos < 2 && (
+              <div style={{fontSize:10.5, color:"#FCA5A5", marginTop:10, textAlign:"center"}}>
+                Se necesitan al menos 2 participantes conectados.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ── Preparación: sin ronda viva ── */}
-      {!enJuego && (
+      {!enJuego && !simple && (
         <div className="card">
           <div className="ctitle">🔢 Sumate que sumamos</div>
           <p style={{fontSize:11.5, color:"rgba(240,232,255,.4)", lineHeight:1.5, marginBottom:12}}>
@@ -3760,10 +3788,10 @@ function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
               <button className="btn btn-g" style={{padding:"3px 10px", fontSize:10}}
                 onClick={leerConectados}>↻</button>
             </div>
-            <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", marginTop:10, lineHeight:1.5}}>
+            {!simple && <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", marginTop:10, lineHeight:1.5}}>
               La gente se junta en el bar y se acerca al escenario. Cuando el staff
               resuelva, lanzá una ronda nueva o cerrá el juego.
-            </div>
+            </div>}
           </div>
 
           {/* ── Objetivo imposible ──
@@ -3786,15 +3814,18 @@ function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
 
           {listaParticipantes}
 
-          <button className="btn btn-g btn-full" style={{marginBottom:7}}
-            disabled={busy} onClick={() => chequearObjetivo(false)}>
-            🎯 Verificar objetivo
-          </button>
-          <div style={{fontSize:9.5, color:"rgba(240,232,255,.28)", textAlign:"center",
-            marginBottom:10, lineHeight:1.5}}>
-            Comprueba si todavía existe algún grupo posible con los presentes.
-            No elige ganador.
-          </div>
+          {/* Anfitrión: sin verificador; el staff resuelve en el bar. */}
+          {!simple && <>
+            <button className="btn btn-g btn-full" style={{marginBottom:7}}
+              disabled={busy} onClick={() => chequearObjetivo(false)}>
+              🎯 Verificar objetivo
+            </button>
+            <div style={{fontSize:9.5, color:"rgba(240,232,255,.28)", textAlign:"center",
+              marginBottom:10, lineHeight:1.5}}>
+              Comprueba si todavía existe algún grupo posible con los presentes.
+              No elige ganador.
+            </div>
+          </>}
         </>
       )}
 
@@ -4314,7 +4345,9 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
           <div style={{fontSize:11.5, color:"#FF2D78", fontWeight:700}}>✕ {err}</div>
         </div>
       )}
-      {!err && nota && (
+      {/* Anfitrión: sin carteles de confirmación (ronda lanzada, DJ Democracy…):
+          lo que pasó ya se ve en el estado y en la pastilla AL AIRE. */}
+      {!err && nota && !simple && (
         <div className="card" style={{borderColor:"rgba(0,245,160,.3)", marginBottom:10}}>
           <div style={{fontSize:11.5, color:"#00F5A0", fontWeight:700}}>{nota}</div>
         </div>
@@ -4339,12 +4372,12 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
                   operativa de la columna derecha, y la palabra elegida se ve
                   sólo en la biblioteca (fila resaltada). */}
               <div className="card" style={{marginBottom:10}}>
-                <div className="ctitle">🔤 Arma la palabra</div>
-                <div style={{fontSize:11, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
+                <div className="ctitle" style={simple ? {margin:0} : undefined}>🔤 Arma la palabra</div>
+                {!simple && <div style={{fontSize:11, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
                   Elegí una palabra en la biblioteca y usá la barra de acciones:
                   📢 Anunciar · 🔄 Nueva palabra · ⏹ Finalizar. El servidor verifica
                   los participantes conectados al lanzar.
-                </div>
+                </div>}
               </div>
   
               <div className="card">
@@ -4428,10 +4461,10 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
                   ))}
                 </div>
     
-                <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
+                {!simple && <div style={{fontSize:10.5, color:"rgba(240,232,255,.4)", lineHeight:1.5}}>
                   La gente se busca en el bar y se acerca al escenario. Cuando el staff
                   resuelva, elegí la palabra siguiente o cerrá el juego.
-                </div>
+                </div>}
               </div>
     
               {/* Lista informativa. NO seleccionable: acá no se valida nada. */}
@@ -5317,7 +5350,7 @@ function TriviaPanel({sec, controls, sessionId, gameState, simple = false}){
           {phase==="idle"&&(
             <div className="card">
               <div className="ctitle">Preguntas de la ronda · {qs.length}/{MAX_TRIVIA_Q}</div>
-              {qs.length===0&&(
+              {qs.length===0&&!simple&&(
                 <div style={{fontSize:11,color:"rgba(240,232,255,.3)",padding:"4px 0 2px",lineHeight:1.5}}>
                   Todavía no hay preguntas en la ronda. Seleccionalas en la biblioteca y tocá
                   «Agregar seleccionadas a ronda».
