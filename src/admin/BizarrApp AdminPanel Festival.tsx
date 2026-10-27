@@ -7,7 +7,7 @@ import { useDueloPostulaciones } from "../hooks/realtime/useDueloPostulaciones";
 import { useDueloRound } from "../hooks/realtime/useDueloRound";
 import { useReglasDuelo, motivoDuracionInvalida, motivoAplausosInvalido } from "../hooks/useReglasDuelo";
 import { useMessages } from "../hooks/realtime/useMessages";
-import { usePresence } from "../hooks/realtime/usePresence";
+import { useConectados, estaActivo } from "../hooks/realtime/useConectados";
 import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
 import { useTriviaAccumulated, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
@@ -2303,7 +2303,6 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
   } = useBibliotecaPremiosRey();
 
   const [validando,   setValidando]   = useState(false); // dry-run en curso
-  const [candidates,  setCandidates]  = useState(null);
   const [busy,        setBusy]        = useState(false);
   const [actionError, setActionError] = useState(null);
 
@@ -2415,20 +2414,9 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
   // era la marca legacy de ganadores previos y Rey del Orto V1 no la lee ni la
   // muestra. Quién puede ganar de verdad lo decide `rey_resolver_sorteo`
   // cruzando presencia con `rey_ganadores` de la jornada.
-  const loadCandidates = useCallback(async () => {
-    if (!sessionId) { setCandidates(null); return []; }
-    const { data, error } = await supabase
-      .from("connected_users")
-      .select("user_id,name,avatar_emoji,last_seen")
-      .eq("session_id", sessionId)
-      .order("last_seen", { ascending: false });
-    if (error) { setActionError("No pudimos leer los conectados."); return null; }
-    setCandidates(data || []);
-    return data || [];
-  }, [sessionId]);
-  // Relee al entrar al panel, al cambiar de fase y al pasar a la placa de
-  // anuncio. Sin intervalos: para refrescar en el medio está el botón ↻.
-  useEffect(() => { loadCandidates(); }, [loadCandidates, phase, announcing]);
+  // En vivo (Realtime): el que entra aparece sin tocar ↻.
+  const { filas: candidates, error: errConectados, recargar: loadCandidates } = useConectados(sessionId);
+  useEffect(() => { if (errConectados) setActionError(errConectados); }, [errConectados]);
 
   const presentes = reyPresentes(candidates);
   const inactivos = (candidates || []).filter(c => !reyActivo(c));
@@ -3456,7 +3444,6 @@ function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
   const { round, assignments, lanzarRonda, cancelarRonda, verificarObjetivo } =
     useSumateRound(sessionId, { admin: true });
 
-  const [conectados, setConectados] = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState(null);
   const [nota,  setNota]  = useState(null);
@@ -3481,15 +3468,10 @@ function SumaPanel({sec, controls, sessionId, gameState, simple = false}){
   // última ronda de la sesión. Todo lo que no está `playing` es preparación.
   const cancelada  = round?.status === "cancelled";
 
-  // Presencia: misma ventana de 2 minutos y misma tabla que usa Rey del Orto.
-  const leerConectados = useCallback(async () => {
-    if (!sessionId) { setConectados(null); return; }
-    const { data, error } = await supabase
-      .from("connected_users").select("user_id,last_seen").eq("session_id", sessionId);
-    if (error) { setErr("No pudimos leer los conectados."); return; }
-    setConectados(data || []);
-  }, [sessionId]);
-  useEffect(() => { leerConectados(); }, [leerConectados, round?.id]);
+  // Presencia: misma ventana de 2 minutos y misma tabla que usa Rey del Orto,
+  // en vivo (Realtime).
+  const { filas: conectados, error: errConectados, recargar: leerConectados } = useConectados(sessionId);
+  useEffect(() => { if (errConectados) setErr(errConectados); }, [errConectados]);
   const activos = (conectados || []).filter(reyActivo).length;
 
   useEffect(() => { setObjetivoPosible(null); }, [round?.id]);
@@ -4138,7 +4120,6 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
   // persiste, no toca game_state, no crea ronda y no llega ni a la TV ni a los
   // celulares. Seleccionar y lanzar son dos cosas distintas.
   const [elegidaId, setElegidaId] = useState(null);
-  const [conectados, setConectados] = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState(null);
   const [nota,  setNota]  = useState(null);
@@ -4151,15 +4132,9 @@ function PalabraPanel({sec, controls, sessionId, gameState, simple = false}){
   const anunciado = gameState?.active_placa === "game_palabra" && !enElAire;
 
   // Presencia: misma ventana de 2 minutos y misma tabla que Rey del Orto y
-  // Sumate. No se inventa una fuente nueva de "tiene la app abierta".
-  const leerConectados = useCallback(async () => {
-    if (!sessionId) { setConectados(null); return; }
-    const { data, error } = await supabase
-      .from("connected_users").select("user_id,last_seen").eq("session_id", sessionId);
-    if (error) { setErr("No pudimos leer los conectados."); return; }
-    setConectados(data || []);
-  }, [sessionId]);
-  useEffect(() => { leerConectados(); }, [leerConectados, round?.id]);
+  // Sumate. No se inventa una fuente nueva de "tiene la app abierta". En vivo.
+  const { filas: conectados, error: errConectados, recargar: leerConectados } = useConectados(sessionId);
+  useEffect(() => { if (errConectados) setErr(errConectados); }, [errConectados]);
   const activos = (conectados || []).filter(reyActivo).length;
 
   // Candado de acciones. `busy` (estado) deshabilita los botones, pero React
@@ -6519,7 +6494,9 @@ export default function AdminPanel(){
     const newVal = typeof val === "function" ? val(zocaloOn) : val;
     controls?.toggleZocalo(newVal);
   };
-  const { connectedCount } = usePresence(session?.id, null);
+  // 👥 en vivo: cuenta los activos (heartbeat en los últimos 2 min).
+  const { filas: filasConectadas } = useConectados(session?.id);
+  const connectedCount = (filasConectadas || []).filter(estaActivo).length;
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
   const pantallaActiva = pantallaGlobal.event?.status === "live";
   const { pending, approved, approve, reject } = useMessages(session?.id, "admin");
