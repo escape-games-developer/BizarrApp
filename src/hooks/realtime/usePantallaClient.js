@@ -134,10 +134,16 @@ export function usePantallaClient(event, user) {
     return () => { supabase.removeChannel(channel); };
   }, [canPlay, eventId, userId, refreshVotes]);
 
-  // El kick se recalcula cuando cambia la canción (los votos son por tema) y
-  // cada 30 s: si aparece o se muestra depende de cuántos invitados hay activos
-  // (mínimo de conectados), que cambia sin que cambie la canción.
-  useEffect(() => { refreshKick(); }, [event?.current_item_id, refreshKick]);
+  // El kick se recalcula cuando cambia la canción (los votos son por tema),
+  // cuando el admin toca las reglas de Sacar Tema o entra un voto (la fila del
+  // evento llega por realtime) y cada 30 s: si aparece o se muestra depende de
+  // cuántos invitados hay activos (mínimo de conectados), que cambia sin que
+  // cambie la canción.
+  useEffect(() => { refreshKick(); }, [
+    event?.current_item_id, event?.kick_enabled, event?.kick_style, event?.kick_min_connected,
+    event?.kick_min_votes, event?.kick_threshold_pct, event?.kick_button_text,
+    event?.kick_votes_current, event?.kick_meter, refreshKick,
+  ]);
   useEffect(() => {
     if (!joined) return undefined;
     const id = setInterval(refreshKick, KICK_RELEER_MS);
@@ -208,8 +214,14 @@ export function usePantallaClient(event, user) {
     catch (err) { console.error("[usePantallaClient] reaccion:", err); }
   }, [eventId, userId, pop]);
 
+  // Apagado en el panel: se oculta ya, sin esperar la relectura. Staff y DJ no
+  // cuentan como activos para el kick, así que tampoco lo votan (lo rechaza
+  // también el servidor).
+  const kickVisible = kick && (event?.kick_enabled === false || role === "staff" || role === "dj")
+    ? { ...kick, enabled: false } : kick;
+
   return {
-    role, joined, myVotes, powers, kick, busy, error, emojis,
+    role, joined, myVotes, powers, kick: kickVisible, busy, error, emojis,
     powerOf, voteOn, superUsed, superLeft, superQuota, superOn,
     vote, superVote, toggleKick, voteKickFijo, react,
     clearError: () => setError(null),

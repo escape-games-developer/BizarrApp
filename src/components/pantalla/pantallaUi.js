@@ -85,6 +85,7 @@ const ERRORES = {
   "voting closed":                 "La votación de este tema cerró: se está preparando la próxima canción.",
   "kick disabled":                 "Sacar Tema está deshabilitado en este evento.",
   "kick hidden":                   "Todavía no hay suficiente gente conectada para sacar temas.",
+  "kick staff":                    "El staff y el DJ no votan para sacar temas.",
   "already voted":                 "Ya votaste en este tema.",
   "song saved":                    "Este tema ya quedó a salvo.",
   "wrong kick mode":               "El modo de votación cambió. Actualizá la pantalla.",
