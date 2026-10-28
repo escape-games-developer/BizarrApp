@@ -12,7 +12,7 @@ import { useVideoRequests } from "../hooks/realtime/useVideoRequests";
 import { useTriviaAccumulated, useTriviaVotes } from "../hooks/realtime/useTriviaVotes";
 import { useInternalPlaylists } from "../hooks/realtime/useInternalPlaylists";
 import { useEscenarioQueue } from "../hooks/realtime/useEscenarioQueue";
-import { usePantallaMensaje, QR_DE_JUEGO, PLACA_DE_JUEGO } from "../hooks/usePantallaQr";
+import { usePantallaMensaje } from "../hooks/usePantallaQr";
 import PlaylistsPanel from "./PlaylistsPanel";
 import NovedadesPanel from "./NovedadesPanel";
 import DisenadorDj from "./disenador/DisenadorDj";
@@ -52,8 +52,8 @@ import { useArmaPalabraRound, normalizarPalabra, palabraValida, motivoPalabraInv
 import { useBibliotecaPalabras } from "../hooks/useBibliotecaPalabras";
 import { useBibliotecaPreguntasTrivia } from "../hooks/useBibliotecaPreguntasTrivia";
 import { useTriviaBorrador } from "../hooks/realtime/useTriviaBorrador";
+import { useReyBorrador } from "../hooks/realtime/useReyBorrador";
 import { TEAMS } from "../constants/theme";
-import { usePermisosAnfitrion } from "../hooks/usePermisosAnfitrion";
 import {
   ImportarModal, FiltroSecciones, CampoSeccion, CSS_SECCIONES,
   TODAS, enSeccion, enSeccionValida, seccionDelFiltro,
@@ -568,11 +568,9 @@ const SECS = [
 // poder reactivarlos, pero no los exponemos en los accesos operativos.
 const FROZEN_MODULE_IDS = new Set(["karaoke"]);
 
-// Lo que maneja el Anfitrión desde la tablet, por grupo y en este orden.
-const JUEGOS_ANFITRION = [
-  { grupo: "Juegos",    ids: ["rey", "suma", "palabra", "trivia"] },
-  { grupo: "Escenario", ids: ["duelo", "ftl", "pt"] },
-];
+// Lo que ve el Anfitrión en la tablet (sólo lectura: opera Producción). El
+// resto de los módulos no le hace falta para guiar al público.
+const JUEGOS_ANFITRION = ["rey", "suma", "palabra", "trivia", "ftl", "pt"];
 
 // Pantallas internas que no están en SECS: se abren desde Lanzar (y la campana)
 // y las ve quien puede ver Lanzar.
@@ -2573,8 +2571,12 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
   const [actionError, setActionError] = useState(null);
 
   // ── Estado OPERATIVO LOCAL de la biblioteca ───────────────────────────────
-  // Nada de esto se persiste ni toca game_state. Seleccionar ≠ lanzar.
-  const [premioId,  setPremioId]  = useState(null);  // premio que se está preparando
+  // Nada de esto toca game_state. Seleccionar ≠ lanzar.
+  // Premio que se está preparando: vive en `rey_borradores` para que el
+  // Anfitrión lo vea en su tablet antes del sorteo. Elegirlo no lanza nada.
+  const { premio: premioPreparado, setPremio: setPremioPreparado } = useReyBorrador(sessionId);
+  const premioId = premioPreparado?.id ?? null;
+  const setPremioId = (id) => setPremioPreparado(id ? premios.find((p) => p.id === id) || null : null);
   const [busqueda,  setBusqueda]  = useState("");    // filtro local
   const [nuevoNom,  setNuevoNom]  = useState("");    // alta: nombre
   const [nuevoDet,  setNuevoDet]  = useState("");    // alta: detalle opcional
@@ -2833,6 +2835,13 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
   // si el operador lo edita, la tarjeta de arriba se actualiza sola, y si lo
   // borra, la selección cae al empty state sin lógica extra.
   const premioElegido = premios.find((p) => p.id === premioId) || null;
+  // El Anfitrión lee la copia guardada: si el premio se edita, se reescribe.
+  useEffect(() => {
+    if (!premioElegido) return;
+    if (premioElegido.nombre === premioPreparado?.nombre
+      && (premioElegido.detalle || "") === (premioPreparado?.detalle || "")) return;
+    setPremioPreparado(premioElegido);
+  }, [premioElegido?.nombre, premioElegido?.detalle]);
 
   // Filtro LOCAL sobre lo que ya trajo el hook: ni una consulta por tecla.
   // Busca en nombre y detalle, sin distinguir mayúsculas ni acentos de espacios.
@@ -2862,7 +2871,7 @@ function ReyPanel({sec, controls, sessionId, gameState, simple = false}){
     const creado = await agregarPremio(nuevoNom, nuevoDet);
     setNuevoNom(""); setNuevoDet("");
     // Recién cargado es, casi siempre, el que se va a usar.
-    setPremioId(creado.id);
+    setPremioPreparado(creado);
   });
 
   // Edición en línea. UPDATE por id; no toca ningún sorteo pasado, porque el
@@ -6904,8 +6913,6 @@ export default function AdminPanel(){
   // 👥 en vivo: cuenta los activos (heartbeat en los últimos 2 min).
   const { filas: filasConectadas } = useConectados(session?.id);
   const connectedCount = (filasConectadas || []).filter(estaActivo).length;
-  // Ajustes → Permisos del anfitrión: qué puede hacer en la tablet.
-  const permisosAnfitrion = usePermisosAnfitrion();
   const screenAudioOn = gameState?.screen_audio_enabled ?? false;
   const pantallaActiva = pantallaGlobal.event?.status === "live";
   const { pending, approved, approve, reject } = useMessages(session?.id, "admin");
@@ -7066,30 +7073,13 @@ export default function AdminPanel(){
   const salir = async()=>{ await supabase.auth.signOut(); window.location.href="/admin"; };
 
   if (vista === "anfitrion") {
-    const juegos = JUEGOS_ANFITRION.flatMap(({grupo, ids})=>ids
-      .map(id=>visibleSecs.find(s=>s.id===id)).filter(Boolean).map(s=>({...s, grupo})));
-    const juegoAlAire = QR_DE_JUEGO[gameState?.active_game]
-      || (LIVE_ESCENARIO_LABELS[gameState?.active_escenario] ? gameState.active_escenario : null)
-      || PLACA_DE_JUEGO[gameState?.active_placa]?.id || null;
-    const renderJuego = (s) => {
-      const props = {sec:s, controls, sessionId:session?.id ?? null, gameState, simple:true, permisos:permisosAnfitrion};
-      const escenario = {...props, goTo:()=>{}, puedeDisenar:false};
-      switch (s.id) {
-        case "rey":     return <ReyPanel {...props}/>;
-        case "suma":    return <SumaPanel {...props}/>;
-        case "palabra": return <PalabraPanel {...props}/>;
-        case "trivia":  return <TriviaPanel {...props}/>;
-        case "duelo":   return <DueloPanel {...escenario}/>;
-        case "ftl":     return <JuegoEscenarioPanel {...escenario} type="ftl"/>;
-        case "pt":      return <JuegoEscenarioPanel {...escenario} type="pt"/>;
-        default:        return null;
-      }
-    };
+    const juegos = JUEGOS_ANFITRION.filter(id=>visibleSecs.some(s=>s.id===id));
     return (
       <>
         <style>{css}</style>
-        <PanelAnfitrion juegos={juegos} juegoAlAire={juegoAlAire} alAire={estadoEnVivo(gameState)?.label || null}
-          conectados={connectedCount} renderJuego={renderJuego} selectorVista={selectorVista} onSalir={salir}/>
+        <PanelAnfitrion juegos={juegos} gameState={gameState} sessionId={session?.id ?? null}
+          alAire={estadoEnVivo(gameState)?.label || null} conectados={connectedCount}
+          selectorVista={selectorVista} onSalir={salir}/>
       </>
     );
   }
