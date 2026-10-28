@@ -397,11 +397,11 @@ function MonitorEscenario({ type, alAire, gameState }) {
  * Lo que el Anfitrión le dice a cada participante, DEBAJO de la tarjeta: el
  * nombre chiquito y la frase grande, latiendo. Aliento en verde, desaliento en rosa.
  */
-function Frases({ items }) {
+function Frases({ items, columnas = false }) {
   const visibles = items.filter((f) => f.texto);
   if (!visibles.length) return null;
   return (
-    <div className="mon-frases">
+    <div className={`mon-frases${columnas ? " cols" : ""}`}>
       <div className="mon-k">🎙️ Decile</div>
       {visibles.map((f, i) => (
         <div key={i} className={`mon-frase ${f.tipo}`}>
@@ -532,7 +532,7 @@ function MonitorDuelo({ alAire, gameState, sessionId }) {
         <div style={{ width: `${pct.p1 + pct.p2 === 0 ? 50 : pct.p1}%` }}/>
       </div>
       {fase === "voting" && frases.activas && (
-        <Frases items={duelistas.filter(Boolean).map((d, i) => {
+        <Frases columnas items={duelistas.filter(Boolean).map((d, i) => {
           const tipo = tipoDuelista(pct[`p${i + 1}`], pct.p1 + pct.p2 > 0);
           return { nombre: d.name, col: DUELO_COL[i], tipo,
             texto: fraseDe(frases[tipo], Math.floor(now / FRASE_CADA_MS), i) };
@@ -624,6 +624,10 @@ export const CSS_MONITOR = `
   .mon-llamados{width:100%;max-width:620px;margin:6px 0 0;}
   /* Frases: debajo de la tarjeta, sin caja; letra de display que late. */
   .mon-frases{display:flex;flex-direction:column;gap:18px;padding:6px 4px 10px;text-align:center;}
+  /* Duelo: cada frase en la columna de su duelista, como las tarjetas de arriba. */
+  .mon-frases.cols{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;row-gap:10px;align-items:start;}
+  .mon-frases.cols > .mon-k{grid-column:1 / -1;}
+  .mon-frases.cols .mon-frase p{font-size:clamp(20px,3.2vw,32px);}
   .mon-frase span{display:block;font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px;}
   .mon-frase p{margin:0;font-family:'Bricolage Grotesque','DM Sans',sans-serif;font-weight:800;
     font-size:clamp(24px,4.2vw,38px);line-height:1.15;letter-spacing:-.01em;text-wrap:balance;
