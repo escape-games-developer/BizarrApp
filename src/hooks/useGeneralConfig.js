@@ -16,6 +16,9 @@ import { supabase } from "../lib/supabase";
  *                    Follow the Leader / Personal Trainer (migración 20261022080000).
  *   estiloCards    → el contenedor de postulación (FTL, PT, Duelo) usa el estilo
  *                    de las cards del catálogo (migración 20261022100000).
+ *   frasesAnfitrion → la tablet del Anfitrión propone frases de aliento y
+ *                    desaliento (bibliotecas `anfitrion_frases`). Sin migración:
+ *                    si falta en la fila, vale prendida.
  *
  * Mismo contrato que useRegistroConfig: el cliente lee por RPC pública y el
  * Admin guarda con control de concurrencia sobre el `updated_at` crudo.
@@ -28,9 +31,9 @@ const VERSION = 1;
 /** Lo que había antes de que existiera la configuración. */
 export const GENERAL_POR_DEFECTO = Object.freeze({
   geoObligatoria: true, modoInvitado: true, catalogoJuegos: true,
-  titulos: true, vestuarioFtl: true, vestuarioPt: true, estiloCards: true,
+  titulos: true, vestuarioFtl: true, vestuarioPt: true, estiloCards: true, frasesAnfitrion: true,
 });
-const OPCIONALES = ["catalogoJuegos", "titulos", "vestuarioFtl", "vestuarioPt", "estiloCards"];
+const OPCIONALES = ["catalogoJuegos", "titulos", "vestuarioFtl", "vestuarioPt", "estiloCards", "frasesAnfitrion"];
 
 function normalizar(value) {
   if (!value || typeof value.geoObligatoria !== "boolean" || typeof value.modoInvitado !== "boolean") return null;

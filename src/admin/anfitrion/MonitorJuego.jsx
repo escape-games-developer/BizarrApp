@@ -16,8 +16,10 @@ import { useDueloRound } from "../../hooks/realtime/useDueloRound";
 import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
 import { useDueloBorrador } from "../../hooks/realtime/useDueloBorrador";
 import {
-  FRASES_DUELO, FRASES_ESCENARIO, FRASE_CADA_MS, estadoDuelista, estadoBarometro, fraseDe,
+  FRASE_CADA_MS, tipoDuelista, tipoEscenario, fraseDe,
 } from "../../constants/frasesAnfitrion";
+import { useFrasesAnfitrion } from "../../hooks/realtime/useFrasesAnfitrion";
+import { useGeneralConfig } from "../../hooks/useGeneralConfig";
 import { faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, modoDeRonda } from "../../services/duelo";
 
 /**
@@ -331,6 +333,7 @@ function MonitorEscenario({ type, alAire, gameState }) {
   const { totals: votos } = useFollowLeaderVotes(modo === "votos" ? turno : null, null, { soloTotales: true });
   const pct = modo === "toques" ? energia : modo === "pelea" ? pelea.pct : modo === "votos" ? votos.up_pct ?? 0 : null;
   const ciclo = useCicloFrases(enVivo && pct != null);
+  const frases = useFrasesTablet();
 
   // El % con que terminó: la última lectura mientras sonaba el video. Queda
   // hasta que suba otra persona.
@@ -378,20 +381,43 @@ function MonitorEscenario({ type, alAire, gameState }) {
           <div className="mon-barra">
             <div className="mon-k">{{ toques: "🔥 Energía del público", pelea: "⚔️ Pelea 👍 / 👎", votos: "👍 Votos positivos" }[modo]}</div>
             <FtlBarometro pct={pct} decae={modo === "toques"}/>
-            <Frase estado={{ alto: "ganando", medio: "parejo", bajo: "perdiendo" }[estadoBarometro(pct)]}
-              texto={fraseDe(FRASES_ESCENARIO[estadoBarometro(pct)], proyectado.name, ciclo)}/>
           </div>
         )}
         {!enVivo && <Leyenda>{tieneVideo ? "Producción arranca el video." : "Producción está eligiendo el video."}</Leyenda>}
       </Escena>
     )}
+    {enVivo && pct != null && frases.activas && (
+      <Frases items={[{ nombre: proyectado.name, col: COL, tipo: tipoEscenario(pct),
+        texto: fraseDe(frases[tipoEscenario(pct)], ciclo) }]}/>
+    )}
   </>);
 }
 
-/** Lo que el Anfitrión le dice al participante: verde si va ganando, rojo si va perdiendo. */
-function Frase({ estado, texto }) {
-  if (!texto) return null;
-  return <div key={texto} className={`mon-frase ${estado}`}>🎙️ {texto}</div>;
+/**
+ * Lo que el Anfitrión le dice a cada participante, DEBAJO de la tarjeta: el
+ * nombre chiquito y la frase grande, latiendo. Aliento en verde, desaliento en rosa.
+ */
+function Frases({ items }) {
+  const visibles = items.filter((f) => f.texto);
+  if (!visibles.length) return null;
+  return (
+    <div className="mon-frases">
+      <div className="mon-k">🎙️ Decile</div>
+      {visibles.map((f, i) => (
+        <div key={i} className={`mon-frase ${f.tipo}`}>
+          <span style={{ color: f.col }}>{f.nombre} · {f.tipo === "aliento" ? "va ganando" : "va perdiendo"}</span>
+          <p key={f.texto}>{f.texto}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Frases de las bibliotecas en uso (Ajustes → General), y si están prendidas. */
+function useFrasesTablet() {
+  const { config } = useGeneralConfig();
+  const { enUso } = useFrasesAnfitrion();
+  return { activas: !!config.frasesAnfitrion, aliento: enUso.aliento, desaliento: enUso.desaliento };
 }
 
 /** Ciclo de las frases: avanza cada FRASE_CADA_MS (el Duelo ya tiene su reloj). */
@@ -445,6 +471,7 @@ function MonitorDuelo({ alAire, gameState, sessionId }) {
     : hayLlamados ? "llamado"
     : faseRonda === "result" ? "result" : "anuncio";
   const resultado = round?.result; // 'p1' | 'p2' | 'tie'
+  const frases = useFrasesTablet();
 
   return (<>
     <Cabecera juego="duelo" titulo="Duelo de Talentos" col={COL} vivo={fase === "voting"}
@@ -498,16 +525,19 @@ function MonitorDuelo({ alAire, gameState, sessionId }) {
             <b>{d.name}</b>
             <strong>{pct[`p${i + 1}`]}%</strong>
             <small>{counts[`p${i + 1}`]} {unidad}</small>
-            {fase === "voting" && (() => {
-              const estado = estadoDuelista(pct[`p${i + 1}`], pct.p1 + pct.p2 > 0);
-              return <Frase estado={estado} texto={fraseDe(FRASES_DUELO[estado], d.name, Math.floor(now / FRASE_CADA_MS), i)}/>;
-            })()}
           </div>
         ))}
       </div>
       <div className="mon-duelo-barra">
         <div style={{ width: `${pct.p1 + pct.p2 === 0 ? 50 : pct.p1}%` }}/>
       </div>
+      {fase === "voting" && frases.activas && (
+        <Frases items={duelistas.filter(Boolean).map((d, i) => {
+          const tipo = tipoDuelista(pct[`p${i + 1}`], pct.p1 + pct.p2 > 0);
+          return { nombre: d.name, col: DUELO_COL[i], tipo,
+            texto: fraseDe(frases[tipo], Math.floor(now / FRASE_CADA_MS), i) };
+        })}/>
+      )}
     </>)}
   </>);
 }
@@ -592,11 +622,20 @@ export const CSS_MONITOR = `
   .mon-duelo strong{font-size:54px;line-height:1;color:var(--mc);}
   .mon-duelo small{font-size:14px;color:rgba(240,232,255,.5);}
   .mon-llamados{width:100%;max-width:620px;margin:6px 0 0;}
-  .mon-frase{width:100%;margin-top:6px;padding:10px 12px;border-radius:14px;font-size:17px;font-weight:700;line-height:1.35;
-    text-align:center;color:#F0E8FF;background:rgba(240,232,255,.06);border:1.5px solid rgba(240,232,255,.15);animation:fadeIn .4s;}
-  .mon-frase.ganando{color:#00F5A0;background:rgba(0,245,160,.08);border-color:rgba(0,245,160,.4);}
-  .mon-frase.perdiendo{color:#FF6B8A;background:rgba(255,45,120,.08);border-color:rgba(255,45,120,.4);}
-  .mon-frase.parejo{color:#FFD600;background:rgba(255,214,0,.07);border-color:rgba(255,214,0,.35);}
+  /* Frases: debajo de la tarjeta, sin caja; letra de display que late. */
+  .mon-frases{display:flex;flex-direction:column;gap:18px;padding:6px 4px 10px;text-align:center;}
+  .mon-frase span{display:block;font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px;}
+  .mon-frase p{margin:0;font-family:'Bricolage Grotesque','DM Sans',sans-serif;font-weight:800;
+    font-size:clamp(24px,4.2vw,38px);line-height:1.15;letter-spacing:-.01em;text-wrap:balance;
+    animation:mon-frase-entra .5s ease-out, mon-latido 1.8s ease-in-out .5s infinite;}
+  .mon-frase.aliento p{color:#00F5A0;--brillo:rgba(0,245,160,.55);}
+  .mon-frase.desaliento p{color:#FF5C93;--brillo:rgba(255,45,120,.55);}
+  @keyframes mon-frase-entra{from{opacity:0;transform:translateY(8px) scale(.97);}to{opacity:1;transform:none;}}
+  @keyframes mon-latido{
+    0%,100%{transform:scale(1);text-shadow:0 0 6px var(--brillo);}
+    50%{transform:scale(1.035);text-shadow:0 0 22px var(--brillo),0 0 2px var(--brillo);}
+  }
+  @media (prefers-reduced-motion:reduce){.mon-frase p{animation:none;}}
   .mon-duelo-barra{height:14px;border-radius:7px;overflow:hidden;background:#FF9500;margin-bottom:14px;}
   .mon-duelo-barra div{height:100%;background:#FF2D78;transition:width .5s;}
   .mon-espera{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;}

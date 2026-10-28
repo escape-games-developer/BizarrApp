@@ -25,7 +25,7 @@ export default function PanelAnfitrion({ juegos, gameState, sessionId, alAire, c
 
   return (
     <div className="anf">
-      <style>{CSS + CSS_MONITOR}</style>
+      <style>{FUENTES + CSS + CSS_MONITOR}</style>
       <header className="anf-top">
         <div className="anf-marca">BizarrApp <span>· Anfitrión</span></div>
         <div className={`anf-aire${alAire ? " on" : ""}`}>
@@ -58,6 +58,9 @@ export default function PanelAnfitrion({ juegos, gameState, sessionId, alAire, c
     </div>
   );
 }
+
+// Letra de las frases del Anfitrión. El @import tiene que ir primero en la hoja.
+const FUENTES = `@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&display=swap');`;
 
 const CSS = `
   .anf{height:100vh;display:flex;flex-direction:column;background:#08040F;color:#F0E8FF;

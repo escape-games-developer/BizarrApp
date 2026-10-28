@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useGeneralConfigAdmin } from "../../hooks/useGeneralConfig";
 import { Interruptor } from "./RegistroClientes";
+import FrasesAnfitrion from "./FrasesAnfitrion";
 
 /**
  * Ajustes → General. Cada opción se prende o apaga con su interruptor y se
@@ -32,6 +33,11 @@ const OPCIONES = [
     id: "titulos", icon: "🔤", titulo: "Títulos de juegos y secciones",
     activo:   "Arriba de cada juego y sección se ve su título (por ejemplo «💃 Follow the Leader», «Mi Perfil», «Carta del Bar»).",
     inactivo: "Los juegos y secciones se muestran sin título: va directo el contenido.",
+  },
+  {
+    id: "frasesAnfitrion", icon: "🎙️", titulo: "Frases del Anfitrión",
+    activo:   "Mientras se vota (Duelo, Follow the Leader, Personal Trainer), la tablet del Anfitrión le propone una frase de aliento al que va ganando y de desaliento al que va perdiendo. Las listas están acá abajo.",
+    inactivo: "La tablet del Anfitrión no muestra frases. Las listas se conservan para cuando las vuelvas a prender.",
   },
 ];
 
@@ -84,6 +90,8 @@ export default function General({ puedeEditar }) {
             onCambiar={(v) => cambiar(o.id, v)}/>
         </div>
       ))}
+
+      <FrasesAnfitrion puedeEditar={puedeEditar} activas={config.frasesAnfitrion}/>
 
       {!puedeEditar && (
         <div style={{ fontSize: 11.5, color: "rgba(240,232,255,.45)" }}>Tu usuario no puede cambiar esta configuración.</div>
