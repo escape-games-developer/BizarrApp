@@ -12,6 +12,10 @@ import { useVotacionEscenario } from "../../hooks/useVotacionEscenario";
 import FtlBarometro from "../../components/FtlBarometro";
 import { ESCENARIO_JUEGOS } from "../../constants/escenarioJuegos";
 import { TEAMS } from "../../constants/theme";
+import { useDueloRound } from "../../hooks/realtime/useDueloRound";
+import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
+import { useDueloBorrador } from "../../hooks/realtime/useDueloBorrador";
+import { faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, modoDeRonda } from "../../services/duelo";
 
 /**
  * Lo que ve el Anfitrión de cada juego. SÓLO LECTURA: el Anfitrión guía al
@@ -29,10 +33,10 @@ export function juegoEnPantalla(gameState) {
   if (juego) return juego;
   if (gameState?.active_game) return null;
   const esc = gameState?.active_escenario;
-  if (esc === "ftl" || esc === "pt") return esc;
+  if (esc === "ftl" || esc === "pt" || esc === "duelo") return esc;
   if (esc) return null;
   return { game_rey: "rey", game_suma: "suma", game_palabra: "palabra", game_trivia: "trivia",
-    escenario_ftl: "ftl", escenario_pt: "pt" }[gameState?.active_placa] || null;
+    escenario_ftl: "ftl", escenario_pt: "pt", duelo: "duelo" }[gameState?.active_placa] || null;
 }
 
 export default function MonitorJuego({ id, alAire, gameState, sessionId }) {
@@ -44,6 +48,7 @@ export default function MonitorJuego({ id, alAire, gameState, sessionId }) {
     case "trivia":  return <MonitorTrivia {...props}/>;
     case "ftl":
     case "pt":      return <MonitorEscenario {...props} type={id}/>;
+    case "duelo":   return <MonitorDuelo {...props}/>;
     default:        return null;
   }
 }
@@ -58,6 +63,7 @@ const LOGOS = {
   trivia:  "/placas/Desafio_demente-removebg-preview.png",
   ftl:     "/placas/Follow_de_leader-removebg-preview.png",
   pt:      "/placas/Personal_Trainer-removebg-preview.png",
+  duelo:   "/placas/Duelo_de_talento-removebg-preview.png",
 };
 
 function Logo({ juego }) {
@@ -386,6 +392,104 @@ function VideoAsignado({ video }) {
   );
 }
 
+// ── 🎤 Duelo de Talentos ───────────────────────────────────────────────────
+// Anuncio (convocatoria, con los postulantes) → los dos duelistas votándose,
+// con el cronómetro si la ronda lo tiene → ganador. El ganador lo decide el
+// servidor (`round.result`); acá sólo se lee.
+
+const DUELO_COL = ["#FF2D78", "#FF9500"];
+const PASOS_DUELO = [{ id: "anuncio", label: "Anuncio" }, { id: "llamado", label: "Llamado" },
+  { id: "voting", label: "Duelo" }, { id: "result", label: "Ganador" }];
+
+function MonitorDuelo({ alAire, gameState, sessionId }) {
+  const COL = DUELO_COL[0];
+  const { round, counts, now } = useDueloRound(sessionId);
+  const { postulaciones } = useDueloPostulaciones(sessionId, null);
+  // Los que Producción eligió para enfrentarse, antes de lanzar la votación.
+  const { selP1, selP2 } = useDueloBorrador(sessionId);
+  const llamados = [selP1, selP2].map((id) => postulaciones.find((p) => p.id === id) || null);
+  const faseRonda = faseDuelo(gameState, round);
+  const duelistas = duelistasDeRonda(round);
+  const pct = porcentajesDuelo(counts);
+  const unidad = modoDeRonda(round) === "votos" ? "votos" : "toques";
+  const seg = faseRonda === "voting" ? segundosRestantes(round, now) : null;
+  const esperando = postulaciones.filter((p) => p.status === "waiting" && !llamados.some((l) => l?.id === p.id));
+  // Fuera del aire queda el resultado de la última ronda, si terminó. Con un
+  // resultado en pantalla, elegir a los próximos ya es el siguiente llamado.
+  const hayLlamados = llamados.some(Boolean);
+  const fase = !alAire ? (round?.status === "finished" ? "result" : "fin")
+    : faseRonda === "voting" ? "voting"
+    : hayLlamados ? "llamado"
+    : faseRonda === "result" ? "result" : "anuncio";
+  const resultado = round?.result; // 'p1' | 'p2' | 'tie'
+
+  return (<>
+    <Cabecera juego="duelo" titulo="Duelo de Talentos" col={COL} vivo={fase === "voting"}
+      estado={{ anuncio: "Convocatoria abierta", llamado: "Llamá a los duelistas",
+        voting: seg == null ? "Votando" : seg > 0 ? `⏱ ${formatoReloj(seg)}` : "Tiempo cumplido",
+        result: alAire ? "Resultado" : "Finalizado", fin: "Finalizado" }[fase]}/>
+    <Pasos pasos={PASOS_DUELO} actual={fase === "fin" ? "result" : fase} col={COL}/>
+
+    {fase === "llamado" ? (<>
+      <Escena col={COL}>
+        <div className="mon-k">Que suban al escenario</div>
+        <div className="mon-duelo mon-llamados">
+          {llamados.map((p, i) => (
+            <div key={i} style={{ "--mc": DUELO_COL[i] }}>
+              {p ? (<><Avatar p={p} grande/><b>{p.user_name}</b></>)
+                : (<><i className="mon-av grande">❔</i><small>Producción está eligiendo</small></>)}
+            </div>
+          ))}
+        </div>
+        <div className="mon-sub">La votación arranca cuando Producción lance el duelo.</div>
+      </Escena>
+    </>) : fase === "anuncio" || fase === "fin" ? (<>
+      <Escena col={COL}>
+        <div className="mon-k">{fase === "fin" ? "Duelo finalizado" : "Convocatoria abierta"}</div>
+        <Logo juego="duelo"/>
+        {fase === "anuncio" && <div className="mon-sub">Producción elige quiénes se enfrentan.</div>}
+      </Escena>
+      {fase === "anuncio" && (
+        <div className="mon-postulantes">
+          <div className="mon-k">{esperando.length ? `${esperando.length} ${esperando.length === 1 ? "postulante" : "postulantes"}` : "Todavía no hay postulantes"}</div>
+          <div>
+            {esperando.map((p) => (
+              <span key={p.id}><Avatar p={p}/>{p.user_name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </>) : (<>
+      {fase === "result" && (
+        <Escena col="#00F5A0">
+          <div className="mon-k">🏆 {resultado === "tie" ? "Resultado" : "Ganador"}</div>
+          <div className="mon-grande" style={{ color: resultado === "tie" ? "#FFD600" : "#00F5A0" }}>
+            {resultado === "tie" ? "🤝 Empate" : resultado === "p1" ? duelistas[0]?.name : resultado === "p2" ? duelistas[1]?.name : "Calculando…"}
+          </div>
+        </Escena>
+      )}
+      <div className="mon-duelo">
+        {duelistas.map((d, i) => d && (
+          <div key={i} className={fase === "result" && resultado === `p${i + 1}` ? "gana" : ""} style={{ "--mc": DUELO_COL[i] }}>
+            <Avatar p={d} grande/>
+            <b>{d.name}</b>
+            <strong>{pct[`p${i + 1}`]}%</strong>
+            <small>{counts[`p${i + 1}`]} {unidad}</small>
+          </div>
+        ))}
+      </div>
+      <div className="mon-duelo-barra">
+        <div style={{ width: `${pct.p1 + pct.p2 === 0 ? 50 : pct.p1}%` }}/>
+      </div>
+    </>)}
+  </>);
+}
+
+function Avatar({ p, grande = false }) {
+  const cls = `mon-av${grande ? " grande" : ""}`;
+  return p.photo_url ? <img className={cls} src={p.photo_url} alt=""/> : <i className={cls}>{p.avatar_emoji || "👤"}</i>;
+}
+
 export const CSS_MONITOR = `
   .mon{max-width:880px;margin:0 auto;padding:14px 0 8px;}
   .mon-cab{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
@@ -446,6 +550,23 @@ export const CSS_MONITOR = `
   .mon-q-ops b{opacity:.6;}
   .mon-q-ops i{margin-left:auto;font-style:normal;font-size:13px;opacity:.7;}
 
+  .mon-postulantes{padding:16px;border-radius:18px;background:rgba(240,232,255,.03);border:1.5px solid rgba(240,232,255,.08);}
+  .mon-postulantes > div{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .mon-postulantes span{display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:999px;font-size:16px;font-weight:700;
+    background:rgba(240,232,255,.05);border:1px solid rgba(240,232,255,.1);}
+  .mon-av{width:32px;height:32px;border-radius:50%;object-fit:cover;display:inline-flex;align-items:center;justify-content:center;
+    font-style:normal;font-size:20px;background:rgba(240,232,255,.06);flex-shrink:0;}
+  .mon-av.grande{width:96px;height:96px;font-size:56px;border:3px solid var(--mc);}
+  .mon-duelo{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;}
+  .mon-duelo > div{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 12px;border-radius:20px;text-align:center;
+    background:rgba(240,232,255,.03);border:2px solid var(--mc);}
+  .mon-duelo > div.gana{box-shadow:0 0 28px var(--mc);}
+  .mon-duelo b{font-size:22px;word-break:break-word;}
+  .mon-duelo strong{font-size:54px;line-height:1;color:var(--mc);}
+  .mon-duelo small{font-size:14px;color:rgba(240,232,255,.5);}
+  .mon-llamados{width:100%;max-width:620px;margin:6px 0 0;}
+  .mon-duelo-barra{height:14px;border-radius:7px;overflow:hidden;background:#FF9500;margin-bottom:14px;}
+  .mon-duelo-barra div{height:100%;background:#FF2D78;transition:width .5s;}
   .mon-espera{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;}
   .mon-espera div{font-size:56px;opacity:.5;}
   .mon-espera b{font-size:22px;}

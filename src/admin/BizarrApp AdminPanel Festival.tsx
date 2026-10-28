@@ -53,6 +53,7 @@ import { useBibliotecaPalabras } from "../hooks/useBibliotecaPalabras";
 import { useBibliotecaPreguntasTrivia } from "../hooks/useBibliotecaPreguntasTrivia";
 import { useTriviaBorrador } from "../hooks/realtime/useTriviaBorrador";
 import { useReyBorrador } from "../hooks/realtime/useReyBorrador";
+import { useDueloBorrador } from "../hooks/realtime/useDueloBorrador";
 import { TEAMS } from "../constants/theme";
 import {
   ImportarModal, FiltroSecciones, CampoSeccion, CSS_SECCIONES,
@@ -570,7 +571,7 @@ const FROZEN_MODULE_IDS = new Set(["karaoke"]);
 
 // Lo que ve el Anfitrión en la tablet (sólo lectura: opera Producción). El
 // resto de los módulos no le hace falta para guiar al público.
-const JUEGOS_ANFITRION = ["rey", "suma", "palabra", "trivia", "ftl", "pt"];
+const JUEGOS_ANFITRION = ["rey", "suma", "palabra", "trivia", "duelo", "ftl", "pt"];
 
 // Pantallas internas que no están en SECS: se abren desde Lanzar (y la campana)
 // y las ve quien puede ver Lanzar.
@@ -1258,8 +1259,9 @@ function DueloPanel({sec, controls, sessionId, gameState, goTo, puedeDisenar, si
   const { postulaciones, quitar, reactivar, vaciar } = useDueloPostulaciones(sessionId, null);
   const { round, counts, now } = useDueloRound(sessionId, { autoFinish: true });
 
-  const [selP1, setSelP1] = useState(null); // id de duelo_postulaciones
-  const [selP2, setSelP2] = useState(null);
+  // Duelistas llamados (ids de duelo_postulaciones): viven en `duelo_borradores`
+  // para que el Anfitrión los vea y los llame al escenario. Elegir no lanza.
+  const { selP1, selP2, setSelP1, setSelP2 } = useDueloBorrador(sessionId);
   const [videoInput, setVideoInput] = useState("");
   const [busy, setBusy]   = useState(false);
   const [err,  setErr]    = useState(null);
