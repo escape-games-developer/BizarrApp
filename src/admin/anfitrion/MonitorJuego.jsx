@@ -15,6 +15,9 @@ import { TEAMS } from "../../constants/theme";
 import { useDueloRound } from "../../hooks/realtime/useDueloRound";
 import { useDueloPostulaciones } from "../../hooks/realtime/useDueloPostulaciones";
 import { useDueloBorrador } from "../../hooks/realtime/useDueloBorrador";
+import {
+  FRASES_DUELO, FRASES_ESCENARIO, FRASE_CADA_MS, estadoDuelista, estadoBarometro, fraseDe,
+} from "../../constants/frasesAnfitrion";
 import { faseDuelo, duelistasDeRonda, porcentajesDuelo, segundosRestantes, formatoReloj, modoDeRonda } from "../../services/duelo";
 
 /**
@@ -327,6 +330,7 @@ function MonitorEscenario({ type, alAire, gameState }) {
   const pelea = useFtlPelea(modo === "pelea" ? turno : null);
   const { totals: votos } = useFollowLeaderVotes(modo === "votos" ? turno : null, null, { soloTotales: true });
   const pct = modo === "toques" ? energia : modo === "pelea" ? pelea.pct : modo === "votos" ? votos.up_pct ?? 0 : null;
+  const ciclo = useCicloFrases(enVivo && pct != null);
 
   // El % con que terminó: la última lectura mientras sonaba el video. Queda
   // hasta que suba otra persona.
@@ -374,12 +378,31 @@ function MonitorEscenario({ type, alAire, gameState }) {
           <div className="mon-barra">
             <div className="mon-k">{{ toques: "🔥 Energía del público", pelea: "⚔️ Pelea 👍 / 👎", votos: "👍 Votos positivos" }[modo]}</div>
             <FtlBarometro pct={pct} decae={modo === "toques"}/>
+            <Frase estado={{ alto: "ganando", medio: "parejo", bajo: "perdiendo" }[estadoBarometro(pct)]}
+              texto={fraseDe(FRASES_ESCENARIO[estadoBarometro(pct)], proyectado.name, ciclo)}/>
           </div>
         )}
         {!enVivo && <Leyenda>{tieneVideo ? "Producción arranca el video." : "Producción está eligiendo el video."}</Leyenda>}
       </Escena>
     )}
   </>);
+}
+
+/** Lo que el Anfitrión le dice al participante: verde si va ganando, rojo si va perdiendo. */
+function Frase({ estado, texto }) {
+  if (!texto) return null;
+  return <div key={texto} className={`mon-frase ${estado}`}>🎙️ {texto}</div>;
+}
+
+/** Ciclo de las frases: avanza cada FRASE_CADA_MS (el Duelo ya tiene su reloj). */
+function useCicloFrases(activo) {
+  const [ciclo, setCiclo] = useState(0);
+  useEffect(() => {
+    if (!activo) return undefined;
+    const id = setInterval(() => setCiclo((c) => c + 1), FRASE_CADA_MS);
+    return () => clearInterval(id);
+  }, [activo]);
+  return ciclo;
 }
 
 function VideoAsignado({ video }) {
@@ -475,6 +498,10 @@ function MonitorDuelo({ alAire, gameState, sessionId }) {
             <b>{d.name}</b>
             <strong>{pct[`p${i + 1}`]}%</strong>
             <small>{counts[`p${i + 1}`]} {unidad}</small>
+            {fase === "voting" && (() => {
+              const estado = estadoDuelista(pct[`p${i + 1}`], pct.p1 + pct.p2 > 0);
+              return <Frase estado={estado} texto={fraseDe(FRASES_DUELO[estado], d.name, Math.floor(now / FRASE_CADA_MS), i)}/>;
+            })()}
           </div>
         ))}
       </div>
@@ -565,6 +592,11 @@ export const CSS_MONITOR = `
   .mon-duelo strong{font-size:54px;line-height:1;color:var(--mc);}
   .mon-duelo small{font-size:14px;color:rgba(240,232,255,.5);}
   .mon-llamados{width:100%;max-width:620px;margin:6px 0 0;}
+  .mon-frase{width:100%;margin-top:6px;padding:10px 12px;border-radius:14px;font-size:17px;font-weight:700;line-height:1.35;
+    text-align:center;color:#F0E8FF;background:rgba(240,232,255,.06);border:1.5px solid rgba(240,232,255,.15);animation:fadeIn .4s;}
+  .mon-frase.ganando{color:#00F5A0;background:rgba(0,245,160,.08);border-color:rgba(0,245,160,.4);}
+  .mon-frase.perdiendo{color:#FF6B8A;background:rgba(255,45,120,.08);border-color:rgba(255,45,120,.4);}
+  .mon-frase.parejo{color:#FFD600;background:rgba(255,214,0,.07);border-color:rgba(255,214,0,.35);}
   .mon-duelo-barra{height:14px;border-radius:7px;overflow:hidden;background:#FF9500;margin-bottom:14px;}
   .mon-duelo-barra div{height:100%;background:#FF2D78;transition:width .5s;}
   .mon-espera{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;}
