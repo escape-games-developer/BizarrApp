@@ -50,6 +50,20 @@ export default function MonitorJuego({ id, alAire, gameState, sessionId }) {
 
 // ── Piezas comunes ─────────────────────────────────────────────────────────
 
+// Logo oficial de cada juego: el mismo de su placa en la TV.
+const LOGOS = {
+  rey:     "/placas/Rey_del_orto-removebg-preview.png",
+  suma:    "/placas/Sumate_que_sumamos-removebg-preview.png",
+  palabra: "/placas/Arma_la_palabra-removebg-preview.png",
+  trivia:  "/placas/Desafio_demente-removebg-preview.png",
+  ftl:     "/placas/Follow_de_leader-removebg-preview.png",
+  pt:      "/placas/Personal_Trainer-removebg-preview.png",
+};
+
+function Logo({ juego }) {
+  return <img className="mon-logo" src={LOGOS[juego]} alt=""/>;
+}
+
 /** Etapas del juego en una fila: las pasadas tildadas, la actual encendida. */
 function Pasos({ pasos, actual, col }) {
   const idx = pasos.findIndex((p) => p.id === actual);
@@ -64,11 +78,10 @@ function Pasos({ pasos, actual, col }) {
   );
 }
 
-function Cabecera({ icono, titulo, col, estado, vivo }) {
+function Cabecera({ juego, titulo, col, estado, vivo }) {
   return (
     <div className="mon-cab" style={{ "--mc": col }}>
-      <span className="mon-cab-i">{icono}</span>
-      <span className="mon-cab-t">{titulo}</span>
+      <img className="mon-cab-logo" src={LOGOS[juego]} alt={titulo}/>
       {estado && <span className={`mon-chip${vivo ? " vivo" : ""}`}>{vivo && <i/>}{estado}</span>}
     </div>
   );
@@ -111,7 +124,7 @@ function MonitorRey({ alAire, gameState, sessionId }) {
     ganador: "Ganador", cancelado: "Sorteo cancelado" }[fase];
 
   return (<>
-    <Cabecera icono="👑" titulo="Rey del Orto" col={COL} estado={estado} vivo={fase === "sorteo"}/>
+    <Cabecera juego="rey" titulo="Rey del Orto" col={COL} estado={estado} vivo={fase === "sorteo"}/>
     <Pasos pasos={PASOS_REY} col={COL}
       actual={fase === "anuncio" ? (premio ? "premio" : "anuncio") : fase === "cancelado" ? "sorteo" : fase === "fin" ? "ganador" : fase}/>
     <Escena col={fase === "sorteo" ? color : COL}>
@@ -132,10 +145,10 @@ function MonitorRey({ alAire, gameState, sessionId }) {
         {ultimo ? (<>
           <div className="mon-grande" style={{ color: "#00F5A0" }}>{ultimo.name}</div>
           <div className="mon-sub">Último ganador · <b style={{ color: COL }}>{ultimo.prize}</b></div>
-        </>) : <div className="mon-grande" style={{ color: COL }}>👑</div>}
+        </>) : <Logo juego="rey"/>}
       </>) : (<>
         <div className="mon-k">{premio ? "Premio a sortear" : anunciando ? "Anuncio en pantalla" : "Al aire"}</div>
-        <div className="mon-grande" style={{ color: COL }}>{premio || "👑"}</div>
+        {premio ? <div className="mon-grande" style={{ color: COL }}>{premio}</div> : <Logo juego="rey"/>}
         {detalle && <div className="mon-sub">{detalle}</div>}
         {!premio && <div className="mon-sub">Producción está eligiendo el premio.</div>}
       </>)}
@@ -148,9 +161,9 @@ function MonitorRey({ alAire, gameState, sessionId }) {
 // dos tiene cronómetro todavía: cuando lo tengan, va en `Escena` debajo del objetivo.
 
 const RONDA = {
-  suma:    { col: "#FF9500", icono: "🔢", titulo: "Sumate que sumamos", objetivo: "Número a formar",
+  suma:    { col: "#FF9500", titulo: "Sumate que sumamos", objetivo: "Número a formar",
              valor: (r) => r?.target_number, hook: useSumateRound, placa: "game_suma" },
-  palabra: { col: "#A855F7", icono: "🔤", titulo: "Arma la palabra", objetivo: "Palabra a formar",
+  palabra: { col: "#A855F7", titulo: "Arma la palabra", objetivo: "Palabra a formar",
              valor: (r) => r?.target_word, hook: useArmaPalabraRound, placa: "game_palabra" },
 };
 const PASOS_RONDA = [{ id: "anuncio", label: "Anuncio" }, { id: "juego", label: "En juego" }, { id: "fin", label: "Finalización" }];
@@ -164,13 +177,13 @@ function MonitorRonda({ tipo, alAire, gameState, sessionId }) {
   const valor = cfg.valor(round);
 
   return (<>
-    <Cabecera icono={cfg.icono} titulo={cfg.titulo} col={cfg.col} vivo={fase === "juego"}
+    <Cabecera juego={tipo} titulo={cfg.titulo} col={cfg.col} vivo={fase === "juego"}
       estado={{ anuncio: "Anuncio en pantalla", juego: "En juego", fin: "Finalizado" }[fase]}/>
     <Pasos pasos={PASOS_RONDA} actual={fase} col={cfg.col}/>
     <Escena col={cfg.col}>
       {fase === "anuncio" ? (<>
         <div className="mon-k">Anuncio en pantalla</div>
-        <div className="mon-grande" style={{ color: cfg.col }}>{cfg.icono}</div>
+        <Logo juego={tipo}/>
         <div className="mon-sub">Cuando Producción lance, acá aparece el objetivo.</div>
       </>) : (<>
         <div className="mon-k">{fase === "juego" ? cfg.objetivo : "Juego finalizado"}</div>
@@ -222,7 +235,7 @@ function MonitorTrivia({ alAire, gameState, sessionId }) {
   const resultado = fase === "ganador" ? { ganador, accumulated } : fase === "fin" ? ultimo : null;
 
   return (<>
-    <Cabecera icono="🧠" titulo="Desafío Demente" col={COL} vivo={enJuego}
+    <Cabecera juego="trivia" titulo="Desafío Demente" col={COL} vivo={enJuego}
       estado={{ anuncio: enElAire ? "Al aire, por empezar" : "Anuncio en pantalla",
         preguntas: `Pregunta ${curQ + 1} de ${qs.length || "—"}`, ganador: "Ganador", fin: "Finalizado" }[fase]}/>
     <Pasos pasos={PASOS_TRIVIA} actual={fase === "fin" ? "ganador" : fase} col={COL}/>
@@ -236,7 +249,7 @@ function MonitorTrivia({ alAire, gameState, sessionId }) {
         <div className="mon-sub">Aciertos · 🍠 Batata {resultado.accumulated.batata} · 🍋 Membrillo {resultado.accumulated.membrillo}</div>
       </Escena>
     ) : fase === "fin" ? (
-      <Escena col={COL}><div className="mon-k">Desafío finalizado</div><div className="mon-grande" style={{ color: COL }}>🧠</div></Escena>
+      <Escena col={COL}><div className="mon-k">Desafío finalizado</div><Logo juego="trivia"/></Escena>
     ) : null}
 
     {enJuego && (
@@ -255,7 +268,7 @@ function MonitorTrivia({ alAire, gameState, sessionId }) {
       !qs.length ? (
         <Escena col={COL}>
           <div className="mon-k">{enElAire ? "Al aire" : "Anuncio en pantalla"}</div>
-          <div className="mon-grande" style={{ color: COL }}>🧠</div>
+          <Logo juego="trivia"/>
           <div className="mon-sub">Producción está armando las preguntas.</div>
         </Escena>
       ) : (
@@ -327,7 +340,7 @@ function MonitorEscenario({ type, alAire, gameState }) {
   const fase = enVivo ? "vivo" : proyectado ? "preparado" : resultado ? "resultado" : alAire ? "anuncio" : "fin";
 
   return (<>
-    <Cabecera icono={juego.icon} titulo={juego.label} col={COL} vivo={enVivo}
+    <Cabecera juego={type} titulo={juego.label} col={COL} vivo={enVivo}
       estado={{ anuncio: "Convocatoria abierta", preparado: tieneVideo ? "Listo para arrancar" : "Eligiendo el video",
         vivo: "En vivo", resultado: alAire ? "Terminó el turno" : "Finalizado", fin: "Finalizado" }[fase]}/>
     <Pasos pasos={PASOS_ESCENARIO} actual={fase === "fin" ? "resultado" : fase} col={COL}/>
@@ -335,7 +348,7 @@ function MonitorEscenario({ type, alAire, gameState }) {
     {fase === "anuncio" || fase === "fin" ? (
       <Escena col={COL}>
         <div className="mon-k">{fase === "fin" ? "Juego finalizado" : "Convocatoria abierta"}</div>
-        <div className="mon-grande" style={{ color: COL }}>{juego.icon}</div>
+        <Logo juego={type}/>
         {fase === "anuncio" && <div className="mon-sub">El público se anota desde el celular. Producción elige quién sube.</div>}
       </Escena>
     ) : fase === "resultado" ? (
@@ -376,8 +389,8 @@ function VideoAsignado({ video }) {
 export const CSS_MONITOR = `
   .mon{max-width:880px;margin:0 auto;padding:14px 0 8px;}
   .mon-cab{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
-  .mon-cab-i{font-size:34px;line-height:1;}
-  .mon-cab-t{font-weight:800;font-size:24px;color:var(--mc);margin-right:auto;}
+  .mon-cab-logo{height:72px;max-width:260px;object-fit:contain;margin-right:auto;}
+  .mon-logo{width:min(70%,360px);max-height:190px;object-fit:contain;}
   .mon-chip{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:14px;font-weight:800;
     color:rgba(240,232,255,.75);background:rgba(240,232,255,.06);border:1px solid rgba(240,232,255,.14);}
   .mon-chip.vivo{color:#FF2D78;background:rgba(255,45,120,.1);border-color:rgba(255,45,120,.45);}
