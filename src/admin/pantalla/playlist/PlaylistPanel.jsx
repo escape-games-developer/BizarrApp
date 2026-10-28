@@ -240,7 +240,7 @@ export default function PlaylistPanel({ event, items, current, refresh, onError 
         </div>
         <div className="pdj-youtube-help">
           Pegá uno o varios links (uno por línea). Soporta youtube.com/watch, youtu.be y /shorts/.<br />
-          <span>Opcional: <code>URL | Título | Artista</code> para forzar título y artista manuales, o <code>URL | Título | Artista | Inicio | Fin</code> (segundos de recorte). También opcionales al final: <code>| Volumen</code> (0-100) y <code>| Categoría</code> (A/B/C/D).</span>
+          <span>Opcional: <code>URL | Título | Artista</code> para forzar título y artista manuales, o <code>URL | Título | Artista | Inicio | Fin</code> (segundos de recorte: Inicio desde dónde arranca, Fin cuántos segundos antes del final corta). También opcionales al final: <code>| Volumen</code> (0-100) y <code>| Categoría</code> (A/B/C/D).</span>
         </div>
         <textarea className="pdj-input" value={texto} disabled={busy}
           onChange={(e) => setTexto(e.target.value)}

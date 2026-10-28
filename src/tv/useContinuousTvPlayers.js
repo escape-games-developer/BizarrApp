@@ -82,21 +82,48 @@ const esItemTemporal = (id) =>
 
 const emptySlot = () => ({ itemId: null, item: null, role: "idle", timeout: null, started: false, retried: false });
 
-const videoOptions = (item) => ({
-  videoId: item.youtube_id,
-  startSeconds: Number(item.trim_start_seconds) || 0,
-  ...(Number(item.trim_end_seconds) > 0 ? { endSeconds: Number(item.trim_end_seconds) } : {}),
-});
+/**
+ * Recorte de un item. Hay dos formatos de `trim_end_seconds`:
+ *
+ *   · Canciones del DJ (filas de pantalla_playlist_items): SEGUNDOS ANTES DEL
+ *     FINAL, como en DJ Democracy — 10 corta 10 s antes de que termine. Si
+ *     inicio + fin no entran en la duración, el recorte entero se ignora.
+ *   · Items sintéticos (videos de Escenario, tandas): segundo EXACTO de corte.
+ *
+ * `duration` es la del player si ya la tiene; si no, la guardada en la fila.
+ */
+function recorteDe(item, duration) {
+  const inicio = Math.max(0, Number(item?.trim_start_seconds) || 0);
+  const fin    = Math.max(0, Number(item?.trim_end_seconds) || 0);
+  const real   = Number.isFinite(duration) && duration > 0
+    ? duration : Math.max(0, Number(item?.duration_seconds) || 0);
+
+  if (esItemTemporal(item?.id)) {
+    return { inicio, corte: fin > 0 && (real === 0 || fin <= real) ? fin : real };
+  }
+  if (real > 0 && inicio + fin >= real) return { inicio: 0, corte: real };
+  return { inicio, corte: real > 0 && fin > 0 ? real - fin : real };
+}
+
+const videoOptions = (item) => {
+  const { inicio, corte } = recorteDe(item, 0);
+  return {
+    videoId: item.youtube_id,
+    startSeconds: inicio,
+    // Sin duración conocida, el corte de una canción del DJ lo hace el reloj
+    // del watcher (effectiveEndOf) en cuanto el player informa la duración.
+    ...(Number(item.trim_end_seconds) > 0 && corte > 0 ? { endSeconds: corte } : {}),
+  };
+};
 
 /**
- * Final EFECTIVO de reproducción. Con recorte manda `trim_end_seconds`; sin
- * recorte (o con un recorte imposible) manda la duración real del video.
+ * Final EFECTIVO de reproducción: el corte del recorte (ver `recorteDe`) o,
+ * sin recorte, la duración real del video.
  */
 export function effectiveEndOf(item, duration) {
-  const trimEnd = Number(item?.trim_end_seconds) || 0;
-  const real    = Number.isFinite(duration) && duration > 0 ? duration : 0;
-  if (trimEnd > 0 && (real === 0 || trimEnd <= real)) return trimEnd;
-  return real;
+  const real = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  if (real === 0 && !esItemTemporal(item?.id)) return 0;
+  return recorteDe(item, real).corte;
 }
 
 /**

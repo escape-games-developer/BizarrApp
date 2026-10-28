@@ -214,14 +214,14 @@ export default function FilaCancion({
           <CampoNumero valor={item.trim_start_seconds ?? 0} etiqueta="Recorte de inicio (s)"
             disabled={ocupado} onGuardar={(v) => guardarCampo("trim_start_seconds")(v ?? 0)}/>
         </span>
-        {/* Fin: 0 = sin recorte (hasta el final). En la base es NULL: un 0
-            guardado cortaría el video apenas arranca. */}
-        <span className="pdj-cn-campo" title="Recorte de fin (segundos, 0 = hasta el final)">
+        {/* Fin: segundos ANTES del final, como en DJ Democracy (lo aplica la
+            TV, ver useContinuousTvPlayers). 0 = hasta el final, NULL en la base. */}
+        <span className="pdj-cn-campo" title="Cortar N segundos antes del final (0 = hasta el final)">
           <span className="pdj-cn-sim">◀</span>
-          <CampoNumero valor={item.trim_end_seconds ?? 0} etiqueta="Recorte de fin (s), 0 = hasta el final"
+          <CampoNumero valor={item.trim_end_seconds ?? 0} etiqueta="Segundos antes del final, 0 = hasta el final"
             disabled={ocupado} onGuardar={(v) => guardarCampo("trim_end_seconds")(v > 0 ? v : null)}/>
         </span>
-        <span className="pdj-cn-campo" title="Volumen (0–100)">
+        <span className="pdj-cn-campo" title="Volumen del video (0-100%). Solo baja el volumen original, no lo amplifica.">
           <span className="pdj-cn-sim"><Icono n="volumen" size={13}/></span>
           <CampoNumero valor={item.youtube_volume ?? 100} max={100} etiqueta="Volumen (0-100)"
             disabled={ocupado} onGuardar={(v) => guardarCampo("youtube_volume")(v ?? 100)}/>

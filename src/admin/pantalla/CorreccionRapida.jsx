@@ -90,7 +90,7 @@ function Tarjeta({ rotulo, item, onError, refresh }) {
       <div className="pdj-cr-dos">
         <Paso etiqueta="✂ Recorte inicio (s)" valor={item.trim_start_seconds ?? 0} disabled={ocupado}
           onGuardar={(n) => guardar({ trim_start_seconds: n })}/>
-        <Paso etiqueta="✂ Recorte fin (s)" valor={item.trim_end_seconds ?? 0} disabled={ocupado}
+        <Paso etiqueta="✂ Cortar antes del final (s)" valor={item.trim_end_seconds ?? 0} disabled={ocupado}
           onGuardar={(n) => guardar({ trim_end_seconds: n > 0 ? n : null })}/>
       </div>
       <Paso etiqueta="🔊 Volumen (0-100)" valor={item.youtube_volume ?? 100} max={100} paso={5}
