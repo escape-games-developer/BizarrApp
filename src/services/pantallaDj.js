@@ -167,10 +167,15 @@ export const castSuperVote = (eventId, itemId, type = "super_up") =>
 // devuelve lo mismo salvo `voted`, que sin `auth.uid()` es false.
 export const getKickStatus  = (eventId, client = supabase) =>
   rpc("pantalla_get_kick_status", { _event_id: eventId }, client);
-export const toggleKickVote = (eventId) => rpc("pantalla_toggle_kick_vote", { _event_id: eventId });
+// `itemId`: la canción que el celular tenía en pantalla al tocar. Si ya cambió,
+// el servidor no anota el voto (devuelve el estado nuevo con `stale: true`):
+// así un voto que llega tarde no cae sobre la canción siguiente.
+const conCancion = (args, itemId) => (itemId ? { ...args, _item_id: itemId } : args);
+export const toggleKickVote = (eventId, itemId) =>
+  rpc("pantalla_toggle_kick_vote", conCancion({ _event_id: eventId }, itemId));
 /** Amor y Odio / Guns & Roses: el voto único del invitado, +1 (flor) o −1 (tomate / bala). */
-export const votarKickFijo  = (eventId, value) =>
-  rpc("pantalla_kick_voto_fijo", { _event_id: eventId, _value: value });
+export const votarKickFijo  = (eventId, value, itemId) =>
+  rpc("pantalla_kick_voto_fijo", conCancion({ _event_id: eventId, _value: value }, itemId));
 
 /** Única escritura directa del cliente. La RLS exige user_id = auth.uid(). */
 export async function sendReaction(eventId, userId, emoji) {

@@ -197,16 +197,16 @@ export function usePantallaClient(event, user) {
 
   const toggleKick = useCallback(async () => {
     setError(null); pop();
-    try { setKick(await toggleKickVote(eventId)); await refreshKick(); }
+    try { setKick(await toggleKickVote(eventId, event?.current_item_id)); await refreshKick(); }
     catch (err) { setError(err.message); }
-  }, [eventId, refreshKick, pop]);
+  }, [eventId, event?.current_item_id, refreshKick, pop]);
 
   // Amor y Odio / Guns & Roses: un voto por tema, +1 o −1, sin cambiarlo.
   const voteKickFijo = useCallback(async (value) => {
     setError(null); pop();
-    try { await votarKickFijo(eventId, value); await refreshKick(); }
+    try { await votarKickFijo(eventId, value, event?.current_item_id); await refreshKick(); }
     catch (err) { setError(err.message); await refreshKick(); }
-  }, [eventId, refreshKick, pop]);
+  }, [eventId, event?.current_item_id, refreshKick, pop]);
 
   const react = useCallback(async (emoji) => {
     pop();

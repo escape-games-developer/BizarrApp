@@ -30,6 +30,10 @@ function authErrorMessage(error) {
     return "El registro está deshabilitado en el servidor. Avisale al staff.";
   if (/same.*password|should be different/i.test(msg))
     return "La contraseña nueva tiene que ser distinta a la anterior.";
+  // Error interno de Auth: llega como 500 y con el cuerpo vacío ("{}"). Pasa,
+  // por ejemplo, con dos pedidos simultáneos del mismo mail nuevo.
+  if (error?.status >= 500 || /^\s*(\{\s*\})?\s*$/.test(msg))
+    return "Hubo un problema con el servidor. Esperá unos segundos y probá de nuevo.";
   if (/fetch|network|failed to fetch/i.test(msg))
     return "Sin conexión con el servidor. Revisá tu internet y probá de nuevo.";
   return msg || "No se pudo completar la operación. Probá de nuevo.";
@@ -366,6 +370,10 @@ export function useAuth() {
           data:             { registro_pendiente: true },
         },
       });
+      // Doble toque con un mail nuevo: uno de los dos pedidos crea la cuenta y
+      // manda el mail, el otro choca dentro de Auth y vuelve 500. El mail salió.
+      if (error?.status >= 500)
+        return { ok: false, error: "No pudimos confirmar el envío. Revisá tu correo: si no te llegó el mail en un minuto, probá de nuevo." };
       if (error) return { ok: false, error: authErrorMessage(error) };
       return { ok: true };
     } catch (e) {

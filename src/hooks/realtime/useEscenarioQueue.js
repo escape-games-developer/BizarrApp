@@ -28,7 +28,11 @@ export function useEscenarioQueue(sessionId, type, userId = null) {
       .eq("session_id", sessionId)
       .eq("type", type)
       .in("status", ["waiting","called"])
-      .order("position", { ascending: true });
+      .order("position", { ascending: true })
+      // `position` lo calcula cada celular con la cola que tenía cargada: si se
+      // anotan varios a la vez, empatan. La hora de inscripción desempata y la
+      // fila queda en el orden en que se anotaron, igual en todas las pantallas.
+      .order("created_at", { ascending: true });
     setQueue(data || []);
   }, [sessionId, type]);
 
