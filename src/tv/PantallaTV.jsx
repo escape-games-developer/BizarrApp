@@ -74,30 +74,43 @@ function completarConfigTv(remoto) {
 
 function Reacciones({ eventId, size = "medium" }) {
   const [burbujas, setBurbujas] = useState([]);
-  // Sufijo propio de esta instancia: dos componentes con el mismo nombre de
-  // canal reusarian el de Supabase y el segundo .on() falla tras subscribe().
-  const canalId = useRef(Math.random().toString(36).slice(2, 8));
 
+  // Los emojis se leen una vez por segundo en vez de llegar por Realtime: con
+  // 50 personas tocando, cada emoji era un mensaje y solos se comían la mitad
+  // del tope de mensajes por segundo del proyecto; pasado el tope, Realtime
+  // descartaba también los cambios de los juegos (prueba de carga 2026-10-29).
+  // Se traen los 30 más nuevos (la pantalla muestra 25 a la vez) y se reparten
+  // a lo largo del segundo para que sigan viéndose como un chorro continuo.
   useEffect(() => {
     if (!eventId) return;
-    const channel = supabaseAnon
-      .channel(`pantalla-tv-reactions-${eventId}-${canalId.current}`)
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "pantalla_reactions", filter: `event_id=eq.${eventId}` },
-        (payload) => {
-          const burbuja = {
-            key:   payload.new.id,
-            emoji: payload.new.emoji,
-            left:  8 + Math.random() * 84,
-            dur:   3 + Math.random() * 1.5,
-          };
-          setBurbujas((prev) => [...prev.slice(-24), burbuja]);
-          setTimeout(() => {
-            setBurbujas((prev) => prev.filter((b) => b.key !== burbuja.key));
-          }, burbuja.dur * 1000);
-        })
-      .subscribe();
-    return () => { supabaseAnon.removeChannel(channel); };
+    let vivo = true;
+    let desde = null;            // created_at del último emoji visto
+    let vistos = new Set();      // ids ya mostrados con ese mismo created_at
+    const timers = new Set();
+    const despues = (fn, ms) => { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); };
+    const mostrar = (r) => {
+      const burbuja = { key: r.id, emoji: r.emoji, left: 8 + Math.random() * 84, dur: 3 + Math.random() * 1.5 };
+      setBurbujas((prev) => [...prev.slice(-24), burbuja]);
+      despues(() => setBurbujas((prev) => prev.filter((b) => b.key !== burbuja.key)), burbuja.dur * 1000);
+    };
+    const leer = async () => {
+      let q = supabaseAnon.from("pantalla_reactions").select("id,emoji,created_at").eq("event_id", eventId);
+      if (desde) q = q.gte("created_at", desde);
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(desde ? 30 : 1);
+      if (!vivo || error || !data) return;
+      if (desde === null) {
+        // Primera lectura: sólo marca desde dónde mirar; lo viejo no se muestra.
+        desde = data[0]?.created_at ?? new Date(0).toISOString();
+        vistos = new Set(data.map((r) => r.id));
+        return;
+      }
+      const nuevas = data.filter((r) => !vistos.has(r.id)).reverse();
+      if (data.length) { desde = data[0].created_at; vistos = new Set(data.filter((r) => r.created_at === desde).map((r) => r.id)); }
+      nuevas.forEach((r, i) => despues(() => mostrar(r), (i * 1000) / nuevas.length));
+    };
+    leer();
+    const id = setInterval(leer, 1000);
+    return () => { vivo = false; clearInterval(id); timers.forEach(clearTimeout); };
   }, [eventId]);
 
   return (

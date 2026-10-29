@@ -7,8 +7,9 @@ import { fetchEvent, fetchItems, fetchLiveEvent } from "../../services/pantallaD
  *
  * Lo usan las cuatro superficies (cliente, admin, DJ y TV): todas leen lo mismo
  * y se sincronizan por `postgres_changes`, sin mensajería directa entre vistas.
- * No hay polling: los UPDATE de `pantalla_playlist_items` traen la fila entera,
- * así que el ranking se aplica en memoria en vez de re-consultar en cada voto.
+ * En vivo, los UPDATE de `pantalla_playlist_items` traen la fila entera, así
+ * que el ranking se aplica en memoria. El celular, en cambio, relee los temas
+ * cada tanto (`itemsCadaMs`, ver abajo).
  *
  * @param {string}  eventId       evento fijo (admin, DJ, TV)
  * @param {boolean} discoverLive  buscar solo el evento en vivo (cliente)
@@ -16,8 +17,16 @@ import { fetchEvent, fetchItems, fetchLiveEvent } from "../../services/pantallaD
  * @param {object}  initial       { event, items } ya leídos (precarga del
  *                                cliente): se muestran de entrada y la carga
  *                                normal los refresca. Sin él, igual que siempre.
+ * @param {number}  itemsCadaMs   celulares: los temas se releen cada tanto en vez
+ *                                de escucharlos. Cada voto actualiza filas de
+ *                                `pantalla_playlist_items` y, en vivo, ese cambio
+ *                                le llegaba a cada celular: con 50 votando se
+ *                                pasaba el tope de mensajes por segundo de
+ *                                Realtime del proyecto y se perdían también los
+ *                                cambios de los juegos (prueba de carga
+ *                                2026-10-29). TV y Admin siguen en vivo.
  */
-export function usePantallaEvent({ eventId = null, discoverLive = false, client = supabase, initial = null } = {}) {
+export function usePantallaEvent({ eventId = null, discoverLive = false, client = supabase, initial = null, itemsCadaMs = null } = {}) {
   const [event,   setEvent]   = useState(() => initial?.event ?? null);
   const [items,   setItems]   = useState(() => initial?.items ?? []);
   const [loading, setLoading] = useState(!initial);
@@ -56,14 +65,15 @@ export function usePantallaEvent({ eventId = null, discoverLive = false, client 
   useEffect(() => {
     if (!activeId) return;
 
-    const channel = client
+    let channel = client
       .channel(`pantalla-ev-${activeId}-${canalId.current}`)
       .on("postgres_changes",
         { event: "*", schema: "public", table: "pantalla_events", filter: `id=eq.${activeId}` },
         (payload) => {
           if (payload.eventType === "DELETE") { setEvent(null); setItems([]); return; }
           setEvent((prev) => ({ ...prev, ...payload.new }));
-        })
+        });
+    if (!itemsCadaMs) channel = channel
       .on("postgres_changes",
         { event: "*", schema: "public", table: "pantalla_playlist_items", filter: `event_id=eq.${activeId}` },
         (payload) => {
@@ -74,14 +84,30 @@ export function usePantallaEvent({ eventId = null, discoverLive = false, client 
             }
             return prev.map((i) => (i.id === payload.new.id ? { ...i, ...payload.new } : i));
           });
-        })
-      .subscribe((status) => {
-        // Al reconectar se re-lee el snapshot: no hay replay de eventos perdidos.
-        if (status === "SUBSCRIBED") load();
-      });
+        });
+    channel.subscribe((status) => {
+      // Al reconectar se re-lee el snapshot: no hay replay de eventos perdidos.
+      if (status === "SUBSCRIBED") load();
+    });
 
     return () => { client.removeChannel(channel); };
-  }, [activeId, client, load]);
+  }, [activeId, client, load, itemsCadaMs]);
+
+  // Temas releídos cada tanto (celulares) y en el acto cuando cambia la canción.
+  const releerItems = useCallback(async () => {
+    if (!activeId) return;
+    try {
+      const lista = await fetchItems(activeId, client);
+      if (mounted.current) setItems(lista);
+    } catch (err) { console.warn("[usePantallaEvent] items:", err.message); }
+  }, [activeId, client]);
+  useEffect(() => {
+    if (!itemsCadaMs || !activeId) return undefined;
+    const id = setInterval(() => { if (document.visibilityState !== "hidden") releerItems(); }, itemsCadaMs);
+    return () => clearInterval(id);
+  }, [itemsCadaMs, activeId, releerItems]);
+  const cancionActual = event?.current_item_id ?? null;
+  useEffect(() => { if (itemsCadaMs && cancionActual) releerItems(); }, [itemsCadaMs, cancionActual, releerItems]);
 
   // Cuando todavía no hay evento en vivo, escucha por si el staff arranca uno.
   useEffect(() => {
@@ -115,5 +141,5 @@ export function usePantallaEvent({ eventId = null, discoverLive = false, client 
     [items, event?.current_item_id],
   );
 
-  return { event, items, candidates, current, loading, error, refresh: load, setItems };
+  return { event, items, candidates, current, loading, error, refresh: load, refreshItems: releerItems, setItems };
 }

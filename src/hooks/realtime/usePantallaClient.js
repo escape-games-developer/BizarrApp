@@ -105,10 +105,12 @@ export function usePantallaClient(event, user) {
     const channel = supabase
       .channel(`pantalla-yo-${eventId}-${userId}-${canalId.current}`)
       .on("postgres_changes",
-        { event: "*", schema: "public", table: "pantalla_participants", filter: `event_id=eq.${eventId}` },
+        // Filtrado por usuario: con `event_id` cada latido de cualquier invitado
+        // pasaba por Realtime (y por la RLS) para cada celular.
+        { event: "*", schema: "public", table: "pantalla_participants", filter: `user_id=eq.${userId}` },
         (payload) => {
           const fila = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
-          if (fila?.user_id === userId) refreshYo();
+          if (fila?.user_id === userId && fila?.event_id === eventId) refreshYo();
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -121,14 +123,16 @@ export function usePantallaClient(event, user) {
     return () => clearInterval(beatRef.current);
   }, [joined, eventId]);
 
-  // Los votos propios llegan por realtime: la RLS filtra los ajenos, así que
-  // esta suscripción sólo trae las filas de este usuario.
+  // Los votos propios llegan por realtime. El filtro es por usuario (no por
+  // evento): con `event_id`, cada voto de cualquiera se evaluaba contra la RLS
+  // para cada celular y contaba en el tope de mensajes por segundo del
+  // proyecto. Un voto propio de otro evento sólo dispara una relectura.
   useEffect(() => {
     if (!canPlay) return;
     const channel = supabase
       .channel(`pantalla-mine-${eventId}-${userId}-${canalId.current}`)
       .on("postgres_changes",
-        { event: "*", schema: "public", table: "pantalla_votes", filter: `event_id=eq.${eventId}` },
+        { event: "*", schema: "public", table: "pantalla_votes", filter: `user_id=eq.${userId}` },
         refreshVotes)
       .subscribe();
     return () => { supabase.removeChannel(channel); };

@@ -356,20 +356,34 @@ export async function saveVotePowers(eventId, rows) {
 export const resolveTv = (code, token) =>
   rpc("pantalla_resolve_tv", { _code: code, _token: token }, supabaseAnon);
 
+// Cuándo salió el último reporte de progreso: también marca `tv_connected_at`,
+// así que mientras suena una canción el latido sobra.
+let ultimoReporteTv = 0;
+
 /** `itemId`: la canción de la que es el tiempo (el cierre de la votación no toma el de otra). */
-export const tvReport = (eventId, token, currentTime, duration, itemId = null) =>
-  rpc("pantalla_tv_report", {
+export const tvReport = async (eventId, token, currentTime, duration, itemId = null) => {
+  const r = await rpc("pantalla_tv_report", {
     _event_id: eventId, _token: token,
     _current_time: currentTime ?? null, _duration: duration ?? null, _item_id: itemId,
   }, supabaseAnon);
+  ultimoReporteTv = Date.now();
+  return r;
+};
 
 /**
  * Latido de la TV: sólo marca que está abierta (`tv_connected_at`). Va aparte
  * del reporte de progreso, que se corta cuando no suena una canción del DJ
  * (juegos, escenario, placas) y dejaba la TV como inactiva en el Admin.
+ *
+ * Con canción al aire el reporte (cada 4 s) ya lo marca: el latido se saltea.
+ * Cada escritura en `pantalla_events` le llega por Realtime a TODOS los
+ * celulares, y el plan tiene un tope de mensajes por segundo para todo el
+ * proyecto (prueba de carga 2026-10-29).
  */
-export const tvLatido = (eventId, token) =>
-  rpc("pantalla_tv_latido", { _event_id: eventId, _token: token }, supabaseAnon);
+export const tvLatido = (eventId, token) => {
+  if (Date.now() - ultimoReporteTv < 8000) return Promise.resolve(null);
+  return rpc("pantalla_tv_latido", { _event_id: eventId, _token: token }, supabaseAnon);
+};
 
 /** Latido de la Telepronter: sólo marca que está abierta. No toca la reproducción. */
 export const telepronterReport = (eventId, token) =>
