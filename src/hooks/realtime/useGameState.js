@@ -38,6 +38,11 @@ export function useGameState() {
   const channelRef        = useRef(null);
   const mountedRef        = useRef(true);
   const reconnectTimerRef = useRef(null);
+  // Nombre de canal propio de esta instancia: `supabase.channel(nombre)`
+  // devuelve el canal existente si el nombre se repite, y agregarle `.on()`
+  // después de `subscribe()` revienta. Pasaba con dos useGameState montados a
+  // la vez (el Admin y la vista previa de Videos).
+  const instanciaRef      = useRef(Math.random().toString(36).slice(2, 8));
 
   const loadInitial = useCallback(async () => {
     try {
@@ -82,7 +87,7 @@ export function useGameState() {
     if (old) supabaseAnon.removeChannel(old);
 
     const channel = supabaseAnon
-      .channel(`game-state-${sessionId}`)
+      .channel(`game-state-${sessionId}-${instanciaRef.current}`)
       .on(
         "postgres_changes",
         {

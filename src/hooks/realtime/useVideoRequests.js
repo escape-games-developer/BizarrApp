@@ -1,10 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 
 export function useVideoRequests(sessionId, currentUserId = null) {
   const [requests, setRequests] = useState([]);
   const [myVotes, setMyVotes] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Canales propios de esta instancia: con el mismo nombre, `supabase.channel()`
+  // devuelve el ya suscripto y `.on()` revienta (Admin + vista previa de Videos).
+  const instancia = useRef(Math.random().toString(36).slice(2, 8)).current;
 
   // Trae todos los video_requests activos + ordena por votos
   const fetchRequests = useCallback(async () => {
@@ -59,26 +62,26 @@ export function useVideoRequests(sessionId, currentUserId = null) {
   useEffect(() => {
     if (!sessionId) return;
     const channel = supabase
-      .channel(`video_requests_${sessionId}`)
+      .channel(`video_requests_${sessionId}_${instancia}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "video_requests",
         filter: `session_id=eq.${sessionId}`
       }, fetchRequests)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [sessionId, fetchRequests]);
+  }, [sessionId, fetchRequests, instancia]);
 
   // Suscripción realtime a video_votes (para actualizar vote_count en vivo)
   useEffect(() => {
     if (!sessionId) return;
     const channel = supabase
-      .channel(`video_votes_${sessionId}`)
+      .channel(`video_votes_${sessionId}_${instancia}`)
       .on("postgres_changes", {
         event: "*", schema: "public", table: "video_votes"
       }, () => { fetchRequests(); fetchMyVotes(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [sessionId, fetchRequests, fetchMyVotes]);
+  }, [sessionId, fetchRequests, fetchMyVotes, instancia]);
 
   // ─── ACCIONES DEL ADMIN ───
 

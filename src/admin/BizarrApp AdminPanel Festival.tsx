@@ -27,6 +27,7 @@ import PantallaDjPanel from "./pantalla/PantallaDjPanel";
 import AdminSidebar from "./AdminSidebar";
 import AjustesPanel from "./AjustesPanel";
 import PanelAnfitrion from "./anfitrion/PanelAnfitrion";
+import PanelProduccion, { GRUPOS_PRODUCCION } from "./produccion/PanelProduccion";
 import BotonInstalar from "./anfitrion/BotonInstalar";
 import { VISTAS, leerVistaElegida, guardarVistaElegida, vistaEfectiva } from "./vistaPanel";
 import Toggle from "./juegos/Toggle";
@@ -2131,7 +2132,9 @@ function JuegoEscenarioPanel({sec, type, controls, sessionId, gameState, goTo, p
             animation: enVivo ? "blink 1.2s infinite" : "none"}}/>
           <div style={{fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:12.5, flex:1,
             color: enElAire ? "#00F5A0" : "rgba(240,232,255,.3)"}}>
-            {!enElAire ? (anunciado ? "Anunciado — la placa está en pantalla" : "Fuera del aire — la TV está en DJ Democracy")
+            {!enElAire ? (anunciado ? "Anunciado — la placa está en pantalla"
+                : estadoEnVivo(gameState) ? `Fuera del aire — en pantalla: ${estadoEnVivo(gameState).label}`
+                : "Fuera del aire — la TV está en DJ Democracy")
               : enVivo ? "EN VIVO: " + (proyectado.name || "participante en escenario")
               : proyectado ? "PREPARADO: " + (proyectado.name || "participante listo para comenzar")
               : "Convocatoria abierta — esperando participante"}
@@ -6875,6 +6878,15 @@ export default function AdminPanel(){
   // Con qué perfil mira el panel el Administrador general (login / encabezado).
   const [vistaElegida, setVistaElegida] = useState(leerVistaElegida);
   const cambiarVista = (v) => { guardarVistaElegida(v); setVistaElegida(v); };
+  // Producción entra al panel de tablet; «Panel completo» la lleva al de
+  // siempre (bibliotecas, diseñadores, ajustes). Queda en este navegador.
+  const [prodTablet, setProdTablet] = useState(() => {
+    try { return localStorage.getItem("bizarr_produccion_modo") !== "completo"; } catch { return true; }
+  });
+  const cambiarProdTablet = (v) => {
+    try { localStorage.setItem("bizarr_produccion_modo", v ? "tablet" : "completo"); } catch { /* sin storage */ }
+    setProdTablet(v);
+  };
   const [user, setUser] = useState(null);
   useEffect(() => {
     supabase.auth.getUser().then(({data:{user}}) => setUser(user));
@@ -7086,6 +7098,38 @@ export default function AdminPanel(){
     );
   }
 
+  if (vista === "produccion" && prodTablet) {
+    const secciones = GRUPOS_PRODUCCION.flatMap(g=>g.items.map(it=>it.id))
+      .filter(id=>!FROZEN_MODULE_IDS.has(id) && puedeVer(id));
+    const secDe = (id) => SECS.find(s=>s.id===(SUBSECCIONES[id]||id)) || SECS[0];
+    // Producción opera todo lo del juego: llamar, asignar canción, elegir preguntas.
+    const permisos = {escenarioLlamar:true, escenarioCancion:true, triviaPreguntas:true};
+    const renderSeccion = (id, irA) => {
+      const props = {sec:secDe(id), controls, sessionId:session?.id ?? null, gameState, simple:true, permisos};
+      const escenario = {...props, goTo:irA, puedeDisenar:false};
+      switch (id) {
+        case "launch":  return <LaunchPanel sec={secDe(id)} gameState={gameState} goTo={irA} controls={controls}/>;
+        case "rey":     return <ReyPanel {...props}/>;
+        case "suma":    return <SumaPanel {...props}/>;
+        case "palabra": return <PalabraPanel {...props}/>;
+        case "trivia":  return <TriviaPanel {...props}/>;
+        case "duelo":   return <DueloPanel {...escenario}/>;
+        case "ftl":     return <JuegoEscenarioPanel {...escenario} type="ftl"/>;
+        case "pt":      return <JuegoEscenarioPanel {...escenario} type="pt"/>;
+        case "pantallaLive": return <PantallaDjPanel sec={secDe(id)} sessionId={session?.id ?? null} modo="live" goTo={irA}/>;
+        default:        return null;
+      }
+    };
+    return (
+      <>
+        <style>{css}</style>
+        <PanelProduccion secciones={secciones} renderSeccion={renderSeccion} gameState={gameState}
+          alAire={estadoEnVivo(gameState)?.label || null} conectados={connectedCount}
+          selectorVista={selectorVista} onPanelCompleto={()=>cambiarProdTablet(false)} onSalir={salir}/>
+      </>
+    );
+  }
+
   return(
     <>
       <style>{css}</style>
@@ -7112,6 +7156,14 @@ export default function AdminPanel(){
             </div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               {selectorVista}
+              {vista === "produccion" && (
+                <button type="button" onClick={()=>cambiarProdTablet(true)} title="Volver al panel de tablet"
+                  style={{height:36,padding:"0 12px",borderRadius:10,background:"#00E5FF14",color:"#00E5FF",
+                    border:"1px solid #00E5FF66",fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:700,
+                    cursor:"pointer",order:1}}>
+                  📱 Modo tablet
+                </button>
+              )}
               <div style={{position:"relative",order:6}}>
                 <button onClick={()=>setBellOpen(b=>!b)}
                   style={{background:"#1A0D2E",border:"1px solid #9B2FFF44",borderRadius:"50%",width:36,height:36,color:"#F0E8FF",cursor:"pointer",position:"relative",padding:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"border-color .15s"}}>
