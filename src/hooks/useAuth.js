@@ -122,6 +122,30 @@ export function persistSession(profile) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(profile));
 }
 
+// ─── Sesión única por cliente ─────────────────────────────────────────────────
+// Una cuenta abierta en un solo dispositivo: gana el último login. Ver la
+// migración 20261105120000_sesion_unica_por_usuario.sql. El staff y los
+// invitados quedan afuera (lo decide el server).
+
+const SESSION_CHECK_INTERVAL = 30_000;
+
+/**
+ * Cierra las sesiones de este usuario en los otros dispositivos. Se llama
+ * sólo justo después de un login nuevo — nunca al restaurar la sesión, o un
+ * celular viejo que vuelve a abrir la app echaría al nuevo.
+ *
+ * Si falla no bloquea el login: la regla es de seguridad, no un requisito
+ * para entrar.
+ */
+export async function claimSingleSession() {
+  try {
+    const { error } = await supabase.rpc("claim_single_session");
+    if (error) console.warn("[useAuth] No se pudieron cerrar las otras sesiones:", error);
+  } catch (e) {
+    console.warn("[useAuth] No se pudieron cerrar las otras sesiones:", e);
+  }
+}
+
 /**
  * Perfil mínimo de invitado, para cuando el trigger `handle_new_user` no dejó
  * fila en `profiles`. Es un fallback, no el camino normal: el trigger corre en
@@ -215,6 +239,9 @@ export function useAuth() {
   // y no del perfil: el invitado nunca llega a `registered = true`, así que el
   // perfil no puede distinguirlo de una cuenta a medio confirmar.
   const [isGuest, setIsGuest] = useState(false);
+  // true cuando este dispositivo quedó afuera porque la cuenta se abrió en
+  // otro. App lo muestra como aviso.
+  const [sessionReplaced, setSessionReplaced] = useState(false);
 
   // ── Restaurar sesión al recargar ────────────────────────────────────────────
   useEffect(() => {
@@ -274,6 +301,40 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // ── Sesión única: ¿la cuenta se abrió en otro dispositivo? ────────────────
+  // Cada 30 s y al volver a la app. Sólo un `false` explícito desloguea: un
+  // error de red no saca a nadie.
+  const loggedUserId = user?.id;
+  useEffect(() => {
+    if (!loggedUserId || isGuest) return;
+    let cancelled = false;
+
+    const check = async () => {
+      if (document.visibilityState === "hidden") return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || session.user.is_anonymous) return;
+      const { data, error } = await supabase.rpc("my_session_is_active");
+      if (cancelled || error || data !== false) return;
+
+      await supabase.auth.signOut({ scope: "local" });
+      localStorage.removeItem(SESSION_KEY);
+      setUser(null);
+      setRegStep(1);
+      setIsGuest(false);
+      setSessionReplaced(true);
+    };
+
+    check();
+    const id = setInterval(check, SESSION_CHECK_INTERVAL);
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loggedUserId, isGuest]);
+
   // ── Registro ────────────────────────────────────────────────────────────────
   const register = useCallback(async (profile, password) => {
     setLoading(true);
@@ -324,6 +385,9 @@ export function useAuth() {
         savePendingProfile({ ...profile, email });
         return { ok: true, pendingConfirmation: true, email, error: null };
       }
+
+      // Hay sesión nueva: cerramos la cuenta en los otros dispositivos.
+      await claimSingleSession();
 
       // 2. Upsert perfil en tabla profiles (id = userId, no user_id)
       const { error: profileError } = await supabase
@@ -558,6 +622,9 @@ export function useAuth() {
         return { ok: false, error: "Email o contraseña incorrectos." };
       }
 
+      await claimSingleSession();
+      setSessionReplaced(false);
+
       const profile = await hydrateProfile(data.user);
       const fullProfile = profile ?? {
         id:         data.user.id,
@@ -687,6 +754,8 @@ export function useAuth() {
     deleteAccount,
     loading,
     isGuest,
+    sessionReplaced,
+    clearSessionReplaced: () => setSessionReplaced(false),
     // El invitado entra sin `registered`: su perfil nunca llega a true porque no
     // tiene mail que confirmar. Sin este OR quedaría rebotando al login.
     isLoggedIn: !!user?.registered || isGuest,

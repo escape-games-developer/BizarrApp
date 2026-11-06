@@ -78,6 +78,21 @@ function callbackErrorMessage(code, desc) {
 }
 
 /**
+ * Sesión única por cliente: el link del mail es un login nuevo, así que cierra
+ * la cuenta en los otros dispositivos (ver claimSingleSession en useAuth.js;
+ * va duplicada acá para no importar el hook desde lib). Si falla, no frena el
+ * canje.
+ */
+async function claimSingleSession() {
+  try {
+    const { error } = await supabase.rpc("claim_single_session");
+    if (error) console.warn("[authCallback] No se pudieron cerrar las otras sesiones:", error);
+  } catch (e) {
+    console.warn("[authCallback] No se pudieron cerrar las otras sesiones:", e);
+  }
+}
+
+/**
  * Canjea lo que haya venido en la URL por una sesión activa.
  * @returns {Promise<{ok:boolean, session?:object, user?:object, error?:string}>}
  */
@@ -93,6 +108,7 @@ export async function consumeAuthCallback(params) {
         refresh_token: params.refreshToken,
       });
       if (error) return { ok: false, error: callbackErrorMessage(error.code, error.message) };
+      await claimSingleSession();
       return { ok: true, session: data.session, user: data.user ?? data.session?.user };
     }
 
@@ -103,6 +119,7 @@ export async function consumeAuthCallback(params) {
         type:       params.type || (params.next === "reset" ? "recovery" : params.next === "invite" ? "invite" : "signup"),
       });
       if (error) return { ok: false, error: callbackErrorMessage(error.code, error.message) };
+      await claimSingleSession();
       return { ok: true, session: data.session, user: data.user ?? data.session?.user };
     }
 
@@ -110,6 +127,7 @@ export async function consumeAuthCallback(params) {
     if (params.code) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
       if (error) return { ok: false, error: callbackErrorMessage(error.code, error.message) };
+      await claimSingleSession();
       return { ok: true, session: data.session, user: data.user ?? data.session?.user };
     }
 

@@ -40,7 +40,7 @@ const destinoDeLink = (view, params) =>
 export default function BizarrApp() {
   const { user, regStep, setRegStep, register, requestEmailSignup, completeEmailSignup, login, loginAsGuest,
           updateUser, logout, resendConfirmation, changePassword, deleteAccount,
-          isLoggedIn, isGuest } = useAuth();
+          isLoggedIn, isGuest, sessionReplaced, clearSessionReplaced } = useAuth();
 
   const [view,     setView]     = useState(() => {
     const params    = new URLSearchParams(window.location.search);
@@ -233,6 +233,25 @@ export default function BizarrApp() {
       <div className={general.titulos ? "app-root" : "app-root sin-titulos"}>
         <ClientShell logoSrc={CLIENT_LOGO_URL}notificationSlot={<NotificationBell user={user}/>}
           navItems={navItems} activeNavId={view} onNavigate={navigate} onNavIntent={navIntent}>
+            {sessionReplaced && (
+              <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
+                marginBottom:14,background:"rgba(245,158,11,.1)",
+                border:"1px solid rgba(245,158,11,.35)",borderRadius:12 }}>
+                <span style={{ fontSize:20,flexShrink:0 }}>📱</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12.5,fontWeight:700,color:"#FCD34D",marginBottom:2 }}>
+                    Cerramos tu sesión en este dispositivo
+                  </div>
+                  <div style={{ fontSize:11.5,color:"rgba(245,230,192,.55)",lineHeight:1.5 }}>
+                    Tu cuenta se abrió en otro dispositivo y sólo puede estar activa en uno a la vez.
+                    Si no fuiste vos, entrá de nuevo y cambiá tu contraseña.
+                  </div>
+                </div>
+                <button onClick={clearSessionReplaced} aria-label="Cerrar aviso"
+                  style={{ background:"none",border:"none",color:"rgba(245,230,192,.35)",
+                    fontSize:16,cursor:"pointer",padding:0,lineHeight:1 }}>×</button>
+              </div>
+            )}
             {authNotice && (
               <div style={{ display:"flex",gap:10,alignItems:"flex-start",padding:"12px 14px",
                 marginBottom:14,background:"rgba(34,197,94,.1)",
